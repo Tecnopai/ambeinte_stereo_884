@@ -38,6 +38,10 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  webview_flutter: ^4.2.2
+  just_audio: ^0.9.35
+  firebase_core: ^2.24.2
+  cloud_firestore: ^4.13.6
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

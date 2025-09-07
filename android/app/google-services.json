@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "690975362924",
+    "project_id": "as884-b3934",
+    "storage_bucket": "as884-b3934.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:690975362924:android:ff40ef4354b8a7ec782d49",
+        "android_client_info": {
+          "package_name": "com.miltonbass.ambeinte_stereo884.ambeinte_stereo_884"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDlsrmITnkoNNs8ELokRJRNo2X9zQjo63I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
