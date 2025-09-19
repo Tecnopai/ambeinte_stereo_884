@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
-// firebase
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Configurar orientación de pantalla
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
   runApp(const MyApp());
 }
 
@@ -20,9 +27,16 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Ambientestereo.fm',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6B73FF),
+          brightness: Brightness.light,
+        ),
         useMaterial3: true,
+        appBarTheme: const AppBarTheme(
+          systemOverlayStyle: SystemUiOverlayStyle.dark,
+        ),
       ),
       home: const MyHomePage(),
     );
@@ -36,66 +50,306 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _MyHomePageState extends State<MyHomePage>
+    with TickerProviderStateMixin {
   late WebViewController _controller;
-  int _progress = 0; // Agregamos una variable para el progreso
+  int _progress = 0;
+  bool _isLoading = true;
+  bool _hasError = false;
+  String _errorMessage = '';
+
+  late AnimationController _logoAnimationController;
+  late Animation<double> _logoScaleAnimation;
+  late Animation<double> _logoOpacityAnimation;
 
   @override
   void initState() {
     super.initState();
+    _initializeAnimations();
+    _initializeWebView();
+  }
+
+  void _initializeAnimations() {
+    _logoAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    );
+
+    _logoScaleAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.2,
+    ).animate(CurvedAnimation(
+      parent: _logoAnimationController,
+      curve: Curves.easeInOut,
+    ));
+
+    _logoOpacityAnimation = Tween<double>(
+      begin: 0.7,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _logoAnimationController,
+      curve: Curves.easeInOut,
+    ));
+
+    _logoAnimationController.repeat(reverse: true);
+  }
+
+  void _initializeWebView() {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(const Color(0x00000000))
+      ..setBackgroundColor(Colors.white)
+      ..setUserAgent('Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36')
+    // Configuraciones adicionales para mejor rendimiento
+      ..enableZoom(false)
       ..setNavigationDelegate(
         NavigationDelegate(
           onProgress: (int progress) {
-            setState(() {
-              _progress = progress; // Actualizamos el progreso en tiempo real
-            });
+            if (mounted && progress != _progress) {
+              setState(() {
+                _progress = progress;
+              });
+            }
           },
-          onPageStarted: (String url) {},
+          onPageStarted: (String url) {
+            if (mounted) {
+              setState(() {
+                _isLoading = true;
+                _hasError = false;
+                _progress = 0;
+              });
+            }
+          },
           onPageFinished: (String url) {
-            setState(() {
-              _progress = 100; // Al terminar la carga, el progreso es 100
-            });
+            if (mounted) {
+              // Agregar un pequeño delay para suavizar la transición
+              Future.delayed(const Duration(milliseconds: 500), () {
+                if (mounted) {
+                  setState(() {
+                    _progress = 100;
+                    _isLoading = false;
+                  });
+                  _logoAnimationController.stop();
+                }
+              });
+            }
           },
-          onWebResourceError: (WebResourceError error) {},
+          onWebResourceError: (WebResourceError error) {
+            if (mounted && error.errorType != WebResourceErrorType.unknown) {
+              setState(() {
+                _hasError = true;
+                _isLoading = false;
+                _errorMessage = error.description;
+              });
+            }
+          },
           onNavigationRequest: (NavigationRequest request) {
-            if (request.url.startsWith('https://ambientestereo.fm/sitio/')) {
+            if (request.url.startsWith('https://ambientestereo.fm/')) {
               return NavigationDecision.navigate;
             }
             return NavigationDecision.prevent;
           },
         ),
-      )
-      ..loadRequest(Uri.parse('https://ambientestereo.fm/sitio/'));
+      );
+
+    // Cargar la URL con manejo de errores
+    _loadWebsite();
+  }
+
+  void _loadWebsite() async {
+    try {
+      await _controller.loadRequest(Uri.parse('https://ambientestereo.fm/sitio/'));
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+          _errorMessage = 'Error al cargar la página';
+        });
+      }
+    }
+  }
+
+  void _reloadPage() {
+    setState(() {
+      _hasError = false;
+      _isLoading = true;
+      _progress = 0;
+    });
+    _logoAnimationController.repeat(reverse: true);
+    _loadWebsite();
   }
 
   @override
   void dispose() {
+    _logoAnimationController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: SafeArea(
-        child: Column(
-          children: <Widget>[
-            // El WebView ocupa todo el espacio disponible
-            Expanded(
-              child: Stack(
-                children: [
-                  WebViewWidget(controller: _controller),
-                  if (_progress < 100)
-                    LinearProgressIndicator(
-                      value: _progress / 100,
-                      backgroundColor: Colors.grey[200],
-                      color: Colors.blue,
+        child: Stack(
+          children: [
+            // WebView
+            WebViewWidget(controller: _controller),
+
+            // Pantalla de carga con logo
+            if (_isLoading && !_hasError)
+              Container(
+                width: double.infinity,
+                height: double.infinity,
+                color: Colors.white,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Logo animado
+                    AnimatedBuilder(
+                      animation: _logoAnimationController,
+                      builder: (context, child) {
+                        return Transform.scale(
+                          scale: _logoScaleAnimation.value,
+                          child: Opacity(
+                            opacity: _logoOpacityAnimation.value,
+                            child: Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF6B73FF),
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF6B73FF).withOpacity(0.3),
+                                    spreadRadius: 5,
+                                    blurRadius: 15,
+                                    offset: const Offset(0, 5),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.radio,
+                                size: 60,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                ],
+                    const SizedBox(height: 30),
+
+                    // Título
+                    const Text(
+                      'Ambientestereo.fm',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF6B73FF),
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Subtítulo
+                    Text(
+                      'Cargando...',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+
+                    // Barra de progreso mejorada
+                    Container(
+                      width: 200,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: LinearProgressIndicator(
+                          value: _progress / 100,
+                          backgroundColor: Colors.transparent,
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFF6B73FF),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+
+                    // Porcentaje de carga
+                    Text(
+                      '${_progress}%',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+
+            // Pantalla de error
+            if (_hasError)
+              Container(
+                width: double.infinity,
+                height: double.infinity,
+                color: Colors.white,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 80,
+                      color: Colors.red[400],
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Error de conexión',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 40),
+                      child: Text(
+                        'No se pudo cargar la página. Verifica tu conexión a internet.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                    ElevatedButton.icon(
+                      onPressed: _reloadPage,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Reintentar'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF6B73FF),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 30,
+                          vertical: 15,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
