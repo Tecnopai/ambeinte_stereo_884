@@ -26,11 +26,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Ambientestereo.fm',
+      title: 'Ambientestereo884.fm',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6B73FF),
+          seedColor: const Color(0xFF39A935),
           brightness: Brightness.light,
         ),
         useMaterial3: true,
@@ -179,6 +179,115 @@ class _MyHomePageState extends State<MyHomePage>
     _loadWebsite();
   }
 
+  // Método para construir el logo personalizado
+  Widget _buildCustomLogo() {
+    // OPCIÓN 1: Logo desde archivo de imagen (descomenta si tienes tu logo)
+    ///*
+    return Container(
+      width: 120,
+      height: 120,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        /*boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            spreadRadius: 5,
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],*/
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Image.asset(
+          'assets/images/ambiente_logo.png', // logo aquí
+          width: 120,
+          height: 120,
+          fit: BoxFit.cover,
+        ),
+      ),
+    );
+    //*/
+
+    // OPCIÓN 2: Logo personalizado creado con código
+    /*
+    return Container(
+      width: 120,
+      height: 120,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF4A90E2),
+            const Color(0xFF7B68EE),
+            const Color(0xFF9370DB),
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ),
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF7B68EE).withOpacity(0.4),
+            spreadRadius: 8,
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Círculo de fondo decorativo
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+          ),
+          // Icono principal
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.radio_rounded,
+                size: 40,
+                color: Colors.white,
+              ),
+              const SizedBox(height: 4),
+              // Texto pequeño en el logo
+              Text(
+                'FM',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2,
+                ),
+              ),
+            ],
+          ),
+          // Efecto de brillo
+          Positioned(
+            top: 15,
+            right: 15,
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    */
+  }
+
   @override
   void dispose() {
     _logoAnimationController.dispose();
@@ -204,7 +313,7 @@ class _MyHomePageState extends State<MyHomePage>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Logo animado
+                    // Logo personalizado animado
                     AnimatedBuilder(
                       animation: _logoAnimationController,
                       builder: (context, child) {
@@ -212,27 +321,7 @@ class _MyHomePageState extends State<MyHomePage>
                           scale: _logoScaleAnimation.value,
                           child: Opacity(
                             opacity: _logoOpacityAnimation.value,
-                            child: Container(
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF6B73FF),
-                                borderRadius: BorderRadius.circular(20),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF6B73FF).withOpacity(0.3),
-                                    spreadRadius: 5,
-                                    blurRadius: 15,
-                                    offset: const Offset(0, 5),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.radio,
-                                size: 60,
-                                color: Colors.white,
-                              ),
-                            ),
+                            child: _buildCustomLogo(),
                           ),
                         );
                       },
@@ -245,7 +334,7 @@ class _MyHomePageState extends State<MyHomePage>
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF6B73FF),
+                        color: Color(0xFF39A935),
                         letterSpacing: 1.2,
                       ),
                     ),
