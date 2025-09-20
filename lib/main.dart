@@ -181,7 +181,7 @@ class _MyHomePageState extends State<MyHomePage>
 
   // Método para construir el logo personalizado
   Widget _buildCustomLogo() {
-    // OPCIÓN 1: Logo desde archivo de imagen (descomenta si tienes tu logo)
+    // OPCIÓN 1: Logo desde archivo de imagen
     ///*
     return Container(
       width: 120,
