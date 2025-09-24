@@ -1,4 +1,4 @@
-package com.miltonbass.ambeinte_stereo884.ambeinte_stereo_884;
+package com.miltonbass.ambientestereo884;
 
 import io.flutter.embedding.android.FlutterActivity;
 
