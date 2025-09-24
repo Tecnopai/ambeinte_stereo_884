@@ -13,9 +13,7 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   runApp(const MyApp());
 }
@@ -50,8 +48,7 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage>
-    with TickerProviderStateMixin {
+class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   late WebViewController _controller;
   int _progress = 0;
   bool _isLoading = true;
@@ -75,21 +72,19 @@ class _MyHomePageState extends State<MyHomePage>
       vsync: this,
     );
 
-    _logoScaleAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.2,
-    ).animate(CurvedAnimation(
-      parent: _logoAnimationController,
-      curve: Curves.easeInOut,
-    ));
+    _logoScaleAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
+      CurvedAnimation(
+        parent: _logoAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
 
-    _logoOpacityAnimation = Tween<double>(
-      begin: 0.7,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _logoAnimationController,
-      curve: Curves.easeInOut,
-    ));
+    _logoOpacityAnimation = Tween<double>(begin: 0.7, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _logoAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
 
     _logoAnimationController.repeat(reverse: true);
   }
@@ -98,8 +93,10 @@ class _MyHomePageState extends State<MyHomePage>
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.white)
-      ..setUserAgent('Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36')
-    // Configuraciones adicionales para mejor rendimiento
+      ..setUserAgent(
+        'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+      )
+      // Configuraciones adicionales para mejor rendimiento
       ..enableZoom(false)
       ..setNavigationDelegate(
         NavigationDelegate(
@@ -157,7 +154,9 @@ class _MyHomePageState extends State<MyHomePage>
 
   void _loadWebsite() async {
     try {
-      await _controller.loadRequest(Uri.parse('https://ambientestereo.fm/sitio/'));
+      await _controller.loadRequest(
+        Uri.parse('https://ambientestereo.fm/sitio/'),
+      );
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -343,10 +342,7 @@ class _MyHomePageState extends State<MyHomePage>
                     // Subtítulo
                     Text(
                       'Cargando...',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                     ),
                     const SizedBox(height: 40),
 
@@ -393,11 +389,7 @@ class _MyHomePageState extends State<MyHomePage>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      Icons.error_outline,
-                      size: 80,
-                      color: Colors.red[400],
-                    ),
+                    Icon(Icons.error_outline, size: 80, color: Colors.red[400]),
                     const SizedBox(height: 20),
                     const Text(
                       'Error de conexión',
@@ -411,12 +403,11 @@ class _MyHomePageState extends State<MyHomePage>
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 40),
                       child: Text(
-                        'No se pudo cargar la página. Verifica tu conexión a internet.',
+                        _errorMessage.isNotEmpty
+                            ? _errorMessage
+                            : 'No se pudo cargar la página. Verifica tu conexión a internet.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                       ),
                     ),
                     const SizedBox(height: 30),
