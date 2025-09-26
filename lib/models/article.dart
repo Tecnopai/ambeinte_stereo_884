@@ -56,9 +56,35 @@ class Article {
   }
 
   /// Remueve las etiquetas HTML de un texto
+  /// Remueve las etiquetas HTML y entidades HTML de un texto
   static String _stripHtmlTags(String html) {
+    // Primero remover tags HTML
     final RegExp exp = RegExp(r"<[^>]*>", multiLine: true, caseSensitive: true);
-    return html.replaceAll(exp, '').trim();
+    String cleanText = html.replaceAll(exp, '');
+
+    // Luego limpiar entidades HTML
+    cleanText = cleanText
+        .replaceAll('&#8230;', '...') // Puntos suspensivos
+        .replaceAll('&amp;', '&') // Ampersand
+        .replaceAll('&lt;', '<') // Menor que
+        .replaceAll('&gt;', '>') // Mayor que
+        .replaceAll('&quot;', '"') // Comillas dobles
+        .replaceAll('&#8217;', "'") // Apóstrofe
+        .replaceAll('&#8220;', '"') // Comilla izquierda
+        .replaceAll('&#8221;', '"') // Comilla derecha
+        .replaceAll('&#8211;', '–') // Guión corto
+        .replaceAll('&#8212;', '—') // Guión largo
+        .replaceAll('&nbsp;', ' ') // Espacio sin separar
+        .replaceAll('&hellip;', '...') // Puntos suspensivos (alternativa)
+        .replaceAll('&lsquo;', "'") // Comilla simple izquierda
+        .replaceAll('&rsquo;', "'") // Comilla simple derecha
+        .replaceAll('&ldquo;', '"') // Comilla doble izquierda
+        .replaceAll('&rdquo;', '"') // Comilla doble derecha
+        .replaceAll('&ndash;', '–') // Guión corto (alternativa)
+        .replaceAll('&mdash;', '—'); // Guión largo (alternativa)
+
+    // Limpiar espacios extras y devolver
+    return cleanText.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   @override

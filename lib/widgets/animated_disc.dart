@@ -47,37 +47,87 @@ class _AnimatedDiscState extends State<AnimatedDisc>
 
   @override
   Widget build(BuildContext context) {
+    // Obtener información del dispositivo
+    final screenSize = MediaQuery.of(context).size;
+    final isTablet = screenSize.shortestSide >= 600;
+    final isLandscape = screenSize.width > screenSize.height;
+    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+
+    // Calcular tamaños dinámicos basados en el dispositivo
+    double discSize;
+    double innerSize;
+    double shadowBlur;
+    double shadowSpread;
+
+    if (isTablet) {
+      // Tablets - más grandes
+      discSize = isLandscape ? 200 : 180;
+      shadowBlur = 25;
+      shadowSpread = 6;
+    } else {
+      // Teléfonos - usar porcentaje del ancho de pantalla
+      final screenWidth = screenSize.width;
+      discSize = screenWidth * 0.4; // 40% del ancho de pantalla
+
+      // Límites mínimos y máximos para teléfonos
+      if (discSize < 120) discSize = 120; // Mínimo para pantallas muy pequeñas
+      if (discSize > 160) discSize = 160; // Máximo para pantallas grandes
+
+      shadowBlur = 20;
+      shadowSpread = 5;
+    }
+
+    // Aplicar factor de escala de texto si es muy grande
+    if (textScale > 1.2) {
+      discSize =
+          discSize * 0.9; // Reducir ligeramente si el texto es muy grande
+    }
+
+    // El contenedor interior es siempre 85% del exterior
+    innerSize = discSize * 0.85;
+
     return AnimatedBuilder(
       animation: _rotationController,
       builder: (context, child) {
         return Transform.rotate(
           angle: _rotationController.value * 2 * 3.14159,
           child: Container(
-            width: 200,
-            height: 200,
-            decoration: const BoxDecoration(
+            width: discSize,
+            height: discSize,
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: AppColors.discGradient,
               boxShadow: [
                 BoxShadow(
-                  color: Color(0x4D6366F1),
-                  blurRadius: 20,
-                  spreadRadius: 5,
+                  color: const Color(0x4D6366F1),
+                  blurRadius: shadowBlur,
+                  spreadRadius: shadowSpread,
                 ),
               ],
             ),
             child: Center(
               child: Container(
-                width: 60,
-                height: 60,
+                width: innerSize,
+                height: innerSize,
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
                   color: AppColors.background,
                 ),
-                child: const Icon(
-                  Icons.radio,
-                  color: AppColors.primary,
-                  size: 30,
+                child: ClipOval(
+                  child: Image.asset(
+                    'assets/images/ambiente_logo.png',
+                    width: innerSize * 0.7, // 70% del contenedor interior
+                    height: innerSize * 0.7,
+                    fit: BoxFit.cover,
+                    // Agregar manejo de errores
+                    errorBuilder: (context, error, stackTrace) {
+                      return Icon(
+                        Icons.music_note,
+                        color: AppColors.primary,
+                        size: innerSize * 0.4,
+                      );
+                    },
+                  ),
                 ),
               ),
             ),

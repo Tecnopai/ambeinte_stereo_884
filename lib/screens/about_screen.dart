@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/audio_player_manager.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/live_indicator.dart';
+import '../core/theme/app_colors.dart';
 
 class AboutScreen extends StatelessWidget {
   final AudioPlayerManager audioManager;
@@ -30,37 +31,24 @@ class AboutScreen extends StatelessWidget {
           body: Stack(
             children: [
               SingleChildScrollView(
-                padding: EdgeInsets.only(
-                  top: 24,
-                  left: 24,
-                  right: 24,
-                  bottom: isPlaying ? 100 : 24,
-                ),
+                padding: _getPadding(context, isPlaying),
                 child: Column(
                   children: [
-                    _buildLogo(),
-                    const SizedBox(height: 32),
-                    const Text(
-                      'Ambient Stereo FM',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Radio sin fronteras',
-                      style: TextStyle(fontSize: 16, color: Color(0xFFCBD5E1)),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildDescriptionCard(),
-                    const SizedBox(height: 32),
-                    _buildInfoCard('Versión', '1.0.0'),
-                    const SizedBox(height: 16),
-                    _buildInfoCard('Sitio Web', 'ambientestereo.fm'),
-                    const SizedBox(height: 32),
-                    _buildWebsiteButton(),
+                    _buildLogo(context),
+                    _getSpacing(context, 32),
+                    _buildTitle(context),
+                    _getSpacing(context, 8),
+                    _buildSubtitle(context),
+                    _getSpacing(context, 32),
+                    _buildDescriptionCard(context),
+                    _getSpacing(context, 32),
+                    _buildInfoCard(context, 'Versión', '1.0.0'),
+                    _getSpacing(context, 14),
+                    _buildInfoCard(context, 'Sitio Web', 'ambientestereo.fm'),
+                    _getSpacing(context, 32),
+                    _buildWebsiteButton(context),
+                    // Padding extra para evitar que el MiniPlayer tape contenido
+                    if (isPlaying) _getSpacing(context, 20),
                   ],
                 ),
               ),
@@ -78,34 +66,129 @@ class AboutScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildLogo() {
-    return Container(
-      width: 120,
-      height: 120,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-        ),
-      ),
-      child: const Icon(Icons.radio, size: 60, color: Colors.white),
+  // Calcula padding dinámico
+  EdgeInsets _getPadding(BuildContext context, bool isPlaying) {
+    final screenSize = MediaQuery.of(context).size;
+    final isTablet = screenSize.shortestSide >= 600;
+    final horizontalPadding = isTablet ? 40.0 : 24.0;
+    final topPadding = isTablet ? 32.0 : 24.0;
+    final bottomPadding = isPlaying
+        ? (isTablet ? 120.0 : 100.0)
+        : (isTablet ? 32.0 : 24.0);
+
+    return EdgeInsets.only(
+      top: topPadding,
+      left: horizontalPadding,
+      right: horizontalPadding,
+      bottom: bottomPadding,
     );
   }
 
-  Widget _buildDescriptionCard() {
+  // Espaciado responsivo
+  SizedBox _getSpacing(BuildContext context, double baseSize) {
+    final screenSize = MediaQuery.of(context).size;
+    final isTablet = screenSize.shortestSide >= 600;
+    final spacing = isTablet ? baseSize * 1.2 : baseSize;
+    return SizedBox(height: spacing);
+  }
+
+  Widget _buildLogo(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isTablet = screenSize.shortestSide >= 600;
+    final logoSize = isTablet ? 140.0 : 120.0;
+    final iconSize = isTablet ? 70.0 : 60.0;
+
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(12),
+      width: logoSize,
+      height: logoSize,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: AppColors.buttonGradient,
+        boxShadow: [
+          BoxShadow(
+            color: Color.fromARGB(77, 203, 203, 229),
+            blurRadius: 20,
+            spreadRadius: 3,
+          ),
+        ],
       ),
-      child: const Column(
+      child: ClipOval(
+        child: Image.asset(
+          'assets/images/ambiente_logo.png',
+          width: iconSize,
+          height: iconSize,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Icon(
+              Icons.radio,
+              size: iconSize,
+              color: AppColors.textPrimary,
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTitle(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isTablet = screenSize.shortestSide >= 600;
+    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+    final fontSize = (isTablet ? 28.0 : 14.0) * textScale;
+
+    return Text(
+      'Ambient Stereo 88.4 FM',
+      style: TextStyle(
+        fontSize: fontSize,
+        fontWeight: FontWeight.bold,
+        color: AppColors.textPrimary,
+      ),
+      textAlign: TextAlign.center,
+    );
+  }
+
+  Widget _buildSubtitle(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isTablet = screenSize.shortestSide >= 600;
+    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+    final fontSize = (isTablet ? 14.0 : 12.0) * textScale;
+
+    return Text(
+      'La radio que si quieres',
+      style: TextStyle(fontSize: fontSize, color: AppColors.textMuted),
+      textAlign: TextAlign.center,
+    );
+  }
+
+  Widget _buildDescriptionCard(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isTablet = screenSize.shortestSide >= 600;
+    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+    final fontSize =
+        (isTablet ? 12.0 : 10.0) * textScale; // Aumentado significativamente
+    final padding = isTablet ? 24.0 : 20.0;
+    final borderRadius = isTablet ? 16.0 : 12.0;
+
+    return Container(
+      padding: EdgeInsets.all(padding),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(borderRadius),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
         children: [
           Text(
             'Disfruta de la mejor música ambiental y contenido exclusivo las 24 horas del día. Ambient Stereo FM te conecta con sonidos únicos y las últimas noticias de nuestro sitio web.',
             style: TextStyle(
-              fontSize: 16,
-              color: Color(0xFFCBD5E1),
+              fontSize: fontSize, // Mejorado de 10 a 14-16
+              color: AppColors.textMuted,
               height: 1.6,
             ),
             textAlign: TextAlign.center,
@@ -115,27 +198,51 @@ class AboutScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoCard(String title, String value) {
+  Widget _buildInfoCard(BuildContext context, String title, String value) {
+    final screenSize = MediaQuery.of(context).size;
+    final isTablet = screenSize.shortestSide >= 600;
+    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+    final titleFontSize = (isTablet ? 12.0 : 10.0) * textScale;
+    final valueFontSize = (isTablet ? 10.0 : 8.0) * textScale; // Aumentado
+    final horizontalPadding = isTablet ? 24.0 : 20.0;
+    final verticalPadding = isTablet ? 20.0 : 16.0;
+    final borderRadius = isTablet ? 12.0 : 8.0;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF374151).withOpacity(0.5)),
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(
+        horizontal: horizontalPadding,
+        vertical: verticalPadding,
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(color: const Color(0xFF374151).withOpacity(0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(fontSize: 16, color: Color(0xFFCBD5E1)),
+            style: TextStyle(
+              fontSize: titleFontSize,
+              color: AppColors.textMuted,
+            ),
           ),
+          SizedBox(height: isTablet ? 6 : 4),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 16,
+            style: TextStyle(
+              fontSize: valueFontSize, // Mejorado de 12 a 14-16
               fontWeight: FontWeight.w600,
-              color: Colors.white,
+              color: AppColors.textPrimary,
             ),
           ),
         ],
@@ -143,16 +250,32 @@ class AboutScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildWebsiteButton() {
+  Widget _buildWebsiteButton(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isTablet = screenSize.shortestSide >= 600;
+    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+    final fontSize = (isTablet ? 14.0 : 12.0) * textScale;
+    final iconSize = (isTablet ? 24.0 : 20.0) * textScale;
+    final horizontalPadding = isTablet ? 40.0 : 32.0;
+    final verticalPadding = isTablet ? 16.0 : 12.0;
+    final borderRadius = isTablet ? 12.0 : 8.0;
+
     return ElevatedButton.icon(
       onPressed: () => _launchUrl('https://ambientestereo.fm'),
-      icon: const Icon(Icons.web),
-      label: const Text('Visitar sitio web'),
+      icon: Icon(Icons.web, size: iconSize),
+      label: Text('Visitar sitio web', style: TextStyle(fontSize: fontSize)),
       style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF6366F1),
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.textPrimary,
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: verticalPadding,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
+        elevation: 4,
+        shadowColor: AppColors.primary.withOpacity(0.3),
       ),
     );
   }
@@ -160,7 +283,7 @@ class AboutScreen extends StatelessWidget {
   Future<void> _launchUrl(String url) async {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 }
