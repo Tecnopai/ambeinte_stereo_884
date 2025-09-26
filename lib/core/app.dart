@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
-import '../screens/main_screen.dart';
+import '../screens/splash_screen.dart'; // Agregar import
 
 class AmbientStereoApp extends StatelessWidget {
   const AmbientStereoApp({super.key});
@@ -8,9 +8,9 @@ class AmbientStereoApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Ambient Stereo FM',
+      title: 'Ambient Stereo 88.4 FM',
       theme: AppTheme.darkTheme,
-      home: const MainScreen(),
+      home: const SplashScreen(), // Cambiar de MainScreen a SplashScreen
       debugShowCheckedModeBanner: false,
     );
   }

@@ -11,5 +11,14 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
+  // Configurar color de la barra de estado durante el splash
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarBrightness: Brightness.dark,
+      statusBarIconBrightness: Brightness.light,
+    ),
+  );
+
   runApp(const AmbientStereoApp());
 }

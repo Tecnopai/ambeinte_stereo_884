@@ -98,7 +98,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
               const Text(
                 'Ambient Stereo 88.4 FM',
                 style: TextStyle(
-                  fontSize: 8,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
                 ),
