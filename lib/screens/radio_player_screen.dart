@@ -76,9 +76,34 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Obtener información del dispositivo
+    final screenSize = MediaQuery.of(context).size;
+    final isTablet = screenSize.shortestSide >= 600;
+    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+
+    // Calcular tamaños dinámicos
+    final padding = isTablet ? 32.0 : 20.0;
+    final titleFontSize =
+        (isTablet ? 18.0 : 14.0) * textScale; // Aumentado significativamente
+    final subtitleFontSize = (isTablet ? 14.0 : 12.0) * textScale; // Aumentado
+    final playButtonSize = isTablet ? 100.0 : 80.0;
+    final playIconSize = isTablet ? 50.0 : 40.0;
+    final loadingSize = isTablet ? 40.0 : 30.0;
+
+    // Espaciados adaptativos
+    final topSpacing = isTablet ? 80.0 : 60.0;
+    final sectionSpacing = isTablet ? 50.0 : 40.0;
+    final smallSpacing = isTablet ? 16.0 : 12.0;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ambient Stereo 88.4 FM'),
+        title: Text(
+          'Ambient Stereo 88.4 FM',
+          style: TextStyle(
+            fontSize: (isTablet ? 20.0 : 18.0) * textScale,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         centerTitle: true,
       ),
       body: Container(
@@ -86,89 +111,125 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
         height: double.infinity,
         decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const SizedBox(height: 60),
-              // Logo/Disco animado
-              AnimatedDisc(isPlaying: _isPlaying),
-              const SizedBox(height: 40),
-              // Título
-              const Text(
-                'Ambient Stereo 88.4 FM',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
+          padding: EdgeInsets.all(padding),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight:
+                  screenSize.height -
+                  (AppBar().preferredSize.height +
+                      MediaQuery.of(context).padding.top +
+                      padding * 2),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(height: topSpacing),
+
+                // Logo/Disco animado
+                AnimatedDisc(isPlaying: _isPlaying),
+
+                SizedBox(height: sectionSpacing),
+
+                // Título
+                Text(
+                  'Ambient Stereo 88.4 FM',
+                  style: TextStyle(
+                    fontSize: titleFontSize,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                    letterSpacing: 0.5,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              // Subtítulo
-              Text(
-                _isPlaying ? 'En vivo ahora' : 'La radio que si quieres',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textMuted,
+
+                SizedBox(height: smallSpacing),
+
+                // Subtítulo
+                Text(
+                  _isPlaying ? 'En vivo ahora' : 'La radio que si quieres',
+                  style: TextStyle(
+                    fontSize: subtitleFontSize,
+                    color: AppColors.textMuted,
+                    letterSpacing: 0.3,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 40),
-              // Ondas de sonido animadas
-              if (_isPlaying)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
-                  child: SoundWaves(),
+
+                SizedBox(height: sectionSpacing),
+
+                // Ondas de sonido animadas
+                if (_isPlaying)
+                  Padding(
+                    padding: EdgeInsets.symmetric(vertical: isTablet ? 30 : 20),
+                    child: SoundWaves(isPlaying: _isPlaying),
+                  ),
+
+                SizedBox(height: sectionSpacing),
+
+                // Control de reproducción
+                _buildPlayButton(
+                  size: playButtonSize,
+                  iconSize: playIconSize,
+                  loadingSize: loadingSize,
+                  isTablet: isTablet,
                 ),
-              const SizedBox(height: 40),
-              // Control de reproducción
-              _buildPlayButton(),
-              const SizedBox(height: 50),
-              // Control de volumen
-              VolumeControl(volume: _volume, audioManager: widget.audioManager),
-              const SizedBox(height: 40),
-            ],
+
+                SizedBox(height: sectionSpacing + 10),
+
+                // Control de volumen
+                VolumeControl(
+                  volume: _volume,
+                  audioManager: widget.audioManager,
+                ),
+
+                SizedBox(height: sectionSpacing),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildPlayButton() {
+  Widget _buildPlayButton({
+    required double size,
+    required double iconSize,
+    required double loadingSize,
+    required bool isTablet,
+  }) {
     return Container(
-      width: 80,
-      height: 80,
-      decoration: const BoxDecoration(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: AppColors.buttonGradient,
         boxShadow: [
           BoxShadow(
-            color: Color.fromARGB(77, 203, 203, 229),
-            blurRadius: 15,
-            spreadRadius: 2,
+            color: const Color.fromARGB(77, 203, 203, 229),
+            blurRadius: isTablet ? 20 : 15,
+            spreadRadius: isTablet ? 3 : 2,
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(40),
+          borderRadius: BorderRadius.circular(size / 2),
           onTap: _togglePlayback,
           child: Center(
             child: _isLoading
-                ? const SizedBox(
-                    width: 30,
-                    height: 30,
+                ? SizedBox(
+                    width: loadingSize,
+                    height: loadingSize,
                     child: CircularProgressIndicator(
                       color: AppColors.textPrimary,
-                      strokeWidth: 3,
+                      strokeWidth: isTablet ? 4 : 3,
                     ),
                   )
                 : Icon(
                     _isPlaying ? Icons.pause : Icons.play_arrow,
                     color: AppColors.textPrimary,
-                    size: 40,
+                    size: iconSize,
                   ),
           ),
         ),
