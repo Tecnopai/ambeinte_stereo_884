@@ -7,10 +7,12 @@ import 'firebase_options.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Configurar orientación de pantalla
+  // Permitir todas las orientaciones para mejor responsividad
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
   ]);
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -38,6 +40,43 @@ class MyApp extends StatelessWidget {
       ),
       home: const MyHomePage(),
     );
+  }
+}
+
+// Enum para tipos de dispositivo
+enum DeviceType { mobile, tablet, desktop }
+
+// Clase para obtener información del dispositivo
+class ResponsiveHelper {
+  static DeviceType getDeviceType(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    if (screenWidth < 600) {
+      return DeviceType.mobile;
+    } else if (screenWidth < 1200) {
+      return DeviceType.tablet;
+    } else {
+      return DeviceType.desktop;
+    }
+  }
+
+  static bool isLandscape(BuildContext context) {
+    return MediaQuery.of(context).orientation == Orientation.landscape;
+  }
+
+  static double getResponsiveSize(BuildContext context, {
+    required double mobile,
+    required double tablet,
+    required double desktop,
+  }) {
+    switch (getDeviceType(context)) {
+      case DeviceType.mobile:
+        return mobile;
+      case DeviceType.tablet:
+        return tablet;
+      case DeviceType.desktop:
+        return desktop;
+    }
   }
 }
 
@@ -96,7 +135,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
       ..setUserAgent(
         'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
       )
-      // Configuraciones adicionales para mejor rendimiento
       ..enableZoom(false)
       ..setNavigationDelegate(
         NavigationDelegate(
@@ -118,7 +156,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
           },
           onPageFinished: (String url) {
             if (mounted) {
-              // Agregar un pequeño delay para suavizar la transición
               Future.delayed(const Duration(milliseconds: 500), () {
                 if (mounted) {
                   setState(() {
@@ -148,7 +185,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
         ),
       );
 
-    // Cargar la URL con manejo de errores
     _loadWebsite();
   }
 
@@ -178,113 +214,286 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
     _loadWebsite();
   }
 
-  // Método para construir el logo personalizado
-  Widget _buildCustomLogo() {
-    // OPCIÓN 1: Logo desde archivo de imagen
-    ///*
+  // Logo responsive que se adapta al dispositivo
+  Widget _buildResponsiveLogo(BuildContext context) {
+    final logoSize = ResponsiveHelper.getResponsiveSize(
+      context,
+      mobile: 100.0,
+      tablet: 140.0,
+      desktop: 160.0,
+    );
+
+    final isLandscape = ResponsiveHelper.isLandscape(context);
+    final adjustedSize = isLandscape ? logoSize * 0.8 : logoSize;
+
     return Container(
-      width: 120,
-      height: 120,
+      width: adjustedSize,
+      height: adjustedSize,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        /*boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            spreadRadius: 5,
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],*/
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: Image.asset(
-          'assets/images/ambiente_logo.png', // logo aquí
-          width: 120,
-          height: 120,
+          'assets/images/ambiente_logo.png',
+          width: adjustedSize,
+          height: adjustedSize,
           fit: BoxFit.cover,
         ),
       ),
     );
-    //*/
+  }
 
-    // OPCIÓN 2: Logo personalizado creado con código
-    /*
-    return Container(
-      width: 120,
-      height: 120,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF4A90E2),
-            const Color(0xFF7B68EE),
-            const Color(0xFF9370DB),
+  // Pantalla de carga responsive
+  Widget _buildLoadingScreen(BuildContext context) {
+    final isLandscape = ResponsiveHelper.isLandscape(context);
+    final deviceType = ResponsiveHelper.getDeviceType(context);
+
+    // Ajustar layout para landscape en móviles
+    if (isLandscape && deviceType == DeviceType.mobile) {
+      return Container(
+        width: double.infinity,
+        height: double.infinity,
+        color: Colors.white,
+        child: Row(
+          children: [
+            // Logo en el lado izquierdo
+            Expanded(
+              flex: 1,
+              child: Center(
+                child: AnimatedBuilder(
+                  animation: _logoAnimationController,
+                  builder: (context, child) {
+                    return Transform.scale(
+                      scale: _logoScaleAnimation.value,
+                      child: Opacity(
+                        opacity: _logoOpacityAnimation.value,
+                        child: _buildResponsiveLogo(context),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            // Información en el lado derecho
+            Expanded(
+              flex: 1,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildTitleAndProgress(context),
+                  ],
+                ),
+              ),
+            ),
           ],
-          stops: const [0.0, 0.5, 1.0],
         ),
-        borderRadius: BorderRadius.circular(25),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF7B68EE).withOpacity(0.4),
-            spreadRadius: 8,
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+      );
+    }
+
+    // Layout vertical para portrait y tablets
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.white,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Logo animado
+          AnimatedBuilder(
+            animation: _logoAnimationController,
+            builder: (context, child) {
+              return Transform.scale(
+                scale: _logoScaleAnimation.value,
+                child: Opacity(
+                  opacity: _logoOpacityAnimation.value,
+                  child: _buildResponsiveLogo(context),
+                ),
+              );
+            },
           ),
+
+          SizedBox(height: isLandscape ? 20 : 30),
+
+          _buildTitleAndProgress(context),
         ],
       ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Círculo de fondo decorativo
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
+    );
+  }
+
+  // Widget para título y barra de progreso
+  Widget _buildTitleAndProgress(BuildContext context) {
+    final titleSize = ResponsiveHelper.getResponsiveSize(
+      context,
+      mobile: 24.0,
+      tablet: 28.0,
+      desktop: 32.0,
+    );
+
+    final progressBarWidth = ResponsiveHelper.getResponsiveSize(
+      context,
+      mobile: MediaQuery.of(context).size.width * 0.6,
+      tablet: 300.0,
+      desktop: 400.0,
+    );
+
+    return Column(
+      children: [
+        // Título responsive
+        Text(
+          'Ambientestereo.fm',
+          style: TextStyle(
+            fontSize: titleSize,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF39A935),
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        // Subtítulo
+        Text(
+          'Cargando...',
+          style: TextStyle(
+            fontSize: ResponsiveHelper.getResponsiveSize(
+              context,
+              mobile: 16.0,
+              tablet: 18.0,
+              desktop: 20.0,
+            ),
+            color: Colors.grey[600],
+          ),
+        ),
+        const SizedBox(height: 40),
+
+        // Barra de progreso responsive
+        Container(
+          width: progressBarWidth,
+          height: 6,
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: _progress / 100,
+              backgroundColor: Colors.transparent,
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                Color(0xFF6B73FF),
+              ),
             ),
           ),
-          // Icono principal
-          Column(
+        ),
+        const SizedBox(height: 15),
+
+        // Porcentaje de carga
+        Text(
+          '${_progress}%',
+          style: TextStyle(
+            fontSize: ResponsiveHelper.getResponsiveSize(
+              context,
+              mobile: 14.0,
+              tablet: 16.0,
+              desktop: 18.0,
+            ),
+            color: Colors.grey[600],
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Pantalla de error responsive
+  Widget _buildErrorScreen(BuildContext context) {
+    final iconSize = ResponsiveHelper.getResponsiveSize(
+      context,
+      mobile: 80.0,
+      tablet: 100.0,
+      desktop: 120.0,
+    );
+
+    final buttonPadding = ResponsiveHelper.getResponsiveSize(
+      context,
+      mobile: 30.0,
+      tablet: 40.0,
+      desktop: 50.0,
+    );
+
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.white,
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: buttonPadding),
+          child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.radio_rounded,
-                size: 40,
-                color: Colors.white,
+              SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+
+              Icon(
+                Icons.error_outline,
+                size: iconSize,
+                color: Colors.red[400],
               ),
-              const SizedBox(height: 4),
-              // Texto pequeño en el logo
+              const SizedBox(height: 20),
+
               Text(
-                'FM',
+                'Error de conexión',
                 style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
+                  fontSize: ResponsiveHelper.getResponsiveSize(
+                    context,
+                    mobile: 22.0,
+                    tablet: 26.0,
+                    desktop: 30.0,
+                  ),
                   fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
+                  color: Colors.red,
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              Text(
+                _errorMessage.isNotEmpty
+                    ? _errorMessage
+                    : 'No se pudo cargar la página. Verifica tu conexión a internet.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: ResponsiveHelper.getResponsiveSize(
+                    context,
+                    mobile: 16.0,
+                    tablet: 18.0,
+                    desktop: 20.0,
+                  ),
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 30),
+
+              ElevatedButton.icon(
+                onPressed: _reloadPage,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Reintentar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6B73FF),
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: buttonPadding,
+                    vertical: 15,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
               ),
             ],
           ),
-          // Efecto de brillo
-          Positioned(
-            top: 15,
-            right: 15,
-            child: Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.3),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
-    */
   }
 
   @override
@@ -303,133 +512,11 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
             // WebView
             WebViewWidget(controller: _controller),
 
-            // Pantalla de carga con logo
-            if (_isLoading && !_hasError)
-              Container(
-                width: double.infinity,
-                height: double.infinity,
-                color: Colors.white,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Logo personalizado animado
-                    AnimatedBuilder(
-                      animation: _logoAnimationController,
-                      builder: (context, child) {
-                        return Transform.scale(
-                          scale: _logoScaleAnimation.value,
-                          child: Opacity(
-                            opacity: _logoOpacityAnimation.value,
-                            child: _buildCustomLogo(),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 30),
+            // Pantalla de carga responsive
+            if (_isLoading && !_hasError) _buildLoadingScreen(context),
 
-                    // Título
-                    const Text(
-                      'Ambientestereo.fm',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF39A935),
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // Subtítulo
-                    Text(
-                      'Cargando...',
-                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 40),
-
-                    // Barra de progreso mejorada
-                    Container(
-                      width: 200,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(3),
-                        child: LinearProgressIndicator(
-                          value: _progress / 100,
-                          backgroundColor: Colors.transparent,
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFF6B73FF),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 15),
-
-                    // Porcentaje de carga
-                    Text(
-                      '${_progress}%',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-            // Pantalla de error
-            if (_hasError)
-              Container(
-                width: double.infinity,
-                height: double.infinity,
-                color: Colors.white,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.error_outline, size: 80, color: Colors.red[400]),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Error de conexión',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.red,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40),
-                      child: Text(
-                        _errorMessage.isNotEmpty
-                            ? _errorMessage
-                            : 'No se pudo cargar la página. Verifica tu conexión a internet.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-                    ElevatedButton.icon(
-                      onPressed: _reloadPage,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Reintentar'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6B73FF),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 30,
-                          vertical: 15,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            // Pantalla de error responsive
+            if (_hasError) _buildErrorScreen(context),
           ],
         ),
       ),
