@@ -7,7 +7,6 @@ import 'firebase_options.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Permitir todas las orientaciones para mejor responsividad
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -43,10 +42,8 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Enum para tipos de dispositivo
 enum DeviceType { mobile, tablet, desktop }
 
-// Clase para obtener información del dispositivo
 class ResponsiveHelper {
   static DeviceType getDeviceType(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -64,7 +61,8 @@ class ResponsiveHelper {
     return MediaQuery.of(context).orientation == Orientation.landscape;
   }
 
-  static double getResponsiveSize(BuildContext context, {
+  static double getResponsiveSize(
+    BuildContext context, {
     required double mobile,
     required double tablet,
     required double desktop,
@@ -93,16 +91,21 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
+  bool _isInitialized = false;
 
   late AnimationController _logoAnimationController;
   late Animation<double> _logoScaleAnimation;
   late Animation<double> _logoOpacityAnimation;
+
+  // Timeout para detectar problemas de carga
+  static const Duration _loadTimeout = Duration(seconds: 30);
 
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
     _initializeWebView();
+    _startLoadTimeout();
   }
 
   void _initializeAnimations() {
@@ -128,93 +131,163 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
     _logoAnimationController.repeat(reverse: true);
   }
 
-  void _initializeWebView() {
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.white)
-      ..setUserAgent(
-        'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-      )
-      ..enableZoom(false)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onProgress: (int progress) {
-            if (mounted && progress != _progress) {
-              setState(() {
-                _progress = progress;
-              });
-            }
-          },
-          onPageStarted: (String url) {
-            if (mounted) {
-              setState(() {
-                _isLoading = true;
-                _hasError = false;
-                _progress = 0;
-              });
-            }
-          },
-          onPageFinished: (String url) {
-            if (mounted) {
-              Future.delayed(const Duration(milliseconds: 500), () {
-                if (mounted) {
-                  setState(() {
-                    _progress = 100;
-                    _isLoading = false;
-                  });
-                  _logoAnimationController.stop();
-                }
-              });
-            }
-          },
-          onWebResourceError: (WebResourceError error) {
-            if (mounted && error.errorType != WebResourceErrorType.unknown) {
-              setState(() {
-                _hasError = true;
-                _isLoading = false;
-                _errorMessage = error.description;
-              });
-            }
-          },
-          onNavigationRequest: (NavigationRequest request) {
-            if (request.url.startsWith('https://ambientestereo.fm/')) {
-              return NavigationDecision.navigate;
-            }
-            return NavigationDecision.prevent;
-          },
-        ),
-      );
-
-    _loadWebsite();
+  void _startLoadTimeout() {
+    Future.delayed(_loadTimeout, () {
+      if (mounted && _isLoading && !_hasError) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+          _errorMessage =
+              'La página está tardando demasiado en cargar. Por favor, verifica tu conexión a internet.';
+        });
+      }
+    });
   }
 
-  void _loadWebsite() async {
+  void _initializeWebView() {
     try {
-      await _controller.loadRequest(
-        Uri.parse('https://ambientestereo.fm/sitio/'),
-      );
+      _controller = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(Colors.white)
+        ..setUserAgent(
+          'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        )
+        ..enableZoom(false)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onProgress: (int progress) {
+              if (mounted && progress != _progress) {
+                setState(() {
+                  _progress = progress;
+                  // Si hay progreso, la conexión está funcionando
+                  if (progress > 0 && _hasError) {
+                    _hasError = false;
+                  }
+                });
+              }
+            },
+            onPageStarted: (String url) {
+              debugPrint('📄 Página iniciada: $url');
+              if (mounted) {
+                setState(() {
+                  _isLoading = true;
+                  _hasError = false;
+                  _progress = 0;
+                });
+              }
+            },
+            onPageFinished: (String url) {
+              debugPrint('✅ Página cargada: $url');
+              if (mounted) {
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  if (mounted) {
+                    setState(() {
+                      _progress = 100;
+                      _isLoading = false;
+                      _isInitialized = true;
+                    });
+                    _logoAnimationController.stop();
+                  }
+                });
+              }
+            },
+            onWebResourceError: (WebResourceError error) {
+              debugPrint(
+                '❌ Error de recurso: ${error.errorType} - ${error.description}',
+              );
+
+              // Solo mostrar error si es crítico
+              if (mounted && _shouldShowError(error)) {
+                setState(() {
+                  _hasError = true;
+                  _isLoading = false;
+                  _errorMessage = _getUserFriendlyError(error);
+                });
+              }
+            },
+            onNavigationRequest: (NavigationRequest request) {
+              debugPrint('🔗 Navegación solicitada: ${request.url}');
+              if (request.url.startsWith('https://ambientestereo.fm/')) {
+                return NavigationDecision.navigate;
+              }
+              return NavigationDecision.prevent;
+            },
+          ),
+        );
+
+      _loadWebsite();
     } catch (e) {
+      debugPrint('❌ Error al inicializar WebView: $e');
       if (mounted) {
         setState(() {
           _hasError = true;
           _isLoading = false;
-          _errorMessage = 'Error al cargar la página';
+          _errorMessage = 'Error al inicializar la aplicación: $e';
+        });
+      }
+    }
+  }
+
+  bool _shouldShowError(WebResourceError error) {
+    // No mostrar errores menores como favicon o recursos opcionales
+    final minorErrors = [
+      WebResourceErrorType.unknown,
+      WebResourceErrorType.fileNotFound,
+    ];
+
+    // Solo mostrar error si no se ha cargado nada todavía
+    return !_isInitialized && !minorErrors.contains(error.errorType);
+  }
+
+  String _getUserFriendlyError(WebResourceError error) {
+    switch (error.errorType) {
+      case WebResourceErrorType.hostLookup:
+        return 'No se puede conectar al servidor. Verifica tu conexión a internet.';
+      case WebResourceErrorType.timeout:
+        return 'La conexión ha excedido el tiempo de espera. Intenta de nuevo.';
+      case WebResourceErrorType.connect:
+        return 'No se puede establecer conexión. Verifica tu conexión a internet.';
+      case WebResourceErrorType.authentication:
+        return 'Error de autenticación con el servidor.';
+      case WebResourceErrorType.unsupportedScheme:
+        return 'Protocolo no soportado.';
+      default:
+        return error.description.isNotEmpty
+            ? error.description
+            : 'Error al cargar la página. Por favor, intenta de nuevo.';
+    }
+  }
+
+  void _loadWebsite() async {
+    try {
+      debugPrint('🌐 Cargando sitio web...');
+      await _controller.loadRequest(
+        Uri.parse('https://ambientestereo.fm/sitio/'),
+      );
+    } catch (e) {
+      debugPrint('❌ Error al cargar sitio: $e');
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+          _errorMessage = 'Error al cargar la página: $e';
         });
       }
     }
   }
 
   void _reloadPage() {
+    debugPrint('🔄 Recargando página...');
     setState(() {
       _hasError = false;
       _isLoading = true;
       _progress = 0;
     });
     _logoAnimationController.repeat(reverse: true);
+    _startLoadTimeout(); // Reiniciar timeout
     _loadWebsite();
   }
 
-  // Logo responsive que se adapta al dispositivo
   Widget _buildResponsiveLogo(BuildContext context) {
     final logoSize = ResponsiveHelper.getResponsiveSize(
       context,
@@ -229,9 +302,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
     return Container(
       width: adjustedSize,
       height: adjustedSize,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(20)),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: Image.asset(
@@ -239,17 +310,22 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
           width: adjustedSize,
           height: adjustedSize,
           fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            debugPrint('❌ Error al cargar logo: $error');
+            return Container(
+              color: const Color(0xFF39A935),
+              child: const Icon(Icons.radio, color: Colors.white, size: 50),
+            );
+          },
         ),
       ),
     );
   }
 
-  // Pantalla de carga responsive
   Widget _buildLoadingScreen(BuildContext context) {
     final isLandscape = ResponsiveHelper.isLandscape(context);
     final deviceType = ResponsiveHelper.getDeviceType(context);
 
-    // Ajustar layout para landscape en móviles
     if (isLandscape && deviceType == DeviceType.mobile) {
       return Container(
         width: double.infinity,
@@ -257,7 +333,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
         color: Colors.white,
         child: Row(
           children: [
-            // Logo en el lado izquierdo
             Expanded(
               flex: 1,
               child: Center(
@@ -275,15 +350,12 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                 ),
               ),
             ),
-            // Información en el lado derecho
             Expanded(
               flex: 1,
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildTitleAndProgress(context),
-                  ],
+                  children: [_buildTitleAndProgress(context)],
                 ),
               ),
             ),
@@ -292,7 +364,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
       );
     }
 
-    // Layout vertical para portrait y tablets
     return Container(
       width: double.infinity,
       height: double.infinity,
@@ -300,7 +371,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Logo animado
           AnimatedBuilder(
             animation: _logoAnimationController,
             builder: (context, child) {
@@ -322,7 +392,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
     );
   }
 
-  // Widget para título y barra de progreso
   Widget _buildTitleAndProgress(BuildContext context) {
     final titleSize = ResponsiveHelper.getResponsiveSize(
       context,
@@ -340,7 +409,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
 
     return Column(
       children: [
-        // Título responsive
         Text(
           'Ambientestereo.fm',
           style: TextStyle(
@@ -352,7 +420,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
         ),
         const SizedBox(height: 10),
 
-        // Subtítulo
         Text(
           'Cargando...',
           style: TextStyle(
@@ -367,7 +434,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
         ),
         const SizedBox(height: 40),
 
-        // Barra de progreso responsive
         Container(
           width: progressBarWidth,
           height: 6,
@@ -388,7 +454,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
         ),
         const SizedBox(height: 15),
 
-        // Porcentaje de carga
         Text(
           '${_progress}%',
           style: TextStyle(
@@ -406,7 +471,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
     );
   }
 
-  // Pantalla de error responsive
   Widget _buildErrorScreen(BuildContext context) {
     final iconSize = ResponsiveHelper.getResponsiveSize(
       context,
@@ -434,11 +498,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
             children: [
               SizedBox(height: MediaQuery.of(context).size.height * 0.2),
 
-              Icon(
-                Icons.error_outline,
-                size: iconSize,
-                color: Colors.red[400],
-              ),
+              Icon(Icons.error_outline, size: iconSize, color: Colors.red[400]),
               const SizedBox(height: 20),
 
               Text(
@@ -509,13 +569,10 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
       body: SafeArea(
         child: Stack(
           children: [
-            // WebView
             WebViewWidget(controller: _controller),
 
-            // Pantalla de carga responsive
             if (_isLoading && !_hasError) _buildLoadingScreen(context),
 
-            // Pantalla de error responsive
             if (_hasError) _buildErrorScreen(context),
           ],
         ),
