@@ -17,7 +17,8 @@ class NewsScreen extends StatefulWidget {
   State<NewsScreen> createState() => _NewsScreenState();
 }
 
-class _NewsScreenState extends State<NewsScreen> with SingleTickerProviderStateMixin {
+class _NewsScreenState extends State<NewsScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final NewsService _newsService = NewsService();
 
@@ -65,7 +66,7 @@ class _NewsScreenState extends State<NewsScreen> with SingleTickerProviderStateM
 
   void _onNewsScroll() {
     if (_newsScrollController.position.pixels >=
-        _newsScrollController.position.maxScrollExtent * 0.8 &&
+            _newsScrollController.position.maxScrollExtent * 0.8 &&
         !_isLoadingMoreNews &&
         _hasMoreNews) {
       _loadMoreNews();
@@ -170,11 +171,11 @@ class _NewsScreenState extends State<NewsScreen> with SingleTickerProviderStateM
           indicatorColor: Colors.white,
           indicatorWeight: 3,
           labelStyle: TextStyle(
-            fontSize: (isTablet ? 15.0 : 13.0) * textScale,
+            fontSize: (isTablet ? 11.0 : 9.0) * textScale,
             fontWeight: FontWeight.bold,
           ),
           unselectedLabelStyle: TextStyle(
-            fontSize: (isTablet ? 14.0 : 12.0) * textScale,
+            fontSize: (isTablet ? 12.0 : 10.0) * textScale,
             fontWeight: FontWeight.normal,
           ),
           tabs: [
@@ -201,7 +202,7 @@ class _NewsScreenState extends State<NewsScreen> with SingleTickerProviderStateM
             controller: _tabController,
             children: [
               _buildCategoriesTab(), // Primero Categorías
-              _buildNewsTab(),        // Luego Todas
+              _buildNewsTab(), // Luego Todas
             ],
           ),
           if (_isPlaying)
@@ -367,8 +368,8 @@ class _NewsScreenState extends State<NewsScreen> with SingleTickerProviderStateM
     final isTablet = screenSize.shortestSide >= 600;
     final textScale = MediaQuery.of(context).textScaler.scale(1.0);
 
-    final titleFontSize = (isTablet ? 16.0 : 14.0) * textScale;
-    final excerptFontSize = (isTablet ? 12.0 : 10.0) * textScale;
+    final titleFontSize = (isTablet ? 14.0 : 12.0) * textScale;
+    final excerptFontSize = (isTablet ? 10.0 : 8.0) * textScale;
     final dateFontSize = (isTablet ? 10.0 : 8.0) * textScale;
     final cardPadding = isTablet ? 20.0 : 16.0;
     final borderRadius = isTablet ? 16.0 : 12.0;
@@ -450,13 +451,14 @@ class _NewsScreenState extends State<NewsScreen> with SingleTickerProviderStateM
     );
   }
 
+  // Tamaños fuente categorias
   Widget _buildCategoryCard(Category category) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
     final textScale = MediaQuery.of(context).textScaler.scale(1.0);
 
-    final titleFontSize = (isTablet ? 16.0 : 14.0) * textScale;
-    final countFontSize = (isTablet ? 12.0 : 10.0) * textScale;
+    final titleFontSize = (isTablet ? 12.0 : 10.0) * textScale;
+    final countFontSize = (isTablet ? 10.0 : 8.0) * textScale;
     final cardPadding = isTablet ? 20.0 : 16.0;
     final borderRadius = isTablet ? 16.0 : 12.0;
     final iconSize = (isTablet ? 28.0 : 24.0) * textScale;
@@ -596,7 +598,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
 
   void _onScroll() {
     if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent * 0.8 &&
+            _scrollController.position.maxScrollExtent * 0.8 &&
         !_isLoadingMore &&
         _hasMore) {
       _loadMoreArticles();
@@ -785,13 +787,14 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     );
   }
 
+  // Tamaños fuente articulos en categorias
   Widget _buildArticleCard(Article article) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
     final textScale = MediaQuery.of(context).textScaler.scale(1.0);
 
-    final titleFontSize = (isTablet ? 16.0 : 14.0) * textScale;
-    final excerptFontSize = (isTablet ? 12.0 : 10.0) * textScale;
+    final titleFontSize = (isTablet ? 12.0 : 10.0) * textScale;
+    final excerptFontSize = (isTablet ? 10.0 : 8.0) * textScale;
     final dateFontSize = (isTablet ? 10.0 : 8.0) * textScale;
     final cardPadding = isTablet ? 20.0 : 16.0;
     final borderRadius = isTablet ? 16.0 : 12.0;

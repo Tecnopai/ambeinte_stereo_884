@@ -39,7 +39,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
 
   void _onScroll() {
     if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent * 0.8 &&
+            _scrollController.position.maxScrollExtent * 0.8 &&
         !_isLoadingMore &&
         _hasMore) {
       _loadMoreArticles();
@@ -87,9 +87,9 @@ class _NewsListScreenState extends State<NewsListScreen> {
       _currentPage++;
       final newArticles = widget.category != null
           ? await _newsService.getArticlesByCategory(
-        widget.category!.id,
-        page: _currentPage,
-      )
+              widget.category!.id,
+              page: _currentPage,
+            )
           : await _newsService.getArticles(page: _currentPage);
 
       if (mounted) {
@@ -124,85 +124,83 @@ class _NewsListScreenState extends State<NewsListScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
           ? Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: isTablet ? 80 : 64,
-                color: Colors.red.shade300,
-              ),
-              SizedBox(height: isTablet ? 24 : 16),
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: isTablet ? 18 : 16,
-                  color: AppColors.textSecondary,
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: isTablet ? 80 : 64,
+                      color: Colors.red.shade300,
+                    ),
+                    SizedBox(height: isTablet ? 24 : 16),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: isTablet ? 18 : 16,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    SizedBox(height: isTablet ? 24 : 16),
+                    ElevatedButton.icon(
+                      onPressed: _loadArticles,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Reintentar'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isTablet ? 32 : 24,
+                          vertical: isTablet ? 16 : 12,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              SizedBox(height: isTablet ? 24 : 16),
-              ElevatedButton.icon(
-                onPressed: _loadArticles,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Reintentar'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isTablet ? 32 : 24,
-                    vertical: isTablet ? 16 : 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      )
+            )
           : _articles.isEmpty
           ? Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.article_outlined,
-              size: isTablet ? 80 : 64,
-              color: AppColors.textSecondary.withOpacity(0.5),
-            ),
-            SizedBox(height: isTablet ? 24 : 16),
-            Text(
-              'No hay artículos disponibles',
-              style: TextStyle(
-                fontSize: isTablet ? 18 : 16,
-                color: AppColors.textSecondary,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.article_outlined,
+                    size: isTablet ? 80 : 64,
+                    color: AppColors.textSecondary.withOpacity(0.5),
+                  ),
+                  SizedBox(height: isTablet ? 24 : 16),
+                  Text(
+                    'No hay artículos disponibles',
+                    style: TextStyle(
+                      fontSize: isTablet ? 18 : 16,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadArticles,
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: EdgeInsets.all(padding),
+                itemCount: _articles.length + (_isLoadingMore ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index == _articles.length) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  }
+                  return _buildArticleCard(_articles[index], isTablet);
+                },
               ),
             ),
-          ],
-        ),
-      )
-          : RefreshIndicator(
-        onRefresh: _loadArticles,
-        child: ListView.builder(
-          controller: _scrollController,
-          padding: EdgeInsets.all(padding),
-          itemCount:
-          _articles.length + (_isLoadingMore ? 1 : 0),
-          itemBuilder: (context, index) {
-            if (index == _articles.length) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: CircularProgressIndicator(),
-                ),
-              );
-            }
-            return _buildArticleCard(
-                _articles[index], isTablet);
-          },
-        ),
-      ),
     );
   }
 

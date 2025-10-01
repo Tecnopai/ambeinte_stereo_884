@@ -25,9 +25,11 @@ class Article {
       excerpt: _parseHtmlString(json['excerpt']['rendered'] as String),
       link: json['link'] as String,
       date: DateTime.parse(json['date'] as String),
-      categories: (json['categories'] as List<dynamic>?)
-          ?.map((e) => e as int)
-          .toList() ?? [],
+      categories:
+          (json['categories'] as List<dynamic>?)
+              ?.map((e) => e as int)
+              .toList() ??
+          [],
     );
   }
 
@@ -40,6 +42,7 @@ class Article {
         .replaceAll('&#8217;', "'")
         .replaceAll('&#8220;', '"')
         .replaceAll('&#8221;', '"')
+        .replaceAll('&#8230;', '...')
         .replaceAll('&lt;', '<')
         .replaceAll('&gt;', '>')
         .replaceAll('[&hellip;]', '...')
@@ -48,8 +51,18 @@ class Article {
 
   String get formattedDate {
     final months = [
-      'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-      'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
+      'ene',
+      'feb',
+      'mar',
+      'abr',
+      'may',
+      'jun',
+      'jul',
+      'ago',
+      'sep',
+      'oct',
+      'nov',
+      'dic',
     ];
     return '${date.day} ${months[date.month - 1]} ${date.year} • ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }

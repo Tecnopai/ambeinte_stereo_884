@@ -55,72 +55,69 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     final padding = isTablet ? 20.0 : 16.0;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Categorías'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Categorías'), centerTitle: true),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
           ? Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: isTablet ? 80 : 64,
-                color: Colors.red.shade300,
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: isTablet ? 80 : 64,
+                      color: Colors.red.shade300,
+                    ),
+                    SizedBox(height: isTablet ? 24 : 16),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: isTablet ? 18 : 16,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    SizedBox(height: isTablet ? 24 : 16),
+                    ElevatedButton.icon(
+                      onPressed: _loadCategories,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Reintentar'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isTablet ? 32 : 24,
+                          vertical: isTablet ? 16 : 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              SizedBox(height: isTablet ? 24 : 16),
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
+            )
+          : _categories.isEmpty
+          ? Center(
+              child: Text(
+                'No hay categorías disponibles',
                 style: TextStyle(
-                  fontSize: isTablet ? 18 : 16,
+                  fontSize: isTablet ? 16 : 14,
                   color: AppColors.textSecondary,
                 ),
               ),
-              SizedBox(height: isTablet ? 24 : 16),
-              ElevatedButton.icon(
-                onPressed: _loadCategories,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Reintentar'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isTablet ? 32 : 24,
-                    vertical: isTablet ? 16 : 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      )
-          : _categories.isEmpty
-          ? Center(
-        child: Text(
-          'No hay categorías disponibles',
-          style: TextStyle(
-            fontSize: isTablet ? 18 : 16,
-            color: AppColors.textSecondary,
-          ),
-        ),
-      )
+            )
           : RefreshIndicator(
-        onRefresh: _loadCategories,
-        child: ListView.builder(
-          padding: EdgeInsets.all(padding),
-          itemCount: _categories.length,
-          itemBuilder: (context, index) {
-            final category = _categories[index];
-            return _buildCategoryCard(category, isTablet);
-          },
-        ),
-      ),
+              onRefresh: _loadCategories,
+              child: ListView.builder(
+                padding: EdgeInsets.all(padding),
+                itemCount: _categories.length,
+                itemBuilder: (context, index) {
+                  final category = _categories[index];
+                  return _buildCategoryCard(category, isTablet);
+                },
+              ),
+            ),
     );
   }
 
@@ -136,9 +133,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => NewsListScreen(
-                category: category,
-              ),
+              builder: (context) => NewsListScreen(category: category),
             ),
           );
         },

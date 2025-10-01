@@ -18,7 +18,7 @@ class ArticleDetailScreen extends StatelessWidget {
     // Calcular tamaños dinámicos
     final padding = isTablet ? 22.0 : 14.0;
     final titleFontSize =
-        (isTablet ? 20.0 : 16.0) * textScale; // Titulo del articulo
+        (isTablet ? 18.0 : 14.0) * textScale; // Titulo del articulo
     final dateFontSize =
         (isTablet ? 10.0 : 8.0) * textScale; // Date fecha del articulo
     final contentFontSize = (isTablet ? 10.0 : 8.0) * textScale; // contenido
