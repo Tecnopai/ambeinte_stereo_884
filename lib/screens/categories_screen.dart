@@ -148,8 +148,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      AppColors.primary.withOpacity(0.2),
-                      AppColors.primary.withOpacity(0.05),
+                      AppColors.primary.withValues(alpha: 0.2),
+                      AppColors.primary.withValues(alpha: 0.05),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -189,7 +189,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               Icon(
                 Icons.arrow_forward_ios,
                 size: isTablet ? 22 : 18,
-                color: AppColors.textSecondary.withOpacity(0.5),
+                color: AppColors.textSecondary.withValues(alpha: 0.5),
               ),
             ],
           ),

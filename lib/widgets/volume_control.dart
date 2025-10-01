@@ -102,7 +102,7 @@ class _VolumeControlState extends State<VolumeControl>
                       // Sombra sutil
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withValues(alpha: 0.1),
                           blurRadius: isTablet ? 8 : 6,
                           spreadRadius: 1,
                           offset: const Offset(0, 2),
@@ -111,7 +111,7 @@ class _VolumeControlState extends State<VolumeControl>
                       // Borde cuando está activo
                       border: _showVolumeSlider
                           ? Border.all(
-                              color: AppColors.primary.withOpacity(0.3),
+                              color: AppColors.primary.withValues(alpha: 0.3),
                               width: 2,
                             )
                           : null,
@@ -120,7 +120,7 @@ class _VolumeControlState extends State<VolumeControl>
                       _getVolumeIcon(),
                       color: _showVolumeSlider
                           ? AppColors.primary
-                          : AppColors.primary.withOpacity(0.8),
+                          : AppColors.primary.withValues(alpha: 0.8),
                       size: iconSize,
                     ),
                   ),
@@ -134,7 +134,7 @@ class _VolumeControlState extends State<VolumeControl>
                   vertical: isTablet ? 8 : 6,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.surface.withOpacity(0.5),
+                  color: AppColors.surface.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(buttonRadius),
                 ),
                 child: Text(
@@ -171,7 +171,7 @@ class _VolumeControlState extends State<VolumeControl>
                               borderRadius: BorderRadius.circular(sliderRadius),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
+                                  color: Colors.black.withValues(alpha: 0.1),
                                   blurRadius: isTablet ? 12 : 8,
                                   spreadRadius: 1,
                                   offset: const Offset(0, 4),
@@ -210,8 +210,8 @@ class _VolumeControlState extends State<VolumeControl>
                                     activeTrackColor: AppColors.primary,
                                     inactiveTrackColor: const Color(0xFF374151),
                                     thumbColor: AppColors.primary,
-                                    overlayColor: AppColors.primary.withOpacity(
-                                      0.2,
+                                    overlayColor: AppColors.primary.withValues(
+                                      alpha: 0.2,
                                     ),
                                     trackHeight: trackHeight,
                                     thumbShape: RoundSliderThumbShape(
@@ -226,7 +226,7 @@ class _VolumeControlState extends State<VolumeControl>
                                           tickMarkRadius: 2,
                                         ),
                                     activeTickMarkColor: AppColors.primary
-                                        .withOpacity(0.7),
+                                        .withValues(alpha: 0.7),
                                     inactiveTickMarkColor: const Color(
                                       0xFF374151,
                                     ),

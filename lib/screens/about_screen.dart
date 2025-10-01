@@ -176,7 +176,7 @@ class AboutScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(borderRadius),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             spreadRadius: 1,
           ),
@@ -217,10 +217,12 @@ class AboutScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(color: const Color(0xFF374151).withOpacity(0.5)),
+        border: Border.all(
+          color: const Color(0xFF374151).withValues(alpha: 0.5),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             spreadRadius: 1,
           ),
@@ -275,7 +277,7 @@ class AboutScreen extends StatelessWidget {
           borderRadius: BorderRadius.circular(borderRadius),
         ),
         elevation: 4,
-        shadowColor: AppColors.primary.withOpacity(0.3),
+        shadowColor: AppColors.primary.withValues(alpha: 0.3),
       ),
     );
   }

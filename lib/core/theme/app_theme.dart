@@ -143,7 +143,7 @@ class AppTheme {
     return CardThemeData(
       color: AppColors.surface,
       elevation: 4,
-      shadowColor: Colors.black.withOpacity(0.15),
+      shadowColor: Colors.black.withValues(alpha: 0.15),
       // Border radius se calcula dinámicamente
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12), // Base, se puede override
@@ -155,9 +155,9 @@ class AppTheme {
   static SliderThemeData _buildResponsiveSliderTheme() {
     return SliderThemeData(
       activeTrackColor: AppColors.primary,
-      inactiveTrackColor: AppColors.textSecondary.withOpacity(0.3),
+      inactiveTrackColor: AppColors.textSecondary.withValues(alpha: 0.3),
       thumbColor: AppColors.primary,
-      overlayColor: AppColors.primary.withOpacity(0.2),
+      overlayColor: AppColors.primary.withValues(alpha: 0.2),
       valueIndicatorColor: AppColors.primary,
       valueIndicatorTextStyle: TextStyle(
         color: Colors.white,

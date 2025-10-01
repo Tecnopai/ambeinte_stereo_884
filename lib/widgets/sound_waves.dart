@@ -130,15 +130,15 @@ class _SoundWavesState extends State<SoundWaves>
                     begin: Alignment.bottomCenter,
                     end: Alignment.topCenter,
                     colors: [
-                      AppColors.primary.withOpacity(0.8),
-                      AppColors.primary.withOpacity(0.4),
+                      AppColors.primary.withValues(alpha: 0.8),
+                      AppColors.primary.withValues(alpha: 0.4),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(borderRadius),
                   // Sombra sutil para profundidad
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primary.withOpacity(0.2),
+                      color: AppColors.primary.withValues(alpha: 0.2),
                       blurRadius: isTablet ? 3 : 2,
                       spreadRadius: 0,
                       offset: const Offset(0, 1),

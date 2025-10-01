@@ -252,7 +252,7 @@ class _NewsScreenState extends State<NewsScreen>
             Icon(
               Icons.category_outlined,
               size: (isTablet ? 80.0 : 64.0) * textScale,
-              color: AppColors.textSecondary.withOpacity(0.5),
+              color: AppColors.textSecondary.withValues(alpha: 0.5),
             ),
             SizedBox(height: isTablet ? 24 : 16),
             Text(
@@ -318,7 +318,7 @@ class _NewsScreenState extends State<NewsScreen>
             Icon(
               Icons.article_outlined,
               size: (isTablet ? 80.0 : 64.0) * textScale,
-              color: AppColors.textSecondary.withOpacity(0.5),
+              color: AppColors.textSecondary.withValues(alpha: 0.5),
             ),
             SizedBox(height: isTablet ? 24 : 16),
             Text(
@@ -495,8 +495,8 @@ class _NewsScreenState extends State<NewsScreen>
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      AppColors.primary.withOpacity(0.2),
-                      AppColors.primary.withOpacity(0.05),
+                      AppColors.primary.withValues(alpha: 0.2),
+                      AppColors.primary.withValues(alpha: 0.05),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -673,10 +673,6 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
-
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -742,7 +738,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
             Icon(
               Icons.article_outlined,
               size: (isTablet ? 80.0 : 64.0) * textScale,
-              color: AppColors.textSecondary.withOpacity(0.5),
+              color: AppColors.textSecondary.withValues(alpha: 0.5),
             ),
             SizedBox(height: isTablet ? 24 : 16),
             Text(

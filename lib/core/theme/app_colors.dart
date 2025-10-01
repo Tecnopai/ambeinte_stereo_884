@@ -41,11 +41,11 @@ class AppColors {
 
   /// Obtiene una variante del color primario con opacidad
   static Color primaryWithOpacity(double opacity) =>
-      primary.withOpacity(opacity);
+      primary.withValues(alpha: opacity);
 
   /// Obtiene una variante del color de superficie con opacidad
   static Color surfaceWithOpacity(double opacity) =>
-      surface.withOpacity(opacity);
+      surface.withValues(alpha: opacity);
 
   /// Obtiene colores de sombra adaptativos según el dispositivo
   static Color getShadowColor(BuildContext context, {double opacity = 0.15}) {
@@ -53,7 +53,7 @@ class AppColors {
     final isTablet = screenSize.shortestSide >= 600;
 
     // En tablets, sombras ligeramente más pronunciadas
-    return Colors.black.withOpacity(isTablet ? opacity * 1.2 : opacity);
+    return Colors.black.withValues(alpha: isTablet ? opacity * 1.2 : opacity);
   }
 
   /// Obtiene opacidad de overlay adaptativa
@@ -65,7 +65,9 @@ class AppColors {
     final isTablet = screenSize.shortestSide >= 600;
 
     // En tablets, overlays ligeramente más sutiles
-    return primary.withOpacity(isTablet ? baseOpacity * 0.8 : baseOpacity);
+    return primary.withValues(
+      alpha: isTablet ? baseOpacity * 0.8 : baseOpacity,
+    );
   }
 
   /// Gradiente adaptativo para botones según el dispositivo
@@ -76,7 +78,10 @@ class AppColors {
     if (isTablet) {
       // En tablets, gradiente más sutil
       return LinearGradient(
-        colors: [primary.withOpacity(0.9), secondary.withOpacity(0.9)],
+        colors: [
+          primary.withValues(alpha: 0.9),
+          secondary.withValues(alpha: 0.9),
+        ],
       );
     }
 
@@ -88,20 +93,20 @@ class AppColors {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
 
-    return primary.withOpacity(isTablet ? opacity * 1.1 : opacity);
+    return primary.withValues(alpha: isTablet ? opacity * 1.1 : opacity);
   }
 
   /// Colores de estado con opacidad adaptativa
   static Color getErrorColor(BuildContext context, {double opacity = 1.0}) {
-    return error.withOpacity(opacity);
+    return error.withValues(alpha: opacity);
   }
 
   static Color getSuccessColor(BuildContext context, {double opacity = 1.0}) {
-    return success.withOpacity(opacity);
+    return success.withValues(alpha: opacity);
   }
 
   static Color getWarningColor(BuildContext context, {double opacity = 1.0}) {
-    return warning.withOpacity(opacity);
+    return warning.withValues(alpha: opacity);
   }
 
   /// Obtiene color de texto adaptativo según contraste

@@ -160,7 +160,9 @@ class _SplashScreenState extends State<SplashScreen>
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: AppColors.primary.withOpacity(0.4),
+                                    color: AppColors.primary.withValues(
+                                      alpha: 0.4,
+                                    ),
                                     blurRadius: isTablet ? 30 : 20,
                                     spreadRadius: isTablet ? 10 : 5,
                                   ),

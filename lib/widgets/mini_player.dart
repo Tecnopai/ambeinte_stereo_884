@@ -124,18 +124,18 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              AppColors.surface.withOpacity(0.95),
-              AppColors.background.withOpacity(0.95),
+              AppColors.surface.withValues(alpha: 0.95),
+              AppColors.background.withValues(alpha: 0.95),
             ],
           ),
           borderRadius: BorderRadius.circular(isTablet ? 20 : 16),
           border: Border.all(
-            color: AppColors.primary.withOpacity(0.3),
+            color: AppColors.primary.withValues(alpha: 0.3),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               blurRadius: isTablet ? 15 : 10,
               spreadRadius: isTablet ? 3 : 2,
             ),
@@ -197,8 +197,8 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
             child: ClipOval(
               child: ColorFiltered(
                 colorFilter: ColorFilter.mode(
-                  AppColors.primary.withOpacity(
-                    0.3,
+                  AppColors.primary.withValues(
+                    alpha: 0.3,
                   ), // Tinte de color sobre la imagen
                   BlendMode.srcOver,
                 ),
@@ -289,7 +289,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
       child: Container(
         padding: EdgeInsets.all(isTablet ? 10 : 8),
         decoration: BoxDecoration(
-          color: const Color(0xFF374151).withOpacity(0.5),
+          color: const Color(0xFF374151).withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(isTablet ? 10 : 8),
         ),
         child: Icon(
@@ -357,7 +357,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
                   activeTrackColor: AppColors.primary,
                   inactiveTrackColor: const Color(0xFF374151),
                   thumbColor: AppColors.primary,
-                  overlayColor: AppColors.primary.withOpacity(0.2),
+                  overlayColor: AppColors.primary.withValues(alpha: 0.2),
                   trackHeight: isTablet ? 3 : 2,
                   thumbShape: RoundSliderThumbShape(
                     enabledThumbRadius: isTablet ? 10 : 8,

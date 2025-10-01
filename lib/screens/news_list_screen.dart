@@ -169,7 +169,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
                   Icon(
                     Icons.article_outlined,
                     size: isTablet ? 80 : 64,
-                    color: AppColors.textSecondary.withOpacity(0.5),
+                    color: AppColors.textSecondary.withValues(alpha: 0.5),
                   ),
                   SizedBox(height: isTablet ? 24 : 16),
                   Text(
@@ -258,7 +258,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
                   Icon(
                     Icons.arrow_forward_ios,
                     size: isTablet ? 16 : 14,
-                    color: AppColors.textSecondary.withOpacity(0.5),
+                    color: AppColors.textSecondary.withValues(alpha: 0.5),
                   ),
                 ],
               ),
