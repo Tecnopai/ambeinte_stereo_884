@@ -42,7 +42,7 @@ class AboutScreen extends StatelessWidget {
                     _getSpacing(context, 32),
                     _buildDescriptionCard(context),
                     _getSpacing(context, 32),
-                    _buildInfoCard(context, 'Versión', '1.0.0'),
+                    _buildInfoCard(context, 'Versión', '2.0.0'),
                     _getSpacing(context, 14),
                     _buildInfoCard(context, 'Sitio Web', 'ambientestereo.fm'),
                     _getSpacing(context, 32),
@@ -185,7 +185,7 @@ class AboutScreen extends StatelessWidget {
       child: Column(
         children: [
           Text(
-            'Disfruta de la mejor música ambiental y contenido exclusivo las 24 horas del día. Ambient Stereo FM te conecta con sonidos únicos y las últimas noticias de nuestro sitio web.',
+            'Nuestro propósito es promover la protección y conservación del medio ambiente, la participación ciudadana y los valores familiares y sociales a través de una programación variada, educativa y cristocéntrica.',
             style: TextStyle(
               fontSize: fontSize, // Mejorado de 10 a 14-16
               color: AppColors.textMuted,
