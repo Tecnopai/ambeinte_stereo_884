@@ -236,7 +236,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(
-              'Ambient Stereo FM',
+              'Ambiente Stereo FM',
               style: TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: isTablet ? 18 : 16,

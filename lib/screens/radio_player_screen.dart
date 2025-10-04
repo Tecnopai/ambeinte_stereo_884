@@ -84,8 +84,8 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     // Calcular tamaños dinámicos
     final padding = isTablet ? 32.0 : 20.0;
     final titleFontSize =
-        (isTablet ? 18.0 : 14.0) * textScale; // Aumentado significativamente
-    final subtitleFontSize = (isTablet ? 14.0 : 12.0) * textScale; // Aumentado
+        (isTablet ? 14.0 : 10.0) * textScale; // Aumentado significativamente
+    final subtitleFontSize = (isTablet ? 12.0 : 10.0) * textScale; // Aumentado
     final playButtonSize = isTablet ? 100.0 : 80.0;
     final playIconSize = isTablet ? 50.0 : 40.0;
     final loadingSize = isTablet ? 40.0 : 30.0;
@@ -94,13 +94,13 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     final topSpacing = isTablet ? 80.0 : 60.0;
     final sectionSpacing = isTablet ? 50.0 : 40.0;
     final smallSpacing = isTablet ? 16.0 : 12.0;
-
+    //Titulo player
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Ambient Stereo 88.4 FM',
+          'Ambiente Stereo 88.4 FM',
           style: TextStyle(
-            fontSize: (isTablet ? 20.0 : 18.0) * textScale,
+            fontSize: (isTablet ? 16.0 : 14.0) * textScale,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -132,7 +132,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
                 // Título
                 Text(
-                  'Ambient Stereo 88.4 FM',
+                  'Ambiente Stereo 88.4 FM',
                   style: TextStyle(
                     fontSize: titleFontSize,
                     fontWeight: FontWeight.bold,

@@ -8,7 +8,7 @@ class AmbientStereoApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Ambient Stereo 88.4 FM',
+      title: 'Ambiente Stereo 88.4 FM',
       theme: AppTheme.darkTheme,
       home: const SplashScreen(), // Cambiar de MainScreen a SplashScreen
       debugShowCheckedModeBanner: false,

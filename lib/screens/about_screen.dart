@@ -137,7 +137,7 @@ class AboutScreen extends StatelessWidget {
     final fontSize = (isTablet ? 28.0 : 14.0) * textScale;
 
     return Text(
-      'Ambient Stereo 88.4 FM',
+      'Ambiente Stereo 88.4 FM',
       style: TextStyle(
         fontSize: fontSize,
         fontWeight: FontWeight.bold,
