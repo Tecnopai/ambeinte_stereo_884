@@ -153,16 +153,19 @@ class _SplashScreenState extends State<SplashScreen>
                                 shape: BoxShape.circle,
                                 gradient: const RadialGradient(
                                   colors: [
-                                    AppColors.primary,
-                                    AppColors.secondary,
-                                    AppColors.accent,
+                                    Color.fromARGB(31, 136, 137, 239),
+                                    Color.fromARGB(31, 138, 92, 246),
+                                    Color.fromARGB(31, 124, 104, 238),
                                   ],
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: AppColors.primary.withValues(
-                                      alpha: 0.4,
-                                    ),
+                                    color: const Color.fromARGB(
+                                      104,
+                                      200,
+                                      201,
+                                      242,
+                                    ).withValues(alpha: 0.1),
                                     blurRadius: isTablet ? 30 : 20,
                                     spreadRadius: isTablet ? 10 : 5,
                                   ),
@@ -198,7 +201,7 @@ class _SplashScreenState extends State<SplashScreen>
                         return Opacity(
                           opacity: _logoOpacity.value,
                           child: Text(
-                            'Ambient Stereo',
+                            'Ambiente Stereo',
                             style: TextStyle(
                               fontSize: titleFontSize,
                               fontWeight: FontWeight.bold,
