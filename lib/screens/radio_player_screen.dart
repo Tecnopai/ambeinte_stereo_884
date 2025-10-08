@@ -19,6 +19,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   bool _isPlaying = true;
   bool _isLoading = true;
   double _volume = 0.7;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -28,6 +29,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   }
 
   void _setupListeners() {
+    // Listener de reproducción
     widget.audioManager.playingStream.listen((isPlaying) {
       if (mounted) {
         setState(() {
@@ -36,6 +38,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       }
     });
 
+    // Listener de carga
     widget.audioManager.loadingStream.listen((isLoading) {
       if (mounted) {
         setState(() {
@@ -44,10 +47,49 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       }
     });
 
+    // Listener de volumen
     widget.audioManager.volumeStream.listen((volume) {
       if (mounted) {
         setState(() {
           _volume = volume;
+        });
+      }
+    });
+
+    // NUEVO: Listener de errores y reconexiones
+    widget.audioManager.errorStream.listen((error) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = error;
+        });
+
+        // Mostrar SnackBar con el estado
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                if (error.contains('Reconectado'))
+                  const Icon(Icons.check_circle, color: Colors.white)
+                else
+                  const Icon(Icons.info, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text(error)),
+              ],
+            ),
+            backgroundColor: error.contains('Reconectado')
+                ? AppColors.success
+                : AppColors.warning,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        // Limpiar mensaje después de 3 segundos
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _errorMessage = null;
+            });
+          }
         });
       }
     });
@@ -76,25 +118,21 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Obtener información del dispositivo
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
     final textScale = MediaQuery.of(context).textScaler.scale(1.0);
 
-    // Calcular tamaños dinámicos
     final padding = isTablet ? 32.0 : 20.0;
-    final titleFontSize =
-        (isTablet ? 14.0 : 10.0) * textScale; // Aumentado significativamente
-    final subtitleFontSize = (isTablet ? 12.0 : 10.0) * textScale; // Aumentado
+    final titleFontSize = (isTablet ? 14.0 : 10.0) * textScale;
+    final subtitleFontSize = (isTablet ? 12.0 : 10.0) * textScale;
     final playButtonSize = isTablet ? 100.0 : 80.0;
     final playIconSize = isTablet ? 50.0 : 40.0;
     final loadingSize = isTablet ? 40.0 : 30.0;
 
-    // Espaciados adaptativos
     final topSpacing = isTablet ? 80.0 : 60.0;
     final sectionSpacing = isTablet ? 50.0 : 40.0;
     final smallSpacing = isTablet ? 16.0 : 12.0;
-    //Titulo player
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -105,6 +143,14 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
           ),
         ),
         centerTitle: true,
+        // NUEVO: Indicador de reconexión en el AppBar
+        actions: [
+          if (_errorMessage != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Center(child: _buildReconnectingIndicator(isTablet)),
+            ),
+        ],
       ),
       body: Container(
         width: double.infinity,
@@ -144,21 +190,13 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
                 SizedBox(height: smallSpacing),
 
-                // Subtítulo
-                Text(
-                  _isPlaying ? 'En vivo ahora' : 'La radio que si quieres',
-                  style: TextStyle(
-                    fontSize: subtitleFontSize,
-                    color: AppColors.textMuted,
-                    letterSpacing: 0.3,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+                // NUEVO: Subtítulo con estado mejorado
+                _buildStatusText(subtitleFontSize),
 
                 SizedBox(height: sectionSpacing),
 
                 // Ondas de sonido animadas
-                if (_isPlaying)
+                if (_isPlaying && !_isLoading)
                   Padding(
                     padding: EdgeInsets.symmetric(vertical: isTablet ? 30 : 20),
                     child: SoundWaves(isPlaying: _isPlaying),
@@ -187,6 +225,93 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // NUEVO: Widget para mostrar el estado actual
+  Widget _buildStatusText(double fontSize) {
+    String statusText;
+    Color statusColor;
+
+    if (_isLoading) {
+      statusText = 'Conectando...';
+      statusColor = AppColors.warning;
+    } else if (_isPlaying) {
+      statusText = 'En vivo ahora';
+      statusColor = AppColors.success;
+    } else {
+      statusText = 'La radio que si quieres';
+      statusColor = AppColors.textMuted;
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (_isLoading || _isPlaying)
+          Container(
+            width: 8,
+            height: 8,
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: statusColor,
+              boxShadow: [
+                BoxShadow(
+                  color: statusColor.withOpacity(0.5),
+                  blurRadius: 8,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+          ),
+        Text(
+          statusText,
+          style: TextStyle(
+            fontSize: fontSize,
+            color: statusColor,
+            letterSpacing: 0.3,
+            fontWeight: _isLoading ? FontWeight.w600 : FontWeight.normal,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  // NUEVO: Indicador de reconexión en el AppBar
+  Widget _buildReconnectingIndicator(bool isTablet) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isTablet ? 12 : 8,
+        vertical: isTablet ? 6 : 4,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.warning.withOpacity(0.5), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: isTablet ? 14 : 12,
+            height: isTablet ? 14 : 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.warning),
+            ),
+          ),
+          SizedBox(width: isTablet ? 8 : 6),
+          Text(
+            'Reconectando...',
+            style: TextStyle(
+              fontSize: isTablet ? 12 : 10,
+              color: AppColors.warning,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
