@@ -130,7 +130,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     final loadingSize = isTablet ? 40.0 : 30.0;
 
     final topSpacing = isTablet ? 80.0 : 60.0;
-    final sectionSpacing = isTablet ? 50.0 : 40.0;
+    final sectionSpacing = isTablet ? 40.0 : 30.0;
     final smallSpacing = isTablet ? 16.0 : 12.0;
 
     return Scaffold(
@@ -198,7 +198,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                 // Ondas de sonido animadas
                 if (_isPlaying && !_isLoading)
                   Padding(
-                    padding: EdgeInsets.symmetric(vertical: isTablet ? 30 : 20),
+                    padding: EdgeInsets.symmetric(vertical: isTablet ? 15 : 5),
                     child: SoundWaves(isPlaying: _isPlaying),
                   ),
 

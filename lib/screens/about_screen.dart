@@ -47,6 +47,8 @@ class AboutScreen extends StatelessWidget {
                     _buildInfoCard(context, 'Sitio Web', 'ambientestereo.fm'),
                     _getSpacing(context, 32),
                     _buildWebsiteButton(context),
+                    _getSpacing(context, 32),
+                    _buildWebsiteButton1(context),
                     // Padding extra para evitar que el MiniPlayer tape contenido
                     if (isPlaying) _getSpacing(context, 20),
                   ],
@@ -103,11 +105,11 @@ class AboutScreen extends StatelessWidget {
       height: logoSize,
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        gradient: AppColors.buttonGradient,
+        gradient: AppColors.Logo,
         boxShadow: [
           BoxShadow(
-            color: Color.fromARGB(77, 203, 203, 229),
-            blurRadius: 20,
+            color: Color.fromARGB(76, 247, 247, 248),
+            blurRadius: 10,
             spreadRadius: 3,
           ),
         ],
@@ -266,6 +268,62 @@ class AboutScreen extends StatelessWidget {
       onPressed: () => _launchUrl('https://ambientestereo.fm'),
       icon: Icon(Icons.web, size: iconSize),
       label: Text('Visitar sitio web', style: TextStyle(fontSize: fontSize)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.textPrimary,
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: verticalPadding,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
+        elevation: 4,
+        shadowColor: AppColors.primary.withValues(alpha: 0.3),
+      ),
+    );
+  }
+
+  Widget _buildWebsiteButton1(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isTablet = screenSize.shortestSide >= 600;
+    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+    final fontSize = (isTablet ? 14.0 : 12.0) * textScale;
+    final iconSize = (isTablet ? 24.0 : 20.0) * textScale;
+    final horizontalPadding = isTablet ? 40.0 : 32.0;
+    final verticalPadding = isTablet ? 16.0 : 12.0;
+    final borderRadius = isTablet ? 12.0 : 8.0;
+
+    // 🔹 Helper para codificar parámetros del correo
+    String? encodeQueryParameters(Map<String, String> params) {
+      return params.entries
+          .map(
+            (e) =>
+                '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
+          )
+          .join('&');
+    }
+
+    // 🔹 URI del correo electrónico
+    final Uri emailUri = Uri(
+      scheme: 'mailto',
+      path: 'tecnologia@iglesiacristianapai.org',
+      query: encodeQueryParameters(<String, String>{
+        'subject': 'Consulta desde la app Ambiente Stereo 88.4',
+        'body': 'Hola, quisiera más información sobre...',
+      })!,
+    );
+
+    return ElevatedButton.icon(
+      onPressed: () async {
+        if (await canLaunchUrl(emailUri)) {
+          await launchUrl(emailUri);
+        } else {
+          throw 'No se pudo abrir el cliente de correo.';
+        }
+      },
+      icon: Icon(Icons.email, size: iconSize),
+      label: Text('Soporte app', style: TextStyle(fontSize: fontSize)),
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.textPrimary,

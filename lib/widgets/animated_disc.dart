@@ -99,7 +99,7 @@ class _AnimatedDiscState extends State<AnimatedDisc>
               gradient: AppColors.discGradient,
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0x4D6366F1),
+                  color: const Color.fromARGB(36, 240, 240, 241),
                   blurRadius: shadowBlur,
                   spreadRadius: shadowSpread,
                 ),
@@ -111,7 +111,7 @@ class _AnimatedDiscState extends State<AnimatedDisc>
                 height: innerSize,
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.background,
+                  color: Color.fromARGB(255, 255, 255, 255),
                 ),
                 child: ClipOval(
                   child: Image.asset(
