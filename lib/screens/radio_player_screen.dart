@@ -258,7 +258,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
               color: statusColor,
               boxShadow: [
                 BoxShadow(
-                  color: statusColor.withOpacity(0.5),
+                  color: statusColor.withValues(alpha: 0.5),
                   blurRadius: 8,
                   spreadRadius: 2,
                 ),
@@ -287,9 +287,12 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
         vertical: isTablet ? 6 : 4,
       ),
       decoration: BoxDecoration(
-        color: AppColors.warning.withOpacity(0.2),
+        color: AppColors.warning.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.warning.withOpacity(0.5), width: 1),
+        border: Border.all(
+          color: AppColors.warning.withValues(alpha: 0.5),
+          width: 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
