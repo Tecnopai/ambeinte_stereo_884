@@ -30,13 +30,12 @@ class AudioPlayerManager {
 
   // Para detectar stream congelado y controlar reinicio
   bool _isRestarting = false;
-  DateTime? _lastPositionUpdate; // NUEVO: Solo verificar después de reconexión
+  DateTime? _lastPositionUpdate;
 
   // Subscripciones para poder cancelarlas
   StreamSubscription? _stateSubscription;
   StreamSubscription? _completeSubscription;
-  StreamSubscription?
-  _positionSubscription; // CAMBIO: position en lugar de duration
+  StreamSubscription? _positionSubscription;
 
   // Stream controllers para notificar cambios
   final _playingController = StreamController<bool>.broadcast();
@@ -68,7 +67,7 @@ class AudioPlayerManager {
     // Crear nuevo player
     _audioPlayer = AudioPlayer();
 
-    // MEJORADO: Escuchar cambios de posición para detectar streams activos
+    // Escuchar cambios de posición para detectar streams activos
     _positionSubscription = _audioPlayer!.onPositionChanged.listen(
       (Duration position) {
         // Se dispara cada ~200ms cuando el stream está activo
@@ -153,39 +152,41 @@ class AudioPlayerManager {
     _initializePlayer();
   }
 
-  /// SIMPLIFICADO: Solo verifica stream congelado, no audio fantasma
+  /// Verifica si realmente hay audio reproduciéndose
   void _startAudioCheck() {
     _stopAudioCheck();
 
-    _audioCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    _audioCheckTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (_isPlaying &&
           !_userStoppedManually &&
           !_isLoading &&
           !_isRestarting) {
-        // Solo verificar si hay position updates cuando esperamos que los haya
+        // Verificar si hay position updates
         if (_lastPositionUpdate != null) {
           final timeSinceLastUpdate = DateTime.now().difference(
             _lastPositionUpdate!,
           );
 
-          // Si llevamos más de 15 segundos sin updates de posición
-          if (timeSinceLastUpdate.inSeconds > 10) {
+          // MEJORADO: Reiniciar más rápido después de reconexión
+          // Si llevamos más de 8 segundos sin updates, reiniciar inmediatamente
+          if (timeSinceLastUpdate.inSeconds > 8) {
             _log(
               '⚠️ Stream sin actividad por ${timeSinceLastUpdate.inSeconds}s',
             );
-
-            // Solo reiniciar si también hay errores consecutivos
-            if (_consecutiveErrors >= 3) {
-              _log('🔄 Forzando reinicio por stream inactivo con errores...');
-              timer.cancel();
-              _forceRestart();
-              return;
-            }
+            _log('🔄 Reiniciando para sincronizar con stream en vivo...');
+            timer.cancel();
+            _forceRestart();
+            return;
+          } else if (timeSinceLastUpdate.inSeconds > 5) {
+            // Advertencia temprana
+            _log(
+              '⚠️ Stream posiblemente desincronizado (${timeSinceLastUpdate.inSeconds}s)',
+            );
           }
         }
 
-        // Verificar errores consecutivos solamente
-        if (_consecutiveErrors > 3) {
+        // Verificar errores consecutivos
+        if (_consecutiveErrors > 5) {
           _log('⚠️ Demasiados errores consecutivos, reiniciando player...');
           timer.cancel();
           _forceRestart();
@@ -200,7 +201,7 @@ class AudioPlayerManager {
     _audioCheckTimer = null;
   }
 
-  /// MEJORADO: Reinicio con subscripciones canceladas
+  /// Reinicio con subscripciones canceladas
   Future<void> _forceRestart() async {
     if (_isRestarting) {
       _log('⚠️ Ya hay un reinicio en curso, ignorando...');
@@ -343,7 +344,7 @@ class AudioPlayerManager {
     }
   }
 
-  /// SIMPLIFICADO: Verificación periódica sin audio fantasma
+  /// Verificación periódica
   void _startConnectivityCheck() {
     _stopConnectivityCheck();
 
@@ -579,6 +580,7 @@ class AudioPlayerManager {
 
     try {
       _log('✅ Conectividad verificada, intentando reconexión...');
+
       await _audioPlayer?.stop().catchError((e) {
         _log('Error al detener en reconexión (ignorado): $e');
         return null;

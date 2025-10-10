@@ -153,9 +153,9 @@ class _NewsScreenState extends State<NewsScreen>
 
   @override
   Widget build(BuildContext context) {
-    //final screenSize = MediaQuery.of(context).size;
-    //final isTablet = screenSize.shortestSide >= 600;
-    //final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+    final screenSize = MediaQuery.of(context).size;
+    final isTablet = screenSize.shortestSide >= 600;
+    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
 
     return Scaffold(
       appBar: AppBar(
@@ -166,7 +166,7 @@ class _NewsScreenState extends State<NewsScreen>
           ],
         ),
         centerTitle: false,
-        /*bottom: TabBar(
+        bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
           indicatorWeight: 3,
@@ -194,7 +194,7 @@ class _NewsScreenState extends State<NewsScreen>
               text: 'Categorías',
             ),
           ],
-        ),*/
+        ),
       ),
       body: Stack(
         children: [
