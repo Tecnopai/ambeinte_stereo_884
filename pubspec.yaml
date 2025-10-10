@@ -14,6 +14,7 @@ dependencies:
   # Audio
   audioplayers: ^6.0.0
   just_audio: ^0.10.5
+  volume_controller: ^2.0.7
   
   # HTTP
   http: ^1.1.0

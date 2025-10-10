@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:volume_controller/volume_controller.dart'; // ✅ NUEVO
 
 /// Clase global para manejar el reproductor de audio con auto-recuperación
 /// y verificación REAL de conectividad con descarga de datos
@@ -11,6 +12,7 @@ class AudioPlayerManager {
   AudioPlayerManager._internal();
 
   AudioPlayer? _audioPlayer;
+  VolumeController? _systemVolumeController; // ✅ NUEVO: Para botones físicos
   bool _isPlaying = false;
   bool _isLoading = false;
   bool _userStoppedManually = false;
@@ -147,9 +149,34 @@ class AudioPlayerManager {
     _audioPlayer!.setReleaseMode(ReleaseMode.loop);
   }
 
+  /// ✅ NUEVO: Inicializar listener de volumen del sistema (botones físicos)
+  void _initializeSystemVolumeListener() {
+    try {
+      _systemVolumeController = VolumeController();
+
+      // Escuchar cambios de volumen del sistema (botones físicos)
+      _systemVolumeController!.listener((systemVolume) {
+        // systemVolume está entre 0.0 y 1.0
+        if ((systemVolume - _volume).abs() > 0.01) {
+          _volume = systemVolume;
+          _audioPlayer?.setVolume(_volume);
+          _volumeController.add(_volume);
+          _log(
+            '🔊 Volumen actualizado por botones físicos: ${(_volume * 100).round()}%',
+          );
+        }
+      });
+
+      _log('✅ Listener de volumen del sistema inicializado');
+    } catch (e) {
+      _log('⚠️ No se pudo inicializar listener de volumen del sistema: $e');
+    }
+  }
+
   /// Inicializa el sistema
   void init() {
     _initializePlayer();
+    _initializeSystemVolumeListener(); // ✅ NUEVO: Escuchar botones físicos
   }
 
   /// Verifica si realmente hay audio reproduciéndose
@@ -665,6 +692,9 @@ class AudioPlayerManager {
     _stateSubscription?.cancel();
     _completeSubscription?.cancel();
     _positionSubscription?.cancel();
+
+    // ✅ NUEVO: Limpiar listener de volumen del sistema
+    _systemVolumeController?.removeListener();
 
     _playingController.close().catchError(
       (e) => _log('Error cerrando playingController: $e'),

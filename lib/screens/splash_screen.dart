@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
+import '../services/audio_player_manager.dart'; // ✅ Agregar import
 import 'main_screen.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  final AudioPlayerManager audioManager; // ✅ Agregar parámetro
+
+  const SplashScreen({
+    super.key,
+    required this.audioManager, // ✅ Requerido
+  });
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -23,6 +29,12 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void initState() {
     super.initState();
+
+    // 🔍 Log de diagnóstico
+    debugPrint(
+      '🎵 SplashScreen usando audioManager: ${widget.audioManager.hashCode}',
+    );
+
     _initializeAnimations();
     _startSplashSequence();
   }
@@ -87,7 +99,10 @@ class _SplashScreenState extends State<SplashScreen>
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) =>
-              const MainScreen(),
+              // ✅ TEMPORAL: Reemplaza con tu pantalla principal
+              // Si tu app usa HomeScreen en lugar de MainScreen, usa esto:
+              // HomeScreen(audioManager: widget.audioManager),
+              MainScreen(audioManager: widget.audioManager),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },

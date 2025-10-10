@@ -5,7 +5,13 @@ import 'news_screen.dart';
 import 'about_screen.dart';
 
 class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+  // ✅ Ahora recibe el audioManager desde SplashScreen
+  final AudioPlayerManager audioManager;
+
+  const MainScreen({
+    super.key,
+    required this.audioManager, // ✅ Parámetro requerido
+  });
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -14,7 +20,9 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   final PageController _pageController = PageController();
-  final AudioPlayerManager _audioManager = AudioPlayerManager();
+
+  // ❌ ELIMINADO: No crear nueva instancia aquí
+  // final AudioPlayerManager _audioManager = AudioPlayerManager();
 
   late List<Widget> _screens;
   List<NavigationItem> _navigationItems = [];
@@ -22,11 +30,15 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
-    _audioManager.init();
+
+    // ❌ ELIMINADO: Ya no inicializar aquí, viene inicializado desde main.dart
+    // _audioManager.init();
+
+    // ✅ ACTUALIZADO: Usar widget.audioManager que viene desde SplashScreen
     _screens = [
-      RadioPlayerScreen(audioManager: _audioManager),
-      NewsScreen(audioManager: _audioManager),
-      AboutScreen(audioManager: _audioManager),
+      RadioPlayerScreen(audioManager: widget.audioManager),
+      NewsScreen(audioManager: widget.audioManager),
+      AboutScreen(audioManager: widget.audioManager),
     ];
 
     _navigationItems = [
@@ -54,7 +66,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void dispose() {
     _pageController.dispose();
-    // Nota: No se debe descartar _audioManager aquí ya que es un singleton que debe persistir
+    // Nota: No se debe descartar audioManager aquí ya que es un singleton que debe persistir
     super.dispose();
   }
 

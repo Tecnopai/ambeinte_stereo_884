@@ -116,10 +116,9 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     return SlideTransition(
       position: _slideAnimation,
       child: Container(
-        // Removemos altura fija - dejamos que el contenido defina el tamaño
         constraints: BoxConstraints(
           minHeight: isTablet ? 80 : 70,
-          maxHeight: isTablet ? 200 : 180, // Límite máximo generoso
+          maxHeight: isTablet ? 200 : 180,
         ),
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -144,7 +143,6 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
         child: Material(
           color: Colors.transparent,
           child: IntrinsicHeight(
-            // Permite que el Column se ajuste al contenido
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -160,7 +158,6 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
 
   Widget _buildMainControls(bool isTablet) {
     return Flexible(
-      // Permite flexibilidad en el tamaño
       child: Container(
         constraints: BoxConstraints(minHeight: isTablet ? 70 : 60),
         padding: EdgeInsets.all(isTablet ? 16 : 12),
@@ -191,15 +188,12 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
             height: iconSize,
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white, // Fondo blanco sólido
-              // gradient: AppColors.buttonGradient, // Comentado el gradiente
+              color: Colors.white,
             ),
             child: ClipOval(
               child: ColorFiltered(
                 colorFilter: ColorFilter.mode(
-                  AppColors.primary.withValues(
-                    alpha: 0.3,
-                  ), // Tinte de color sobre la imagen
+                  AppColors.primary.withValues(alpha: 0.3),
                   BlendMode.srcOver,
                 ),
                 child: Image.asset(
@@ -210,8 +204,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
                   errorBuilder: (context, error, stackTrace) {
                     return Icon(
                       Icons.radio,
-                      color:
-                          AppColors.textPrimary, // Color del ícono de fallback
+                      color: AppColors.textPrimary,
                       size: iconSize * 0.5,
                     );
                   },
@@ -229,10 +222,9 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min, // Importante: min size
+        mainAxisSize: MainAxisSize.min,
         children: [
           FittedBox(
-            // Ajusta el texto al espacio disponible
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(
@@ -279,25 +271,45 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
+  // NUEVO: Método del botón de volumen
   Widget _buildVolumeButton(bool isTablet) {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _showVolumeSlider = !_showVolumeSlider;
-        });
+    return StreamBuilder<double>(
+      stream: widget.audioManager.volumeStream,
+      initialData: _volume,
+      builder: (context, snapshot) {
+        final currentVolume = snapshot.data ?? _volume;
+
+        return InkWell(
+          onTap: () {
+            setState(() {
+              _showVolumeSlider = !_showVolumeSlider;
+            });
+          },
+          borderRadius: BorderRadius.circular(isTablet ? 12 : 8),
+          child: Container(
+            padding: EdgeInsets.all(isTablet ? 8 : 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _getVolumeIcon(currentVolume),
+                  color: AppColors.textSecondary,
+                  size: isTablet ? 20 : 16,
+                ),
+                SizedBox(width: isTablet ? 6 : 4),
+                Text(
+                  '${(currentVolume * 100).round()}%',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: isTablet ? 12 : 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
       },
-      child: Container(
-        padding: EdgeInsets.all(isTablet ? 10 : 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFF374151).withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(isTablet ? 10 : 8),
-        ),
-        child: Icon(
-          _getVolumeIcon(),
-          color: AppColors.textPrimary,
-          size: isTablet ? 22 : 18,
-        ),
-      ),
     );
   }
 
@@ -331,77 +343,88 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
+  // CORREGIDO: Solo un método _buildVolumeSlider con StreamBuilder
   Widget _buildVolumeSlider(bool isTablet) {
-    return Flexible(
-      // Permite flexibilidad
-      child: Container(
-        constraints: BoxConstraints(
-          minHeight: isTablet ? 50 : 45,
-          maxHeight: isTablet ? 80 : 70,
-        ),
-        padding: EdgeInsets.symmetric(
-          horizontal: isTablet ? 20 : 16,
-          vertical: isTablet ? 8 : 6,
-        ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.volume_down,
-              color: AppColors.textSecondary,
-              size: isTablet ? 20 : 16,
-            ),
-            SizedBox(width: isTablet ? 12 : 8),
-            Expanded(
-              child: SliderTheme(
-                data: SliderThemeData(
-                  activeTrackColor: AppColors.primary,
-                  inactiveTrackColor: const Color(0xFF374151),
-                  thumbColor: AppColors.primary,
-                  overlayColor: AppColors.primary.withValues(alpha: 0.2),
-                  trackHeight: isTablet ? 3 : 2,
-                  thumbShape: RoundSliderThumbShape(
-                    enabledThumbRadius: isTablet ? 10 : 8,
+    return StreamBuilder<double>(
+      stream: widget.audioManager.volumeStream,
+      initialData: _volume,
+      builder: (context, snapshot) {
+        final currentVolume = snapshot.data ?? _volume;
+
+        return Container(
+          constraints: BoxConstraints(
+            minHeight: isTablet ? 40 : 35,
+            maxHeight: isTablet ? 50 : 45,
+          ),
+          padding: EdgeInsets.symmetric(
+            horizontal: isTablet ? 16 : 12,
+            vertical: isTablet ? 4 : 3,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.volume_down,
+                color: AppColors.textSecondary,
+                size: isTablet ? 18 : 14,
+              ),
+              SizedBox(width: isTablet ? 8 : 6),
+              SizedBox(
+                width: isTablet ? 120 : 100,
+                child: SliderTheme(
+                  data: SliderThemeData(
+                    activeTrackColor: AppColors.primary,
+                    inactiveTrackColor: const Color(0xFF374151),
+                    thumbColor: AppColors.primary,
+                    overlayColor: AppColors.primary.withValues(alpha: 0.2),
+                    trackHeight: isTablet ? 2.5 : 2,
+                    thumbShape: RoundSliderThumbShape(
+                      enabledThumbRadius: isTablet ? 8 : 6,
+                    ),
+                  ),
+                  child: Slider(
+                    value: currentVolume,
+                    onChanged: (value) {
+                      setState(() {
+                        _volume = value;
+                      });
+                      widget.audioManager.setVolume(value);
+                    },
+                    min: 0.0,
+                    max: 1.0,
                   ),
                 ),
-                child: Slider(
-                  value: _volume,
-                  onChanged: (value) {
-                    setState(() {
-                      _volume = value;
-                    });
-                    widget.audioManager.setVolume(value);
-                  },
-                  min: 0.0,
-                  max: 1.0,
+              ),
+              SizedBox(width: isTablet ? 8 : 6),
+              Icon(
+                Icons.volume_up,
+                color: AppColors.textSecondary,
+                size: isTablet ? 18 : 14,
+              ),
+              SizedBox(width: isTablet ? 6 : 4),
+              SizedBox(
+                width: isTablet ? 40 : 35,
+                child: Text(
+                  '${(currentVolume * 100).round()}%',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: isTablet ? 12 : 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.end,
                 ),
               ),
-            ),
-            SizedBox(width: isTablet ? 12 : 8),
-            Icon(
-              Icons.volume_up,
-              color: AppColors.textSecondary,
-              size: isTablet ? 20 : 16,
-            ),
-            SizedBox(width: isTablet ? 8 : 6),
-            FittedBox(
-              // Ajusta el porcentaje si es necesario
-              child: Text(
-                '${(_volume * 100).round()}%',
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: isTablet ? 14 : 12,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  IconData _getVolumeIcon() {
-    if (_volume == 0) return Icons.volume_off;
-    if (_volume < 0.5) return Icons.volume_down;
+  // ACTUALIZADO: Ahora recibe el volumen como parámetro
+  IconData _getVolumeIcon(double volume) {
+    if (volume == 0) return Icons.volume_off;
+    if (volume < 0.5) return Icons.volume_down;
     return Icons.volume_up;
   }
 

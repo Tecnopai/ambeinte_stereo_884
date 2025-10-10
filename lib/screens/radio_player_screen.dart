@@ -18,7 +18,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     with TickerProviderStateMixin {
   bool _isPlaying = true;
   bool _isLoading = true;
-  double _volume = 0.7;
+  // ❌ ELIMINADO: double _volume = 0.7;
   String? _errorMessage;
 
   @override
@@ -47,16 +47,10 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       }
     });
 
-    // Listener de volumen
-    widget.audioManager.volumeStream.listen((volume) {
-      if (mounted) {
-        setState(() {
-          _volume = volume;
-        });
-      }
-    });
+    // ❌ ELIMINADO: Listener de volumen - ya no es necesario aquí
+    // VolumeControl maneja su propio estado con StreamBuilder
 
-    // NUEVO: Listener de errores y reconexiones
+    // Listener de errores y reconexiones
     widget.audioManager.errorStream.listen((error) {
       if (mounted) {
         setState(() {
@@ -98,7 +92,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   void _initializeStates() {
     _isPlaying = widget.audioManager.isPlaying;
     _isLoading = widget.audioManager.isLoading;
-    _volume = widget.audioManager.volume;
+    // ❌ ELIMINADO: _volume = widget.audioManager.volume;
   }
 
   Future<void> _togglePlayback() async {
@@ -143,7 +137,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
           ),
         ),
         centerTitle: true,
-        // NUEVO: Indicador de reconexión en el AppBar
+        // Indicador de reconexión en el AppBar
         actions: [
           if (_errorMessage != null)
             Padding(
@@ -190,7 +184,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
                 SizedBox(height: smallSpacing),
 
-                // NUEVO: Subtítulo con estado mejorado
+                // Subtítulo con estado mejorado
                 _buildStatusText(subtitleFontSize),
 
                 SizedBox(height: sectionSpacing),
@@ -214,11 +208,8 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
                 SizedBox(height: sectionSpacing + 10),
 
-                // Control de volumen
-                VolumeControl(
-                  volume: _volume,
-                  audioManager: widget.audioManager,
-                ),
+                // ✅ Control de volumen sin parámetro volume
+                VolumeControl(audioManager: widget.audioManager),
 
                 SizedBox(height: sectionSpacing),
               ],
@@ -229,7 +220,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     );
   }
 
-  // NUEVO: Widget para mostrar el estado actual
+  // Widget para mostrar el estado actual
   Widget _buildStatusText(double fontSize) {
     String statusText;
     Color statusColor;
@@ -279,7 +270,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     );
   }
 
-  // NUEVO: Indicador de reconexión en el AppBar
+  // Indicador de reconexión en el AppBar
   Widget _buildReconnectingIndicator(bool isTablet) {
     return Container(
       padding: EdgeInsets.symmetric(
