@@ -12,10 +12,16 @@ dependencies:
     sdk: flutter
 
   # Audio
-  audioplayers: ^6.0.0
-  just_audio: ^0.10.5
   volume_controller: ^2.0.7
   
+  # Radio streaming
+  # radio_player: ^2.1.0
+  just_audio: ^0.10.5 
+
+  # Controles en pantalla de bloqueo y notificaciones
+  # audio_service: ^0.18.15
+  rxdart: ^0.28.0 
+
   # HTTP
   http: ^1.1.0
   
