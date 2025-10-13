@@ -20,6 +20,9 @@
     <!-- Tipo específico de servicio en foreground para Android 14+ -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
+    <!-- permisos para botones de volumen -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+
     <application
         android:label="Ambientestereo884.fm"
         android:name="${applicationName}"

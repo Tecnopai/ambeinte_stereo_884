@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
+import 'package:volume_controller/volume_controller.dart';
 
 /// Clase global para manejar el reproductor de audio con just_audio
 class AudioPlayerManager {
@@ -10,6 +11,8 @@ class AudioPlayerManager {
   AudioPlayerManager._internal();
 
   AudioPlayer? _audioPlayer;
+  VolumeController?
+  _systemVolumeController; // ✅ Renombrado para evitar conflicto
 
   bool _isPlaying = false;
   bool _isLoading = false;
@@ -35,13 +38,15 @@ class AudioPlayerManager {
   // Stream controllers
   final _playingController = StreamController<bool>.broadcast();
   final _loadingController = StreamController<bool>.broadcast();
-  final _volumeController = StreamController<double>.broadcast();
+  final _volumeStreamController =
+      StreamController<double>.broadcast(); // ✅ Renombrado
   final _errorController = StreamController<String>.broadcast();
 
   // Getters
   Stream<bool> get playingStream => _playingController.stream;
   Stream<bool> get loadingStream => _loadingController.stream;
-  Stream<double> get volumeStream => _volumeController.stream;
+  Stream<double> get volumeStream =>
+      _volumeStreamController.stream; // ✅ Actualizado
   Stream<String> get errorStream => _errorController.stream;
 
   bool get isPlaying => _isPlaying;
@@ -51,10 +56,45 @@ class AudioPlayerManager {
   /// Inicializa el sistema
   Future<void> init() async {
     try {
+      await _initializeVolumeController();
       _initializePlayer();
       _log('✅ AudioPlayerManager inicializado correctamente');
     } catch (e) {
       _log('❌ Error al inicializar: $e');
+    }
+  }
+
+  /// Inicializa el controlador de volumen del sistema
+  Future<void> _initializeVolumeController() async {
+    try {
+      _systemVolumeController = VolumeController(); // ✅ Actualizado
+
+      // Obtener volumen actual del sistema
+      final systemVolume = await _systemVolumeController!.getVolume();
+      _volume = systemVolume;
+      _volumeStreamController.add(_volume); // ✅ Actualizado
+
+      _log('🔊 Volumen inicial del sistema: ${(_volume * 100).round()}%');
+
+      // Escuchar cambios en los botones físicos
+      _systemVolumeController!.listener((newVolume) {
+        // ✅ Actualizado
+        _log(
+          '🔊 Botón físico detectado - Nuevo volumen: ${(newVolume * 100).round()}%',
+        );
+        _volume = newVolume;
+        _volumeStreamController.add(_volume); // ✅ Actualizado
+
+        // Sincronizar con el player
+        _audioPlayer?.setVolume(_volume);
+      });
+
+      _log('✅ VolumeController inicializado');
+    } catch (e) {
+      _log('❌ Error al inicializar VolumeController: $e');
+      // Si falla, usar volumen por defecto
+      _volume = 0.7;
+      _volumeStreamController.add(_volume); // ✅ Actualizado
     }
   }
 
@@ -113,9 +153,12 @@ class AudioPlayerManager {
         },
       );
 
+      // Aplicar el volumen inicial del sistema
       _audioPlayer!.setVolume(_volume);
 
-      _log('✅ AudioPlayer inicializado');
+      _log(
+        '✅ AudioPlayer inicializado con volumen ${(_volume * 100).round()}%',
+      );
     } catch (e) {
       _log('❌ Error al inicializar player: $e');
     }
@@ -417,13 +460,23 @@ class AudioPlayerManager {
     _healthCheckTimer = null;
   }
 
+  /// Establece el volumen (tanto en el player como en el sistema)
   Future<void> setVolume(double volume) async {
     try {
       _volume = volume.clamp(0.0, 1.0);
+
+      // Aplicar al player de audio
       await _audioPlayer?.setVolume(_volume);
-      _volumeController.add(_volume);
+
+      // Sincronizar con el volumen del sistema (no es async)
+      _systemVolumeController?.setVolume(_volume); // ✅ Sin await
+
+      // Emitir al stream
+      _volumeStreamController.add(_volume);
+
+      _log('🔊 Volumen establecido: ${(_volume * 100).round()}%');
     } catch (e) {
-      _log('Error volumen: $e');
+      _log('❌ Error al establecer volumen: $e');
     }
   }
 
@@ -443,9 +496,10 @@ class AudioPlayerManager {
 
     _playingController.close();
     _loadingController.close();
-    _volumeController.close();
+    _volumeStreamController.close(); // ✅ Actualizado
     _errorController.close();
 
     _audioPlayer?.dispose();
+    _systemVolumeController?.removeListener(); // ✅ Actualizado
   }
 }

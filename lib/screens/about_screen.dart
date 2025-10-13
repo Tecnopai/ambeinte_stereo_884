@@ -105,7 +105,7 @@ class AboutScreen extends StatelessWidget {
       height: logoSize,
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        gradient: AppColors.Logo,
+        gradient: AppColors.logo,
         boxShadow: [
           BoxShadow(
             color: Color.fromARGB(76, 247, 247, 248),

@@ -33,7 +33,7 @@ class AppColors {
     colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
   );
 
-  static const LinearGradient Logo = LinearGradient(
+  static const LinearGradient logo = LinearGradient(
     colors: [
       Color.fromARGB(255, 254, 254, 255),
       Color.fromARGB(255, 250, 250, 250),
