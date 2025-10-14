@@ -11,8 +11,6 @@ class AudioPlayerManager {
   AudioPlayerManager._internal();
 
   AudioPlayer? _audioPlayer;
-  VolumeController?
-  _systemVolumeController; // ✅ Renombrado para evitar conflicto
 
   bool _isPlaying = false;
   bool _isLoading = false;
@@ -38,15 +36,13 @@ class AudioPlayerManager {
   // Stream controllers
   final _playingController = StreamController<bool>.broadcast();
   final _loadingController = StreamController<bool>.broadcast();
-  final _volumeStreamController =
-      StreamController<double>.broadcast(); // ✅ Renombrado
+  final _volumeStreamController = StreamController<double>.broadcast();
   final _errorController = StreamController<String>.broadcast();
 
   // Getters
   Stream<bool> get playingStream => _playingController.stream;
   Stream<bool> get loadingStream => _loadingController.stream;
-  Stream<double> get volumeStream =>
-      _volumeStreamController.stream; // ✅ Actualizado
+  Stream<double> get volumeStream => _volumeStreamController.stream;
   Stream<String> get errorStream => _errorController.stream;
 
   bool get isPlaying => _isPlaying;
@@ -67,23 +63,29 @@ class AudioPlayerManager {
   /// Inicializa el controlador de volumen del sistema
   Future<void> _initializeVolumeController() async {
     try {
-      _systemVolumeController = VolumeController(); // ✅ Actualizado
-
-      // Obtener volumen actual del sistema
-      final systemVolume = await _systemVolumeController!.getVolume();
+      // Obtener volumen actual del sistema usando .instance
+      final systemVolume = await VolumeController.instance.getVolume();
       _volume = systemVolume;
-      _volumeStreamController.add(_volume); // ✅ Actualizado
+
+      if (!_volumeStreamController.isClosed) {
+        _volumeStreamController.add(_volume);
+      }
 
       _log('🔊 Volumen inicial del sistema: ${(_volume * 100).round()}%');
 
-      // Escuchar cambios en los botones físicos
-      _systemVolumeController!.listener((newVolume) {
-        // ✅ Actualizado
+      // Configurar para no mostrar UI del sistema (opcional)
+      VolumeController.instance.showSystemUI = false;
+
+      // Escuchar cambios en los botones físicos usando .instance
+      VolumeController.instance.addListener((newVolume) {
         _log(
           '🔊 Botón físico detectado - Nuevo volumen: ${(newVolume * 100).round()}%',
         );
         _volume = newVolume;
-        _volumeStreamController.add(_volume); // ✅ Actualizado
+
+        if (!_volumeStreamController.isClosed) {
+          _volumeStreamController.add(_volume);
+        }
 
         // Sincronizar con el player
         _audioPlayer?.setVolume(_volume);
@@ -94,7 +96,9 @@ class AudioPlayerManager {
       _log('❌ Error al inicializar VolumeController: $e');
       // Si falla, usar volumen por defecto
       _volume = 0.7;
-      _volumeStreamController.add(_volume); // ✅ Actualizado
+      if (!_volumeStreamController.isClosed) {
+        _volumeStreamController.add(_volume);
+      }
     }
   }
 
@@ -119,7 +123,9 @@ class AudioPlayerManager {
           if (_isPlaying) {
             _retryCount = 0;
             _consecutiveErrors = 0;
-            _errorController.add('');
+            if (!_errorController.isClosed) {
+              _errorController.add('');
+            }
             _startHealthCheck();
             _startConnectivityCheck();
           } else {
@@ -130,8 +136,12 @@ class AudioPlayerManager {
             }
           }
 
-          _playingController.add(_isPlaying);
-          _loadingController.add(_isLoading);
+          if (!_playingController.isClosed) {
+            _playingController.add(_isPlaying);
+          }
+          if (!_loadingController.isClosed) {
+            _loadingController.add(_isLoading);
+          }
         },
         onError: (error) {
           _log('❌ Error en playerStateStream: $error');
@@ -183,7 +193,9 @@ class AudioPlayerManager {
     try {
       _userStoppedManually = false;
       _isLoading = true;
-      _loadingController.add(_isLoading);
+      if (!_loadingController.isClosed) {
+        _loadingController.add(_isLoading);
+      }
 
       final hasConnection = await _checkRealConnectivity();
 
@@ -191,9 +203,15 @@ class AudioPlayerManager {
         _log('❌ Sin conexión');
         _isLoading = false;
         _isPlaying = false;
-        _loadingController.add(_isLoading);
-        _playingController.add(_isPlaying);
-        _errorController.add('Sin conexión. Reintentando...');
+        if (!_loadingController.isClosed) {
+          _loadingController.add(_isLoading);
+        }
+        if (!_playingController.isClosed) {
+          _playingController.add(_isPlaying);
+        }
+        if (!_errorController.isClosed) {
+          _errorController.add('Sin conexión. Reintentando...');
+        }
         _scheduleReconnect();
         return;
       }
@@ -217,9 +235,15 @@ class AudioPlayerManager {
       _consecutiveErrors++;
       _isLoading = false;
       _isPlaying = false;
-      _loadingController.add(_isLoading);
-      _playingController.add(_isPlaying);
-      _errorController.add('Error al conectar. Reintentando...');
+      if (!_loadingController.isClosed) {
+        _loadingController.add(_isLoading);
+      }
+      if (!_playingController.isClosed) {
+        _playingController.add(_isPlaying);
+      }
+      if (!_errorController.isClosed) {
+        _errorController.add('Error al conectar. Reintentando...');
+      }
       _scheduleReconnect();
     }
   }
@@ -237,16 +261,24 @@ class AudioPlayerManager {
 
       _isPlaying = false;
       _isLoading = false;
-      _playingController.add(_isPlaying);
-      _loadingController.add(_isLoading);
+      if (!_playingController.isClosed) {
+        _playingController.add(_isPlaying);
+      }
+      if (!_loadingController.isClosed) {
+        _loadingController.add(_isLoading);
+      }
 
       _log('Detenido por usuario');
     } catch (e) {
       _log('❌ Error en stop: $e');
       _isPlaying = false;
       _isLoading = false;
-      _playingController.add(_isPlaying);
-      _loadingController.add(_isLoading);
+      if (!_playingController.isClosed) {
+        _playingController.add(_isPlaying);
+      }
+      if (!_loadingController.isClosed) {
+        _loadingController.add(_isLoading);
+      }
     }
   }
 
@@ -264,9 +296,15 @@ class AudioPlayerManager {
 
       _isLoading = true;
       _isPlaying = false;
-      _loadingController.add(_isLoading);
-      _playingController.add(_isPlaying);
-      _errorController.add('Reiniciando...');
+      if (!_loadingController.isClosed) {
+        _loadingController.add(_isLoading);
+      }
+      if (!_playingController.isClosed) {
+        _playingController.add(_isPlaying);
+      }
+      if (!_errorController.isClosed) {
+        _errorController.add('Reiniciando...');
+      }
 
       await _audioPlayer?.stop();
       await Future.delayed(const Duration(milliseconds: 500));
@@ -276,7 +314,9 @@ class AudioPlayerManager {
       if (_userStoppedManually) {
         _isRestarting = false;
         _isLoading = false;
-        _loadingController.add(_isLoading);
+        if (!_loadingController.isClosed) {
+          _loadingController.add(_isLoading);
+        }
         return;
       }
 
@@ -285,8 +325,12 @@ class AudioPlayerManager {
       if (!hasConnection) {
         _isRestarting = false;
         _isLoading = false;
-        _loadingController.add(_isLoading);
-        _errorController.add('Sin conexión. Reintentando...');
+        if (!_loadingController.isClosed) {
+          _loadingController.add(_isLoading);
+        }
+        if (!_errorController.isClosed) {
+          _errorController.add('Sin conexión. Reintentando...');
+        }
         _scheduleReconnect();
         return;
       }
@@ -295,17 +339,25 @@ class AudioPlayerManager {
       await _audioPlayer?.play();
 
       _log('✅ Reinicio exitoso');
-      _errorController.add('');
+      if (!_errorController.isClosed) {
+        _errorController.add('');
+      }
     } catch (e) {
       _log('❌ Error en reinicio: $e');
       _isLoading = false;
-      _loadingController.add(_isLoading);
-      _errorController.add('Error. Reintentando...');
+      if (!_loadingController.isClosed) {
+        _loadingController.add(_isLoading);
+      }
+      if (!_errorController.isClosed) {
+        _errorController.add('Error. Reintentando...');
+      }
       _scheduleReconnect();
     } finally {
       _isRestarting = false;
       _isLoading = false;
-      _loadingController.add(_isLoading);
+      if (!_loadingController.isClosed) {
+        _loadingController.add(_isLoading);
+      }
     }
   }
 
@@ -341,8 +393,12 @@ class AudioPlayerManager {
         if (!hasConnection) {
           _log('⚠️ Conectividad perdida');
           _isPlaying = false;
-          _playingController.add(_isPlaying);
-          _errorController.add('Sin conexión');
+          if (!_playingController.isClosed) {
+            _playingController.add(_isPlaying);
+          }
+          if (!_errorController.isClosed) {
+            _errorController.add('Sin conexión');
+          }
           _scheduleReconnect();
         }
       }
@@ -361,15 +417,23 @@ class AudioPlayerManager {
 
     _isLoading = false;
     _isPlaying = false;
-    _loadingController.add(_isLoading);
-    _playingController.add(_isPlaying);
+    if (!_loadingController.isClosed) {
+      _loadingController.add(_isLoading);
+    }
+    if (!_playingController.isClosed) {
+      _playingController.add(_isPlaying);
+    }
 
     if (!_userStoppedManually) {
       if (_consecutiveErrors > 5) {
-        _errorController.add('Reiniciando...');
+        if (!_errorController.isClosed) {
+          _errorController.add('Reiniciando...');
+        }
         _forceRestart();
       } else {
-        _errorController.add('Reintentando...');
+        if (!_errorController.isClosed) {
+          _errorController.add('Reintentando...');
+        }
         _scheduleReconnect();
       }
     }
@@ -381,7 +445,9 @@ class AudioPlayerManager {
     _cancelReconnect();
 
     if (_retryCount >= _maxRetries) {
-      _errorController.add('Reintentando en ${_maxRetryDelay.inSeconds}s...');
+      if (!_errorController.isClosed) {
+        _errorController.add('Reintentando en ${_maxRetryDelay.inSeconds}s...');
+      }
       _retryTimer = Timer(_maxRetryDelay, () {
         _retryCount = 0;
         _attemptReconnect();
@@ -408,7 +474,9 @@ class AudioPlayerManager {
     final hasConnection = await _checkRealConnectivity();
 
     if (!hasConnection) {
-      _errorController.add('Sin conexión. Reintentando...');
+      if (!_errorController.isClosed) {
+        _errorController.add('Sin conexión. Reintentando...');
+      }
       _scheduleReconnect();
       return;
     }
@@ -419,7 +487,9 @@ class AudioPlayerManager {
     }
 
     _isLoading = true;
-    _loadingController.add(_isLoading);
+    if (!_loadingController.isClosed) {
+      _loadingController.add(_isLoading);
+    }
 
     try {
       await _audioPlayer?.stop();
@@ -429,14 +499,20 @@ class AudioPlayerManager {
       await _audioPlayer?.play();
 
       _log('✅ Reconexión exitosa');
-      _errorController.add('Reconectado');
+      if (!_errorController.isClosed) {
+        _errorController.add('Reconectado');
+      }
     } catch (e) {
       _log('❌ Error reconexión: $e');
       _consecutiveErrors++;
       _isLoading = false;
       _isPlaying = false;
-      _loadingController.add(_isLoading);
-      _playingController.add(_isPlaying);
+      if (!_loadingController.isClosed) {
+        _loadingController.add(_isLoading);
+      }
+      if (!_playingController.isClosed) {
+        _playingController.add(_isPlaying);
+      }
       _scheduleReconnect();
     }
   }
@@ -468,11 +544,13 @@ class AudioPlayerManager {
       // Aplicar al player de audio
       await _audioPlayer?.setVolume(_volume);
 
-      // Sincronizar con el volumen del sistema (no es async)
-      _systemVolumeController?.setVolume(_volume); // ✅ Sin await
+      // Sincronizar con el volumen del sistema usando .instance
+      VolumeController.instance.setVolume(_volume);
 
       // Emitir al stream
-      _volumeStreamController.add(_volume);
+      if (!_volumeStreamController.isClosed) {
+        _volumeStreamController.add(_volume);
+      }
 
       _log('🔊 Volumen establecido: ${(_volume * 100).round()}%');
     } catch (e) {
@@ -496,10 +574,12 @@ class AudioPlayerManager {
 
     _playingController.close();
     _loadingController.close();
-    _volumeStreamController.close(); // ✅ Actualizado
+    _volumeStreamController.close();
     _errorController.close();
 
     _audioPlayer?.dispose();
-    _systemVolumeController?.removeListener(); // ✅ Actualizado
+
+    // Remover el listener del volumen usando .instance
+    VolumeController.instance.removeListener();
   }
 }

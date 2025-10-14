@@ -1,20 +1,275 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:http/http.dart' as http;
+import 'package:html/parser.dart' as html_parser;
+import 'package:html/dom.dart' as dom;
+import 'package:flutter/gestures.dart';
 import '../services/audio_player_manager.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/live_indicator.dart';
 import '../core/theme/app_colors.dart';
 
-class AboutScreen extends StatelessWidget {
+class AboutScreen extends StatefulWidget {
   final AudioPlayerManager audioManager;
 
   const AboutScreen({super.key, required this.audioManager});
 
   @override
+  State<AboutScreen> createState() => _AboutScreenState();
+}
+
+class _AboutScreenState extends State<AboutScreen> {
+  String _version = 'Cargando...';
+  List<Widget> _aboutContent = [];
+  bool _isLoadingContent = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+    _loadAboutContent();
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      setState(() {
+        _version = packageInfo.version;
+      });
+    } catch (e) {
+      setState(() {
+        _version = '2.0.0';
+      });
+    }
+  }
+
+  Future<void> _loadAboutContent() async {
+    try {
+      final response = await http
+          .get(Uri.parse('https://ambientestereo.fm/sitio/sobre-nosotros/'))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final document = html_parser.parse(response.body);
+
+        var contentElement =
+            document.querySelector('.entry-content') ??
+            document.querySelector('article') ??
+            document.querySelector('.post-content');
+
+        List<Widget> widgets = [];
+
+        if (contentElement != null) {
+          contentElement.querySelector('h1.entry-title')?.remove();
+          final children = contentElement.children;
+
+          for (var element in children) {
+            final tagName = element.localName;
+            final text = element.text.trim();
+
+            if (text.isEmpty) continue;
+
+            // Detectar títulos (h2, h3, h4)
+            final isHeader =
+                tagName == 'h2' || tagName == 'h3' || tagName == 'h4';
+
+            if (isHeader) {
+              // Es un título de encabezado
+              if (widgets.isNotEmpty) {
+                widgets.add(const SizedBox(height: 20));
+              }
+
+              widgets.add(
+                Text(
+                  text,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                    color: AppColors.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+              );
+
+              widgets.add(const SizedBox(height: 8));
+            } else if (tagName == 'p') {
+              // Verificar si el párrafo comienza con un <strong> que es título
+              final strong = element.querySelector('strong');
+
+              if (strong != null) {
+                final strongText = strong.text.trim();
+                final isAllCaps =
+                    strongText == strongText.toUpperCase() &&
+                    strongText.length > 3 &&
+                    strongText.length < 50;
+
+                if (isAllCaps) {
+                  // El <strong> es un título, separarlo del resto
+                  if (widgets.isNotEmpty) {
+                    widgets.add(const SizedBox(height: 20));
+                  }
+
+                  // Agregar el título
+                  widgets.add(
+                    Text(
+                      strongText,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        color: AppColors.textPrimary,
+                        height: 1.4,
+                      ),
+                    ),
+                  );
+
+                  widgets.add(const SizedBox(height: 8));
+
+                  // Procesar el resto del contenido del párrafo (sin el strong)
+                  strong.remove(); // Remover el strong del elemento
+                  final remainingText = element.text.trim();
+
+                  if (remainingText.isNotEmpty) {
+                    List<InlineSpan> spans = [];
+                    _processParagraph(element, spans);
+
+                    if (spans.isNotEmpty) {
+                      widgets.add(
+                        RichText(
+                          text: TextSpan(
+                            style: const TextStyle(
+                              fontSize: 8.5,
+                              color: AppColors.textMuted,
+                              height: 1.6,
+                              letterSpacing: 0.2,
+                            ),
+                            children: spans,
+                          ),
+                          textAlign: TextAlign.left,
+                        ),
+                      );
+
+                      widgets.add(const SizedBox(height: 10));
+                    }
+                  }
+
+                  continue; // Ya procesamos este elemento
+                }
+              }
+
+              // Es un párrafo normal (sin título strong)
+              List<InlineSpan> spans = [];
+              _processParagraph(element, spans);
+
+              if (spans.isNotEmpty) {
+                widgets.add(
+                  RichText(
+                    text: TextSpan(
+                      style: const TextStyle(
+                        fontSize: 8.5,
+                        color: AppColors.textMuted,
+                        height: 1.6,
+                        letterSpacing: 0.2,
+                      ),
+                      children: spans,
+                    ),
+                    textAlign: TextAlign.left,
+                  ),
+                );
+
+                widgets.add(const SizedBox(height: 10));
+              }
+            }
+          }
+        }
+
+        if (widgets.isEmpty) {
+          widgets = [const Text('No se pudo cargar el contenido.')];
+        }
+
+        setState(() {
+          _aboutContent = widgets;
+          _isLoadingContent = false;
+        });
+      } else {
+        throw Exception('Error ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() {
+        _aboutContent = [
+          const Text(
+            'Nuestro propósito es promover la protección y conservación del medio ambiente, la participación ciudadana y los valores familiares y sociales a través de una programación variada, educativa y cristocéntrica.',
+            style: TextStyle(
+              fontSize: 8.5,
+              color: AppColors.textMuted,
+              height: 1.6,
+            ),
+          ),
+        ];
+        _isLoadingContent = false;
+      });
+    }
+  }
+
+  void _processParagraph(dom.Element paragraph, List<InlineSpan> spans) {
+    for (var node in paragraph.nodes) {
+      if (node.nodeType == dom.Node.TEXT_NODE) {
+        final text = node.text ?? '';
+        if (text.trim().isNotEmpty) {
+          spans.add(TextSpan(text: text));
+        }
+      } else if (node.nodeType == dom.Node.ELEMENT_NODE) {
+        final element = node as dom.Element;
+        final text = element.text.trim();
+
+        if (text.isEmpty) continue;
+
+        if (element.localName == 'a') {
+          final href = element.attributes['href'] ?? '';
+          spans.add(
+            TextSpan(
+              text: text,
+              style: const TextStyle(
+                color: AppColors.primary,
+                decoration: TextDecoration.underline,
+              ),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () => _launchUrl(href),
+            ),
+          );
+        } else if (element.localName == 'strong' || element.localName == 'b') {
+          spans.add(
+            TextSpan(
+              text: text,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          );
+        } else if (element.localName == 'em' || element.localName == 'i') {
+          spans.add(
+            TextSpan(
+              text: text,
+              style: const TextStyle(fontStyle: FontStyle.italic),
+            ),
+          );
+        } else {
+          if (element.nodes.isNotEmpty) {
+            _processParagraph(element, spans);
+          } else {
+            spans.add(TextSpan(text: text));
+          }
+        }
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<bool>(
-      stream: audioManager.playingStream,
-      initialData: audioManager.isPlaying,
+      stream: widget.audioManager.playingStream,
+      initialData: widget.audioManager.isPlaying,
       builder: (context, snapshot) {
         final isPlaying = snapshot.data ?? false;
 
@@ -22,7 +277,7 @@ class AboutScreen extends StatelessWidget {
           appBar: AppBar(
             title: Row(
               children: [
-                const Text('Acerca de'),
+                const Text('Nosotros'),
                 if (isPlaying) const LiveIndicator(),
               ],
             ),
@@ -41,15 +296,20 @@ class AboutScreen extends StatelessWidget {
                     _buildSubtitle(context),
                     _getSpacing(context, 32),
                     _buildDescriptionCard(context),
-                    _getSpacing(context, 32),
-                    _buildInfoCard(context, 'Versión', '2.0.0'),
+                    _getSpacing(context, 24),
+                    _buildInfoCard(context, 'Versión', _version),
                     _getSpacing(context, 14),
-                    _buildInfoCard(context, 'Sitio Web', 'ambientestereo.fm'),
-                    _getSpacing(context, 32),
+                    _buildInfoCard(
+                      context,
+                      'Emisora oficial de',
+                      'La Iglesia Cristiana PAI',
+                    ),
+                    _getSpacing(context, 14),
                     _buildWebsiteButton(context),
-                    _getSpacing(context, 32),
+                    _getSpacing(context, 14),
+                    _buildWebsiteButton2(context),
+                    _getSpacing(context, 14),
                     _buildWebsiteButton1(context),
-                    // Padding extra para evitar que el MiniPlayer tape contenido
                     if (isPlaying) _getSpacing(context, 20),
                   ],
                 ),
@@ -59,7 +319,7 @@ class AboutScreen extends StatelessWidget {
                   bottom: 16,
                   left: 16,
                   right: 16,
-                  child: MiniPlayer(audioManager: audioManager),
+                  child: MiniPlayer(audioManager: widget.audioManager),
                 ),
             ],
           ),
@@ -68,7 +328,6 @@ class AboutScreen extends StatelessWidget {
     );
   }
 
-  // Calcula padding dinámico
   EdgeInsets _getPadding(BuildContext context, bool isPlaying) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -86,7 +345,6 @@ class AboutScreen extends StatelessWidget {
     );
   }
 
-  // Espaciado responsivo
   SizedBox _getSpacing(BuildContext context, double baseSize) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -165,10 +423,7 @@ class AboutScreen extends StatelessWidget {
   Widget _buildDescriptionCard(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
-    final fontSize =
-        (isTablet ? 12.0 : 10.0) * textScale; // Aumentado significativamente
-    final padding = isTablet ? 24.0 : 20.0;
+    final padding = isTablet ? 20.0 : 18.0;
     final borderRadius = isTablet ? 16.0 : 12.0;
 
     return Container(
@@ -184,19 +439,12 @@ class AboutScreen extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        children: [
-          Text(
-            'Nuestro propósito es promover la protección y conservación del medio ambiente, la participación ciudadana y los valores familiares y sociales a través de una programación variada, educativa y cristocéntrica.',
-            style: TextStyle(
-              fontSize: fontSize, // Mejorado de 10 a 14-16
-              color: AppColors.textMuted,
-              height: 1.6,
+      child: _isLoadingContent
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _aboutContent,
             ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
     );
   }
 
@@ -205,7 +453,7 @@ class AboutScreen extends StatelessWidget {
     final isTablet = screenSize.shortestSide >= 600;
     final textScale = MediaQuery.of(context).textScaler.scale(1.0);
     final titleFontSize = (isTablet ? 12.0 : 10.0) * textScale;
-    final valueFontSize = (isTablet ? 10.0 : 8.0) * textScale; // Aumentado
+    final valueFontSize = (isTablet ? 10.0 : 8.0) * textScale;
     final horizontalPadding = isTablet ? 24.0 : 20.0;
     final verticalPadding = isTablet ? 20.0 : 16.0;
     final borderRadius = isTablet ? 12.0 : 8.0;
@@ -244,7 +492,7 @@ class AboutScreen extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-              fontSize: valueFontSize, // Mejorado de 12 a 14-16
+              fontSize: valueFontSize,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
             ),
@@ -254,12 +502,45 @@ class AboutScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildWebsiteButton2(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isTablet = screenSize.shortestSide >= 600;
+    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+    final fontSize = (isTablet ? 10.0 : 8.0) * textScale;
+    final iconSize = (isTablet ? 20.0 : 16.0) * textScale;
+    final horizontalPadding = isTablet ? 40.0 : 32.0;
+    final verticalPadding = isTablet ? 16.0 : 12.0;
+    final borderRadius = isTablet ? 12.0 : 8.0;
+
+    return ElevatedButton.icon(
+      onPressed: () => _launchUrl('https://iglesiacristianapai.org/'),
+      icon: Icon(Icons.web, size: iconSize),
+      label: Text(
+        'Web Iglesia Cristiana PAI',
+        style: TextStyle(fontSize: fontSize),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.textPrimary,
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: verticalPadding,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
+        elevation: 4,
+        shadowColor: AppColors.primary.withValues(alpha: 0.3),
+      ),
+    );
+  }
+
   Widget _buildWebsiteButton(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
     final textScale = MediaQuery.of(context).textScaler.scale(1.0);
-    final fontSize = (isTablet ? 14.0 : 12.0) * textScale;
-    final iconSize = (isTablet ? 24.0 : 20.0) * textScale;
+    final fontSize = (isTablet ? 10.0 : 8.0) * textScale;
+    final iconSize = (isTablet ? 20.0 : 16.0) * textScale;
     final horizontalPadding = isTablet ? 40.0 : 32.0;
     final verticalPadding = isTablet ? 16.0 : 12.0;
     final borderRadius = isTablet ? 12.0 : 8.0;
@@ -267,7 +548,7 @@ class AboutScreen extends StatelessWidget {
     return ElevatedButton.icon(
       onPressed: () => _launchUrl('https://ambientestereo.fm'),
       icon: Icon(Icons.web, size: iconSize),
-      label: Text('Visitar sitio web', style: TextStyle(fontSize: fontSize)),
+      label: Text('Web Ambiente Stereo', style: TextStyle(fontSize: fontSize)),
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.textPrimary,
@@ -288,13 +569,12 @@ class AboutScreen extends StatelessWidget {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
     final textScale = MediaQuery.of(context).textScaler.scale(1.0);
-    final fontSize = (isTablet ? 14.0 : 12.0) * textScale;
-    final iconSize = (isTablet ? 24.0 : 20.0) * textScale;
+    final fontSize = (isTablet ? 10.0 : 8.0) * textScale;
+    final iconSize = (isTablet ? 20.0 : 16.0) * textScale;
     final horizontalPadding = isTablet ? 40.0 : 32.0;
     final verticalPadding = isTablet ? 16.0 : 12.0;
     final borderRadius = isTablet ? 12.0 : 8.0;
 
-    // 🔹 Helper para codificar parámetros del correo
     String? encodeQueryParameters(Map<String, String> params) {
       return params.entries
           .map(
@@ -304,7 +584,6 @@ class AboutScreen extends StatelessWidget {
           .join('&');
     }
 
-    // 🔹 URI del correo electrónico
     final Uri emailUri = Uri(
       scheme: 'mailto',
       path: 'tecnologia@iglesiacristianapai.org',
@@ -318,8 +597,6 @@ class AboutScreen extends StatelessWidget {
       onPressed: () async {
         if (await canLaunchUrl(emailUri)) {
           await launchUrl(emailUri);
-        } else {
-          throw 'No se pudo abrir el cliente de correo.';
         }
       },
       icon: Icon(Icons.email, size: iconSize),

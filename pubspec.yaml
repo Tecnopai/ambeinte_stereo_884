@@ -12,7 +12,7 @@ dependencies:
     sdk: flutter
 
   # Audio
-  volume_controller: ^2.0.7
+  volume_controller: ^3.4.0
   
   # Radio streaming
   # radio_player: ^2.1.0
@@ -24,6 +24,9 @@ dependencies:
 
   # HTTP
   http: ^1.1.0
+
+  # HTML Parsing
+  html: ^0.15.4
   
   # URL Launcher
   url_launcher: ^6.2.4
@@ -40,6 +43,9 @@ dependencies:
 
   #image para mejor rendimiento de imagenes
   cached_network_image: ^3.3.1
+
+  #Obtener la versión automáticamente
+  package_info_plus: ^9.0.0
 
 dev_dependencies:
   flutter_test:
