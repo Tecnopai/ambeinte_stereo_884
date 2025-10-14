@@ -6,6 +6,7 @@ class Article {
   final String link;
   final DateTime date;
   final List<int> categories;
+  final String? imageUrl; // ✨ NUEVO: URL de la imagen destacada
 
   Article({
     required this.id,
@@ -15,6 +16,7 @@ class Article {
     required this.link,
     required this.date,
     this.categories = const [],
+    this.imageUrl, // ✨ NUEVO
   });
 
   factory Article.fromJson(Map<String, dynamic> json) {
@@ -30,7 +32,49 @@ class Article {
               ?.map((e) => e as int)
               .toList() ??
           [],
+      // ✨ NUEVO: Extraer URL de la imagen
+      imageUrl: _extractImageUrl(json),
     );
+  }
+
+  // ✨ NUEVO: Método para extraer la URL de la imagen
+  static String? _extractImageUrl(Map<String, dynamic> json) {
+    try {
+      // Opción 1: Desde _embedded (si usamos ?_embed en la API)
+      if (json['_embedded'] != null) {
+        final embedded = json['_embedded'] as Map<String, dynamic>;
+        if (embedded['wp:featuredmedia'] != null) {
+          final featuredMedia = embedded['wp:featuredmedia'] as List<dynamic>;
+          if (featuredMedia.isNotEmpty) {
+            final media = featuredMedia[0] as Map<String, dynamic>;
+            // Intentar obtener diferentes tamaños
+            if (media['media_details'] != null) {
+              final details = media['media_details'] as Map<String, dynamic>;
+              if (details['sizes'] != null) {
+                final sizes = details['sizes'] as Map<String, dynamic>;
+                // Prioridad: medium_large > medium > full
+                if (sizes['medium_large'] != null) {
+                  return sizes['medium_large']['source_url'] as String?;
+                } else if (sizes['medium'] != null) {
+                  return sizes['medium']['source_url'] as String?;
+                }
+              }
+            }
+            // Si no hay tamaños específicos, usar source_url
+            return media['source_url'] as String?;
+          }
+        }
+      }
+
+      // Opción 2: URL directa si está disponible
+      if (json['jetpack_featured_media_url'] != null) {
+        return json['jetpack_featured_media_url'] as String;
+      }
+
+      return null;
+    } catch (e) {
+      return null;
+    }
   }
 
   static String _parseHtmlString(String htmlString) {
@@ -76,6 +120,7 @@ class Article {
       'link': link,
       'date': date.toIso8601String(),
       'categories': categories,
+      'imageUrl': imageUrl, // ✨ NUEVO
     };
   }
 }

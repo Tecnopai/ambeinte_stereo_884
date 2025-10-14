@@ -10,23 +10,20 @@ class ArticleDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Obtener información del dispositivo
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
     final textScale = MediaQuery.of(context).textScaler.scale(1.0);
 
-    // Calcular tamaños dinámicos
     final padding = isTablet ? 22.0 : 14.0;
-    final titleFontSize =
-        (isTablet ? 18.0 : 14.0) * textScale; // Titulo del articulo
-    final dateFontSize =
-        (isTablet ? 10.0 : 8.0) * textScale; // Date fecha del articulo
-    final contentFontSize = (isTablet ? 10.0 : 8.0) * textScale; // contenido
-    final buttonFontSize = (isTablet ? 14.0 : 12.0) * textScale; // fuente icono
-    final iconSize = (isTablet ? 18.0 : 16.0) * textScale; // Aumentado de 14
+    final titleFontSize = (isTablet ? 18.0 : 14.0) * textScale;
+    final dateFontSize = (isTablet ? 10.0 : 8.0) * textScale;
+    final contentFontSize = (isTablet ? 10.0 : 8.0) * textScale;
+    final buttonFontSize = (isTablet ? 14.0 : 12.0) * textScale;
+    final iconSize = (isTablet ? 18.0 : 16.0) * textScale;
     final buttonIconSize = (isTablet ? 22.0 : 20.0) * textScale;
     final borderRadius = isTablet ? 16.0 : 12.0;
     final buttonPadding = isTablet ? 14.0 : 10.0;
+    final imageHeight = isTablet ? 280.0 : 220.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -46,9 +43,66 @@ class ArticleDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ✨ IMAGEN DESTACADA DEL ARTÍCULO
+            if (article.imageUrl != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(borderRadius),
+                child: Image.network(
+                  article.imageUrl!,
+                  height: imageHeight,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Container(
+                      height: imageHeight,
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.primary,
+                          strokeWidth: 3,
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      height: imageHeight,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(borderRadius),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.broken_image_outlined,
+                            size: isTablet ? 64 : 50,
+                            color: AppColors.textSecondary.withValues(
+                              alpha: 0.5,
+                            ),
+                          ),
+                          SizedBox(height: 12),
+                          Text(
+                            'Imagen no disponible',
+                            style: TextStyle(
+                              fontSize: (isTablet ? 14.0 : 12.0) * textScale,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+            SizedBox(
+              height: article.imageUrl != null ? (isTablet ? 24 : 20) : 0,
+            ),
+
             // Título del artículo
             SelectableText(
-              // Permite selección de texto
               article.title,
               style: TextStyle(
                 fontSize: titleFontSize,
@@ -70,7 +124,6 @@ class ArticleDetailScreen extends StatelessWidget {
                 ),
                 SizedBox(width: isTablet ? 6 : 4),
                 Flexible(
-                  // Evita overflow en textos largos
                   child: Text(
                     article.formattedDate,
                     style: TextStyle(
@@ -104,7 +157,6 @@ class ArticleDetailScreen extends StatelessWidget {
                 ],
               ),
               child: SelectableText(
-                // Permite selección de texto
                 article.content,
                 style: TextStyle(
                   fontSize: contentFontSize,
@@ -139,7 +191,6 @@ class ArticleDetailScreen extends StatelessWidget {
               ),
             ),
 
-            // Padding extra para evitar que se corte en la parte inferior
             SizedBox(height: isTablet ? 32 : 24),
           ],
         ),

@@ -57,7 +57,7 @@ class _MainScreenState extends State<MainScreen> {
       NavigationItem(
         icon: Icons.info_outline,
         selectedIcon: Icons.info,
-        label: 'Acerca',
+        label: 'Nosotros',
         tooltip: 'Información de la app',
       ),
     ];

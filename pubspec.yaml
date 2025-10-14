@@ -38,6 +38,9 @@ dependencies:
   # Icons
   cupertino_icons: ^1.0.8
 
+  #image para mejor rendimiento de imagenes
+  cached_network_image: ^3.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

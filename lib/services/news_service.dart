@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/article.dart';
 import '../models/category.dart';
-import '../core/constants/app_constants.dart'; // ✨ Importar constantes
+import '../core/constants/app_constants.dart';
 
 /// Servicio para manejar las noticias desde la API de WordPress
 class NewsService {
@@ -11,7 +11,6 @@ class NewsService {
   static const int _itemsPerPage = 20;
   static const Duration _timeout = Duration(seconds: 15);
 
-  // ✨ NUEVO: Método auxiliar para filtrar artículos
   List<Article> _filterByAllowedCategories(List<Article> articles) {
     return articles.where((article) {
       if (article.categories.isEmpty) return false;
@@ -22,11 +21,11 @@ class NewsService {
   }
 
   /// Obtiene todas las categorías disponibles
-  /// ✨ MODIFICADO: Solo retorna las categorías permitidas
   Future<List<Category>> getCategories() async {
     try {
+      // ✨ MODIFICADO: Agregar _embed para obtener imágenes
       final uri = Uri.parse(
-        '$_baseUrl/categories?per_page=100&hide_empty=true',
+        '$_baseUrl/categories?per_page=100&hide_empty=true&_embed',
       );
       final response = await http.get(uri).timeout(_timeout);
 
@@ -38,7 +37,7 @@ class NewsService {
             .where(
               (category) =>
                   AppConstants.allowedCategoryIds.contains(category.id),
-            ) // ✨ Filtro añadido
+            )
             .toList();
       } else {
         throw Exception('Error al cargar categorías: ${response.statusCode}');
@@ -49,19 +48,18 @@ class NewsService {
   }
 
   /// Obtiene artículos filtrados por categoría
-  /// ✨ MODIFICADO: Aplica doble filtro de seguridad
   Future<List<Article>> getArticlesByCategory(
     int categoryId, {
     int page = 1,
   }) async {
     try {
-      // ✨ Verificar que la categoría esté permitida
       if (!AppConstants.allowedCategoryIds.contains(categoryId)) {
-        return []; // No retornar artículos de categorías no permitidas
+        return [];
       }
 
+      // ✨ MODIFICADO: Agregar _embed para obtener imágenes
       final uri = Uri.parse(
-        '$_baseUrl/posts?categories=$categoryId&page=$page&per_page=$_itemsPerPage',
+        '$_baseUrl/posts?categories=$categoryId&page=$page&per_page=$_itemsPerPage&_embed',
       );
       final response = await http.get(uri).timeout(_timeout);
 
@@ -71,7 +69,7 @@ class NewsService {
             .map((item) => Article.fromJson(item as Map<String, dynamic>))
             .toList();
 
-        return _filterByAllowedCategories(articles); // ✨ Filtro adicional
+        return _filterByAllowedCategories(articles);
       } else if (response.statusCode == 400) {
         return [];
       } else {
@@ -83,11 +81,11 @@ class NewsService {
   }
 
   /// Obtiene la lista de artículos desde la API
-  /// ✨ MODIFICADO: Filtra por categorías permitidas
   Future<List<Article>> getArticles({int page = 1}) async {
     try {
+      // ✨ MODIFICADO: Agregar _embed para obtener imágenes
       final uri = Uri.parse(
-        '$_baseUrl/posts?page=$page&per_page=$_itemsPerPage',
+        '$_baseUrl/posts?page=$page&per_page=$_itemsPerPage&_embed',
       );
       final response = await http.get(uri).timeout(_timeout);
 
@@ -97,7 +95,7 @@ class NewsService {
             .map((item) => Article.fromJson(item as Map<String, dynamic>))
             .toList();
 
-        return _filterByAllowedCategories(articles); // ✨ Filtro añadido
+        return _filterByAllowedCategories(articles);
       } else if (response.statusCode == 400) {
         return [];
       } else {
@@ -111,14 +109,14 @@ class NewsService {
   /// Obtiene un artículo específico por ID
   Future<Article> getArticleById(int id) async {
     try {
-      final uri = Uri.parse('$_baseUrl/posts/$id');
+      // ✨ MODIFICADO: Agregar _embed para obtener imágenes
+      final uri = Uri.parse('$_baseUrl/posts/$id?_embed');
       final response = await http.get(uri).timeout(_timeout);
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         final article = Article.fromJson(data);
 
-        // ✨ Verificar que el artículo pertenezca a una categoría permitida
         final hasAllowedCategory = article.categories.any(
           (categoryId) => AppConstants.allowedCategoryIds.contains(categoryId),
         );
@@ -137,7 +135,6 @@ class NewsService {
   }
 
   /// Busca artículos por término de búsqueda
-  /// ✨ MODIFICADO: Filtra resultados por categorías permitidas
   Future<List<Article>> searchArticles(String searchTerm) async {
     try {
       if (searchTerm.trim().isEmpty) {
@@ -145,8 +142,9 @@ class NewsService {
       }
 
       final encodedSearch = Uri.encodeComponent(searchTerm.trim());
+      // ✨ MODIFICADO: Agregar _embed para obtener imágenes
       final uri = Uri.parse(
-        '$_baseUrl/posts?search=$encodedSearch&per_page=$_itemsPerPage',
+        '$_baseUrl/posts?search=$encodedSearch&per_page=$_itemsPerPage&_embed',
       );
       final response = await http.get(uri).timeout(_timeout);
 
@@ -156,7 +154,7 @@ class NewsService {
             .map((item) => Article.fromJson(item as Map<String, dynamic>))
             .toList();
 
-        return _filterByAllowedCategories(articles); // ✨ Filtro añadido
+        return _filterByAllowedCategories(articles);
       } else {
         throw Exception('Error en la búsqueda: ${response.statusCode}');
       }
@@ -165,7 +163,6 @@ class NewsService {
     }
   }
 
-  /// Obtiene artículos con paginación (método legacy, usar getArticles con page)
   @Deprecated('Usar getArticles(page: page) en su lugar')
   Future<List<Article>> getArticlesPaginated(int page) async {
     return getArticles(page: page);
