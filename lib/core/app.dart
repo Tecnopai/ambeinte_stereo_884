@@ -3,6 +3,10 @@ import 'theme/app_theme.dart';
 import '../services/audio_player_manager.dart';
 import '../screens/splash_screen.dart';
 
+/// Widget raíz de la aplicación Ambiente Stereo
+///
+/// Gestiona la inicialización del AudioPlayerManager y configura
+/// el MaterialApp con el tema y la pantalla inicial
 class AmbientStereoApp extends StatefulWidget {
   const AmbientStereoApp({super.key});
 
@@ -11,18 +15,20 @@ class AmbientStereoApp extends StatefulWidget {
 }
 
 class _AmbientStereoAppState extends State<AmbientStereoApp> {
-  // ✅ Crear UNA SOLA instancia del AudioPlayerManager aquí
+  /// Instancia única del gestor de reproducción de audio
+  ///
+  /// Se inicializa en initState y se mantiene durante toda
+  /// la vida de la aplicación para garantizar una única
+  /// instancia del reproductor de audio
   late final AudioPlayerManager _audioManager;
 
   @override
   void initState() {
     super.initState();
-    // Inicializar el singleton
+
+    // Inicializar el AudioPlayerManager singleton
     _audioManager = AudioPlayerManager();
     _audioManager.init();
-
-    // Log de diagnóstico
-    debugPrint('🎵 AudioPlayerManager inicializado: ${_audioManager.hashCode}');
   }
 
   @override
@@ -31,7 +37,7 @@ class _AmbientStereoAppState extends State<AmbientStereoApp> {
       title: 'Ambiente Stereo 88.4 FM',
       theme: AppTheme.darkTheme,
       debugShowCheckedModeBanner: false,
-      // ✅ Pasar la instancia al SplashScreen
+      // Pasar la instancia del audioManager al SplashScreen
       home: SplashScreen(audioManager: _audioManager),
     );
   }

@@ -10,7 +10,10 @@ import '../widgets/mini_player.dart';
 import '../widgets/live_indicator.dart';
 import '../core/theme/app_colors.dart';
 
+/// Pantalla "Acerca de" que muestra información sobre la aplicación y la emisora
+/// Incluye logo, descripción, versión, enlaces web y soporte
 class AboutScreen extends StatefulWidget {
+  // Gestor del reproductor de audio para controlar el mini player
   final AudioPlayerManager audioManager;
 
   const AboutScreen({super.key, required this.audioManager});
@@ -20,17 +23,25 @@ class AboutScreen extends StatefulWidget {
 }
 
 class _AboutScreenState extends State<AboutScreen> {
+  // Versión de la aplicación obtenida del package_info
   String _version = 'Cargando...';
+
+  // Contenido "Acerca de" cargado desde el sitio web
   List<Widget> _aboutContent = [];
+
+  // Indica si se está cargando el contenido web
   bool _isLoadingContent = true;
 
   @override
   void initState() {
     super.initState();
+    // Cargar versión y contenido al iniciar
     _loadVersion();
     _loadAboutContent();
   }
 
+  /// Obtiene la versión de la aplicación desde package_info
+  /// Si falla, establece una versión por defecto
   Future<void> _loadVersion() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -44,15 +55,21 @@ class _AboutScreenState extends State<AboutScreen> {
     }
   }
 
+  /// Carga el contenido "Acerca de" desde el sitio web de la emisora
+  /// Parsea el HTML y extrae los títulos y párrafos
+  /// Si falla, muestra un mensaje por defecto
   Future<void> _loadAboutContent() async {
     try {
+      // Hacer petición HTTP al sitio web
       final response = await http
           .get(Uri.parse('https://ambientestereo.fm/sitio/sobre-nosotros/'))
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
+        // Parsear el HTML de la respuesta
         final document = html_parser.parse(response.body);
 
+        // Buscar el contenedor principal del contenido
         var contentElement =
             document.querySelector('.entry-content') ??
             document.querySelector('article') ??
@@ -61,25 +78,29 @@ class _AboutScreenState extends State<AboutScreen> {
         List<Widget> widgets = [];
 
         if (contentElement != null) {
+          // Remover el título principal (h1)
           contentElement.querySelector('h1.entry-title')?.remove();
           final children = contentElement.children;
 
+          // Procesar cada elemento hijo del contenido
           for (var element in children) {
             final tagName = element.localName;
             final text = element.text.trim();
 
+            // Ignorar elementos vacíos
             if (text.isEmpty) continue;
 
-            // Detectar títulos (h2, h3, h4)
+            // ===== DETECTAR ENCABEZADOS (h2, h3, h4) =====
             final isHeader =
                 tagName == 'h2' || tagName == 'h3' || tagName == 'h4';
 
             if (isHeader) {
-              // Es un título de encabezado
+              // Agregar espaciado antes del título
               if (widgets.isNotEmpty) {
                 widgets.add(const SizedBox(height: 20));
               }
 
+              // Agregar el título como widget de texto
               widgets.add(
                 Text(
                   text,
@@ -94,18 +115,20 @@ class _AboutScreenState extends State<AboutScreen> {
 
               widgets.add(const SizedBox(height: 8));
             } else if (tagName == 'p') {
-              // Verificar si el párrafo comienza con un <strong> que es título
+              // ===== DETECTAR TÍTULOS EN PÁRRAFOS CON <strong> =====
+              // Verificar si el párrafo comienza con un <strong> en mayúsculas
               final strong = element.querySelector('strong');
 
               if (strong != null) {
                 final strongText = strong.text.trim();
+                // Verificar si es un título: texto en mayúsculas de longitud razonable
                 final isAllCaps =
                     strongText == strongText.toUpperCase() &&
                     strongText.length > 3 &&
                     strongText.length < 50;
 
                 if (isAllCaps) {
-                  // El <strong> es un título, separarlo del resto
+                  // El <strong> es un título, separarlo del resto del párrafo
                   if (widgets.isNotEmpty) {
                     widgets.add(const SizedBox(height: 20));
                   }
@@ -125,8 +148,8 @@ class _AboutScreenState extends State<AboutScreen> {
 
                   widgets.add(const SizedBox(height: 8));
 
-                  // Procesar el resto del contenido del párrafo (sin el strong)
-                  strong.remove(); // Remover el strong del elemento
+                  // Procesar el resto del contenido del párrafo sin el <strong>
+                  strong.remove(); // Remover el elemento strong
                   final remainingText = element.text.trim();
 
                   if (remainingText.isNotEmpty) {
@@ -157,6 +180,7 @@ class _AboutScreenState extends State<AboutScreen> {
                 }
               }
 
+              // ===== PROCESAR PÁRRAFO NORMAL =====
               // Es un párrafo normal (sin título strong)
               List<InlineSpan> spans = [];
               _processParagraph(element, spans);
@@ -183,6 +207,7 @@ class _AboutScreenState extends State<AboutScreen> {
           }
         }
 
+        // Si no se pudo cargar ningún contenido, mostrar mensaje
         if (widgets.isEmpty) {
           widgets = [const Text('No se pudo cargar el contenido.')];
         }
@@ -195,6 +220,7 @@ class _AboutScreenState extends State<AboutScreen> {
         throw Exception('Error ${response.statusCode}');
       }
     } catch (e) {
+      // En caso de error, mostrar texto por defecto
       setState(() {
         _aboutContent = [
           const Text(
@@ -211,19 +237,28 @@ class _AboutScreenState extends State<AboutScreen> {
     }
   }
 
+  /// Procesa un párrafo HTML y extrae sus elementos de texto con formato
+  /// Maneja enlaces, negritas, cursivas y texto normal
+  ///
+  /// [paragraph] - Elemento DOM del párrafo a procesar
+  /// [spans] - Lista donde se agregan los TextSpans procesados
   void _processParagraph(dom.Element paragraph, List<InlineSpan> spans) {
     for (var node in paragraph.nodes) {
+      // Procesar nodos de texto plano
       if (node.nodeType == dom.Node.TEXT_NODE) {
         final text = node.text ?? '';
         if (text.trim().isNotEmpty) {
           spans.add(TextSpan(text: text));
         }
-      } else if (node.nodeType == dom.Node.ELEMENT_NODE) {
+      }
+      // Procesar elementos HTML (etiquetas)
+      else if (node.nodeType == dom.Node.ELEMENT_NODE) {
         final element = node as dom.Element;
         final text = element.text.trim();
 
         if (text.isEmpty) continue;
 
+        // Procesar enlaces <a>
         if (element.localName == 'a') {
           final href = element.attributes['href'] ?? '';
           spans.add(
@@ -237,7 +272,9 @@ class _AboutScreenState extends State<AboutScreen> {
                 ..onTap = () => _launchUrl(href),
             ),
           );
-        } else if (element.localName == 'strong' || element.localName == 'b') {
+        }
+        // Procesar texto en negrita <strong> o <b>
+        else if (element.localName == 'strong' || element.localName == 'b') {
           spans.add(
             TextSpan(
               text: text,
@@ -247,14 +284,18 @@ class _AboutScreenState extends State<AboutScreen> {
               ),
             ),
           );
-        } else if (element.localName == 'em' || element.localName == 'i') {
+        }
+        // Procesar texto en cursiva <em> o <i>
+        else if (element.localName == 'em' || element.localName == 'i') {
           spans.add(
             TextSpan(
               text: text,
               style: const TextStyle(fontStyle: FontStyle.italic),
             ),
           );
-        } else {
+        }
+        // Procesar elementos anidados recursivamente
+        else {
           if (element.nodes.isNotEmpty) {
             _processParagraph(element, spans);
           } else {
@@ -267,6 +308,7 @@ class _AboutScreenState extends State<AboutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Escuchar cambios en el estado de reproducción para mostrar/ocultar mini player
     return StreamBuilder<bool>(
       stream: widget.audioManager.playingStream,
       initialData: widget.audioManager.isPlaying,
@@ -278,6 +320,7 @@ class _AboutScreenState extends State<AboutScreen> {
             title: Row(
               children: [
                 const Text('Nosotros'),
+                // Mostrar indicador "EN VIVO" si está reproduciendo
                 if (isPlaying) const LiveIndicator(),
               ],
             ),
@@ -285,6 +328,7 @@ class _AboutScreenState extends State<AboutScreen> {
           ),
           body: Stack(
             children: [
+              // ===== CONTENIDO PRINCIPAL SCROLLABLE =====
               SingleChildScrollView(
                 padding: _getPadding(context, isPlaying),
                 child: Column(
@@ -310,10 +354,13 @@ class _AboutScreenState extends State<AboutScreen> {
                     _buildWebsiteButton2(context),
                     _getSpacing(context, 14),
                     _buildWebsiteButton1(context),
+                    // Espacio extra para el mini player si está reproduciendo
                     if (isPlaying) _getSpacing(context, 20),
                   ],
                 ),
               ),
+              // ===== MINI PLAYER FLOTANTE =====
+              // Solo se muestra si hay reproducción activa
               if (isPlaying)
                 Positioned(
                   bottom: 16,
@@ -328,11 +375,13 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Calcula el padding adaptativo según el dispositivo y estado de reproducción
   EdgeInsets _getPadding(BuildContext context, bool isPlaying) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
     final horizontalPadding = isTablet ? 40.0 : 24.0;
     final topPadding = isTablet ? 32.0 : 24.0;
+    // Padding inferior mayor si hay mini player visible
     final bottomPadding = isPlaying
         ? (isTablet ? 120.0 : 100.0)
         : (isTablet ? 32.0 : 24.0);
@@ -345,6 +394,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Calcula el espaciado vertical adaptativo según el dispositivo
   SizedBox _getSpacing(BuildContext context, double baseSize) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -352,6 +402,7 @@ class _AboutScreenState extends State<AboutScreen> {
     return SizedBox(height: spacing);
   }
 
+  /// Construye el logo circular de la emisora con gradiente y sombra
   Widget _buildLogo(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -378,6 +429,7 @@ class _AboutScreenState extends State<AboutScreen> {
           width: iconSize,
           height: iconSize,
           fit: BoxFit.cover,
+          // Icono por defecto si la imagen no carga
           errorBuilder: (context, error, stackTrace) {
             return Icon(
               Icons.radio,
@@ -390,6 +442,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Construye el título principal "Ambiente Stereo 88.4 FM"
   Widget _buildTitle(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -407,6 +460,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Construye el subtítulo "La radio que si quieres"
   Widget _buildSubtitle(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -420,6 +474,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Construye la tarjeta con el contenido "Acerca de" cargado desde el web
   Widget _buildDescriptionCard(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -440,7 +495,9 @@ class _AboutScreenState extends State<AboutScreen> {
         ],
       ),
       child: _isLoadingContent
+          // Mostrar indicador de carga mientras se obtiene el contenido
           ? const Center(child: CircularProgressIndicator())
+          // Mostrar contenido parseado del HTML
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: _aboutContent,
@@ -448,6 +505,8 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Construye una tarjeta de información con título y valor
+  /// Usada para mostrar versión y otros datos
   Widget _buildInfoCard(BuildContext context, String title, String value) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -481,6 +540,7 @@ class _AboutScreenState extends State<AboutScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Etiqueta del campo
           Text(
             title,
             style: TextStyle(
@@ -489,6 +549,7 @@ class _AboutScreenState extends State<AboutScreen> {
             ),
           ),
           SizedBox(height: isTablet ? 6 : 4),
+          // Valor del campo
           Text(
             value,
             style: TextStyle(
@@ -502,6 +563,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Botón para visitar el sitio web de la Iglesia Cristiana PAI
   Widget _buildWebsiteButton2(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -535,6 +597,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Botón para visitar el sitio web de Ambiente Stereo
   Widget _buildWebsiteButton(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -565,6 +628,8 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Botón para contactar soporte técnico vía email
+  /// Abre el cliente de correo con asunto y cuerpo predefinidos
   Widget _buildWebsiteButton1(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -575,6 +640,7 @@ class _AboutScreenState extends State<AboutScreen> {
     final verticalPadding = isTablet ? 16.0 : 12.0;
     final borderRadius = isTablet ? 12.0 : 8.0;
 
+    // Función auxiliar para codificar parámetros de URL
     String? encodeQueryParameters(Map<String, String> params) {
       return params.entries
           .map(
@@ -584,6 +650,7 @@ class _AboutScreenState extends State<AboutScreen> {
           .join('&');
     }
 
+    // Crear URI de mailto con asunto y cuerpo predefinidos
     final Uri emailUri = Uri(
       scheme: 'mailto',
       path: 'tecnologia@iglesiacristianapai.org',
@@ -617,6 +684,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Abre una URL en el navegador externo del dispositivo
   Future<void> _launchUrl(String url) async {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {

@@ -8,6 +8,9 @@ import '../widgets/live_indicator.dart';
 import '../core/theme/app_colors.dart';
 import 'article_detail_screen.dart';
 
+/// Pantalla principal de noticias con dos pestañas: Todas y Categorías
+/// Muestra artículos con imágenes y permite navegación por categorías
+/// Incluye infinite scroll y mini player cuando hay reproducción activa
 class NewsScreen extends StatefulWidget {
   final AudioPlayerManager audioManager;
 
@@ -19,10 +22,13 @@ class NewsScreen extends StatefulWidget {
 
 class _NewsScreenState extends State<NewsScreen>
     with SingleTickerProviderStateMixin {
+  // Controlador de pestañas (Todas / Categorías)
   late TabController _tabController;
+
+  // Servicio para obtener noticias y categorías desde la API
   final NewsService _newsService = NewsService();
 
-  // Para la tab de noticias
+  // Estado de la pestaña de noticias
   List<Article> _articles = [];
   bool _isLoadingNews = true;
   int _newsPage = 1;
@@ -30,10 +36,11 @@ class _NewsScreenState extends State<NewsScreen>
   bool _isLoadingMoreNews = false;
   final ScrollController _newsScrollController = ScrollController();
 
-  // Para la tab de categorías
+  // Estado de la pestaña de categorías
   List<Category> _categories = [];
   bool _isLoadingCategories = true;
 
+  // Estado de reproducción del audio
   bool _isPlaying = false;
 
   @override
@@ -53,6 +60,7 @@ class _NewsScreenState extends State<NewsScreen>
     super.dispose();
   }
 
+  /// Configura el listener para detectar cambios en el estado de reproducción
   void _setupAudioListener() {
     widget.audioManager.playingStream.listen((isPlaying) {
       if (mounted) {
@@ -64,6 +72,8 @@ class _NewsScreenState extends State<NewsScreen>
     _isPlaying = widget.audioManager.isPlaying;
   }
 
+  /// Detecta cuando el usuario hace scroll cerca del final (80%)
+  /// Activa la carga de más noticias automáticamente
   void _onNewsScroll() {
     if (_newsScrollController.position.pixels >=
             _newsScrollController.position.maxScrollExtent * 0.8 &&
@@ -73,6 +83,7 @@ class _NewsScreenState extends State<NewsScreen>
     }
   }
 
+  /// Carga la primera página de artículos
   Future<void> _loadArticles() async {
     try {
       setState(() {
@@ -99,6 +110,7 @@ class _NewsScreenState extends State<NewsScreen>
     }
   }
 
+  /// Carga más artículos (paginación) para la pestaña de noticias
   Future<void> _loadMoreNews() async {
     if (_isLoadingMoreNews || !_hasMoreNews) return;
 
@@ -127,6 +139,7 @@ class _NewsScreenState extends State<NewsScreen>
     }
   }
 
+  /// Carga las categorías disponibles
   Future<void> _loadCategories() async {
     try {
       final categories = await _newsService.getCategories();
@@ -145,6 +158,7 @@ class _NewsScreenState extends State<NewsScreen>
     }
   }
 
+  /// Muestra un SnackBar con mensaje de error
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: AppColors.error),
@@ -202,6 +216,7 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
+  /// Construye la pestaña de categorías
   Widget _buildCategoriesTab() {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -268,6 +283,7 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
+  /// Construye la pestaña de noticias
   Widget _buildNewsTab() {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -348,7 +364,7 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
-  // ✨ TARJETA DE ARTÍCULO CON IMAGEN
+  /// Construye una tarjeta de artículo con imagen
   Widget _buildArticleCard(Article article) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -384,7 +400,7 @@ class _NewsScreenState extends State<NewsScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ✨ IMAGEN DEL ARTÍCULO
+            // Imagen del artículo
             if (article.imageUrl != null)
               Image.network(
                 article.imageUrl!,
@@ -446,7 +462,7 @@ class _NewsScreenState extends State<NewsScreen>
                 ),
               ),
 
-            // CONTENIDO DE LA TARJETA
+            // Contenido de la tarjeta
             Padding(
               padding: EdgeInsets.all(cardPadding),
               child: Column(
@@ -506,7 +522,7 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
-  // ✨ TARJETA DE CATEGORÍA CON IMAGEN
+  /// Construye una tarjeta de categoría con imagen opcional
   Widget _buildCategoryCard(Category category) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -544,7 +560,7 @@ class _NewsScreenState extends State<NewsScreen>
           padding: EdgeInsets.all(cardPadding),
           child: Row(
             children: [
-              // ✨ IMAGEN O ICONO DE CATEGORÍA
+              // Imagen o icono de categoría
               ClipRRect(
                 borderRadius: BorderRadius.circular(isTablet ? 12 : 10),
                 child: category.imageUrl != null
@@ -655,7 +671,7 @@ class _NewsScreenState extends State<NewsScreen>
   }
 }
 
-// ✨ PANTALLA DE NOTICIAS POR CATEGORÍA (CON IMÁGENES)
+/// Pantalla de artículos filtrados por categoría
 class CategoryNewsScreen extends StatefulWidget {
   final Category category;
   final AudioPlayerManager audioManager;
@@ -694,6 +710,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     super.dispose();
   }
 
+  /// Configura el listener para el estado de reproducción
   void _setupAudioListener() {
     widget.audioManager.playingStream.listen((isPlaying) {
       if (mounted) {
@@ -705,6 +722,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     _isPlaying = widget.audioManager.isPlaying;
   }
 
+  /// Detecta scroll para infinite scroll
   void _onScroll() {
     if (_scrollController.position.pixels >=
             _scrollController.position.maxScrollExtent * 0.8 &&
@@ -714,6 +732,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     }
   }
 
+  /// Carga artículos de la categoría seleccionada
   Future<void> _loadArticles() async {
     try {
       setState(() {
@@ -743,6 +762,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     }
   }
 
+  /// Carga más artículos (paginación)
   Future<void> _loadMoreArticles() async {
     if (_isLoadingMore || !_hasMore) return;
 
@@ -774,6 +794,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     }
   }
 
+  /// Muestra mensaje de error
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: AppColors.error),
@@ -812,6 +833,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     );
   }
 
+  /// Construye el contenido principal con estados de carga, vacío y lista
   Widget _buildContent() {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -892,7 +914,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     );
   }
 
-  // ✨ TARJETA DE ARTÍCULO CON IMAGEN (EN CATEGORÍA)
+  /// Construye una tarjeta de artículo con imagen para la vista de categoría
   Widget _buildArticleCard(Article article) {
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
@@ -928,7 +950,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ✨ IMAGEN DEL ARTÍCULO
+            // Imagen del artículo
             if (article.imageUrl != null)
               Image.network(
                 article.imageUrl!,
@@ -986,7 +1008,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
                 ),
               ),
 
-            // CONTENIDO DE LA TARJETA
+            // Contenido de la tarjeta
             Padding(
               padding: EdgeInsets.all(cardPadding),
               child: Column(

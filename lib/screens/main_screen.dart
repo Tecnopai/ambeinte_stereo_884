@@ -4,43 +4,45 @@ import 'radio_player_screen.dart';
 import 'news_screen.dart';
 import 'about_screen.dart';
 
+/// Pantalla principal de la aplicación con navegación por pestañas
+/// Contiene tres secciones: Radio, Noticias y Nosotros
+/// Adapta su navegación según el tipo de dispositivo (móvil/tablet) y orientación
 class MainScreen extends StatefulWidget {
-  // ✅ Ahora recibe el audioManager desde SplashScreen
+  // Gestor del reproductor de audio compartido entre todas las pantallas
   final AudioPlayerManager audioManager;
 
-  const MainScreen({
-    super.key,
-    required this.audioManager, // ✅ Parámetro requerido
-  });
+  const MainScreen({super.key, required this.audioManager});
 
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
+  // Índice de la pestaña actual seleccionada
   int _currentIndex = 0;
+
+  // Controlador para manejar el PageView y sus animaciones
   final PageController _pageController = PageController();
 
-  // ❌ ELIMINADO: No crear nueva instancia aquí
-  // final AudioPlayerManager _audioManager = AudioPlayerManager();
-
+  // Lista de pantallas que se mostrarán en cada pestaña
   late List<Widget> _screens;
+
+  // Configuración de los elementos de navegación (iconos, etiquetas, tooltips)
   List<NavigationItem> _navigationItems = [];
 
   @override
   void initState() {
     super.initState();
 
-    // ❌ ELIMINADO: Ya no inicializar aquí, viene inicializado desde main.dart
-    // _audioManager.init();
-
-    // ✅ ACTUALIZADO: Usar widget.audioManager que viene desde SplashScreen
+    // Inicializar las pantallas usando el audioManager compartido
+    // Todas las pantallas reciben la misma instancia para mantener el estado
     _screens = [
       RadioPlayerScreen(audioManager: widget.audioManager),
       NewsScreen(audioManager: widget.audioManager),
       AboutScreen(audioManager: widget.audioManager),
     ];
 
+    // Configurar los elementos de navegación con sus iconos y etiquetas
     _navigationItems = [
       NavigationItem(
         icon: Icons.radio,
@@ -66,23 +68,30 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void dispose() {
     _pageController.dispose();
-    // Nota: No se debe descartar audioManager aquí ya que es un singleton que debe persistir
+    // Nota: No se descarta audioManager aquí porque es un singleton
+    // que debe persistir durante toda la vida de la aplicación
     super.dispose();
   }
 
+  /// Callback cuando el usuario hace swipe entre páginas
+  /// Actualiza el índice actual para sincronizar la navegación
   void _onPageChanged(int index) {
     setState(() {
       _currentIndex = index;
     });
   }
 
+  /// Callback cuando el usuario toca una pestaña en la navegación
+  /// Anima la transición hacia la página seleccionada
   void _onTabTapped(int index) {
-    if (_currentIndex == index) return; // Evitar animaciones innecesarias
+    // Evitar animaciones innecesarias si ya estamos en la misma pestaña
+    if (_currentIndex == index) return;
 
     setState(() {
       _currentIndex = index;
     });
 
+    // Animar el cambio de página con una transición suave
     _pageController.animateToPage(
       index,
       duration: const Duration(milliseconds: 300),
@@ -92,21 +101,24 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Obtener información del dispositivo
+    // Obtener información del dispositivo para diseño adaptativo
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
     final isLandscape = screenSize.width > screenSize.height;
 
-    // En tablets landscape, usar NavigationRail en lugar de BottomNavigationBar
+    // En tablets en modo horizontal, usar NavigationRail lateral
+    // En otros casos, usar BottomNavigationBar tradicional
     final useNavigationRail = isTablet && isLandscape;
 
     return Scaffold(
       body: Row(
         children: [
-          // Navigation Rail para tablets en landscape
+          // ===== NAVIGATION RAIL (tablets en landscape) =====
+          // Barra de navegación lateral para aprovechar el espacio horizontal
           if (useNavigationRail) _buildNavigationRail(),
 
-          // Contenido principal
+          // ===== CONTENIDO PRINCIPAL =====
+          // PageView permite hacer swipe entre pantallas
           Expanded(
             child: PageView(
               controller: _pageController,
@@ -117,26 +129,31 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
 
-      // Bottom Navigation Bar para teléfonos y tablets en portrait
+      // ===== BOTTOM NAVIGATION BAR (móviles y tablets portrait) =====
+      // Barra de navegación inferior tradicional
       bottomNavigationBar: useNavigationRail
           ? null
           : _buildBottomNavigationBar(isTablet),
     );
   }
 
+  /// Construye la barra de navegación lateral para tablets en horizontal
+  /// Muestra iconos y etiquetas extendidas en el lado izquierdo
   Widget _buildNavigationRail() {
     return NavigationRail(
       selectedIndex: _currentIndex,
       onDestinationSelected: _onTabTapped,
-      extended: true, // Mostrar etiquetas
+      extended: true, // Mostrar etiquetas junto a los iconos
       minExtendedWidth: 200,
-      labelType: NavigationRailLabelType
-          .none, // Las etiquetas se muestran por 'extended'
+      labelType:
+          NavigationRailLabelType.none, // Etiquetas controladas por 'extended'
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       destinations: _navigationItems
           .map(
             (item) => NavigationRailDestination(
+              // Icono sin seleccionar con tooltip
               icon: Tooltip(message: item.tooltip, child: Icon(item.icon)),
+              // Icono seleccionado con tooltip
               selectedIcon: Tooltip(
                 message: item.tooltip,
                 child: Icon(item.selectedIcon),
@@ -148,16 +165,21 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  /// Construye la barra de navegación inferior tradicional
+  /// Adapta tamaños según el tipo de dispositivo
+  ///
+  /// [isTablet] - Indica si el dispositivo es una tablet para ajustar tamaños
   Widget _buildBottomNavigationBar(bool isTablet) {
+    // Tamaños adaptativos según el dispositivo
     final iconSize = isTablet ? 28.0 : 24.0;
     final fontSize = isTablet ? 14.0 : 12.0;
 
     return BottomNavigationBar(
       currentIndex: _currentIndex,
       onTap: _onTabTapped,
-      type: BottomNavigationBarType
-          .fixed, // Asegura que todas las tabs sean visibles
-      enableFeedback: true, // Haptic feedback
+      type:
+          BottomNavigationBarType.fixed, // Todas las pestañas siempre visibles
+      enableFeedback: true, // Retroalimentación háptica al tocar
       elevation: isTablet ? 12 : 8,
       iconSize: iconSize,
       selectedFontSize: fontSize,
@@ -165,10 +187,12 @@ class _MainScreenState extends State<MainScreen> {
       items: _navigationItems
           .map(
             (item) => BottomNavigationBarItem(
+              // Icono sin seleccionar
               icon: Tooltip(
                 message: item.tooltip,
                 child: Icon(item.icon, size: iconSize),
               ),
+              // Icono seleccionado
               activeIcon: Tooltip(
                 message: item.tooltip,
                 child: Icon(item.selectedIcon, size: iconSize),
@@ -182,11 +206,19 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-// Clase para organizar los elementos de navegación
+/// Clase modelo para organizar los datos de cada elemento de navegación
+/// Contiene la información necesaria para mostrar iconos, etiquetas y tooltips
 class NavigationItem {
+  // Icono cuando la pestaña no está seleccionada
   final IconData icon;
+
+  // Icono cuando la pestaña está seleccionada
   final IconData selectedIcon;
+
+  // Texto de la etiqueta
   final String label;
+
+  // Texto del tooltip al mantener presionado
   final String tooltip;
 
   NavigationItem({

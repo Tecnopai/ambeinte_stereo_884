@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../services/audio_player_manager.dart';
 import '../core/theme/app_colors.dart';
 
+/// Mini reproductor flotante que aparece en la parte inferior de la pantalla
+/// Muestra controles de reproducción, volumen y estado de la transmisión
+/// Se desliza hacia arriba cuando está reproduciendo
 class MiniPlayer extends StatefulWidget {
   final AudioPlayerManager audioManager;
 
@@ -12,11 +15,13 @@ class MiniPlayer extends StatefulWidget {
 }
 
 class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
+  // Estados del reproductor
   bool _isPlaying = false;
   bool _isLoading = false;
   double _volume = 0.7;
   bool _showVolumeSlider = false;
 
+  // Controladores de animación
   late AnimationController _slideController;
   late Animation<Offset> _slideAnimation;
   late AnimationController _pulseController;
@@ -30,17 +35,20 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     _initializeStates();
   }
 
+  /// Inicializa las animaciones de deslizamiento y pulso
   void _initializeAnimations() {
+    // Animación de deslizamiento vertical
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
 
     _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 1),
-      end: Offset.zero,
+      begin: const Offset(0, 1), // Comienza fuera de pantalla (abajo)
+      end: Offset.zero, // Termina en posición normal
     ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
 
+    // Animación de pulso para el icono de radio
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
@@ -51,13 +59,16 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
+  /// Configura los listeners para los streams del audio manager
   void _setupListeners() {
+    // Listener de reproducción
     widget.audioManager.playingStream.listen((isPlaying) {
       if (mounted) {
         setState(() {
           _isPlaying = isPlaying;
         });
 
+        // Animar entrada/salida del mini player
         if (_isPlaying) {
           _slideController.forward();
         } else {
@@ -66,6 +77,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
       }
     });
 
+    // Listener de carga
     widget.audioManager.loadingStream.listen((isLoading) {
       if (mounted) {
         setState(() {
@@ -74,6 +86,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
       }
     });
 
+    // Listener de volumen
     widget.audioManager.volumeStream.listen((volume) {
       if (mounted) {
         setState(() {
@@ -83,16 +96,19 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     });
   }
 
+  /// Inicializa los estados desde el audio manager
   void _initializeStates() {
     _isPlaying = widget.audioManager.isPlaying;
     _isLoading = widget.audioManager.isLoading;
     _volume = widget.audioManager.volume;
 
+    // Mostrar el mini player si está reproduciendo
     if (_isPlaying) {
       _slideController.forward();
     }
   }
 
+  /// Alterna entre reproducir y pausar
   Future<void> _togglePlayback() async {
     try {
       await widget.audioManager.togglePlayback();
@@ -156,6 +172,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
+  /// Construye la fila principal de controles
   Widget _buildMainControls(bool isTablet) {
     return Flexible(
       child: Container(
@@ -175,6 +192,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
+  /// Construye el icono circular de la radio con efecto de pulso
   Widget _buildRadioIcon(bool isTablet) {
     final iconSize = isTablet ? 56.0 : 48.0;
 
@@ -217,6 +235,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
+  /// Construye la información de la radio (nombre y estado)
   Widget _buildRadioInfo(bool isTablet) {
     return Expanded(
       child: Column(
@@ -224,6 +243,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Nombre de la emisora
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
@@ -239,12 +259,14 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
             ),
           ),
           SizedBox(height: isTablet ? 4 : 2),
+          // Estado de la transmisión
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Indicador circular de estado
                 Container(
                   width: isTablet ? 8 : 6,
                   height: isTablet ? 8 : 6,
@@ -271,7 +293,8 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
-  // NUEVO: Método del botón de volumen
+  /// Construye el botón de volumen con indicador de porcentaje
+  /// Al tocarlo, muestra/oculta el slider de volumen
   Widget _buildVolumeButton(bool isTablet) {
     return StreamBuilder<double>(
       stream: widget.audioManager.volumeStream,
@@ -313,6 +336,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
+  /// Construye el botón circular de reproducción/pausa
   Widget _buildPlayButton(bool isTablet) {
     final buttonSize = isTablet ? 52.0 : 44.0;
 
@@ -343,7 +367,8 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
-  // CORREGIDO: Solo un método _buildVolumeSlider con StreamBuilder
+  /// Construye el slider de volumen expandible
+  /// Muestra controles de volumen bajo, alto y porcentaje
   Widget _buildVolumeSlider(bool isTablet) {
     return StreamBuilder<double>(
       stream: widget.audioManager.volumeStream,
@@ -421,7 +446,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
-  // ACTUALIZADO: Ahora recibe el volumen como parámetro
+  /// Retorna el icono apropiado según el nivel de volumen
   IconData _getVolumeIcon(double volume) {
     if (volume == 0) return Icons.volume_off;
     if (volume < 0.5) return Icons.volume_down;

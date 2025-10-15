@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
-import '../services/audio_player_manager.dart'; // ✅ Agregar import
+import '../services/audio_player_manager.dart';
 import 'main_screen.dart';
 
+/// Pantalla de bienvenida con animaciones
+/// Muestra el logo, nombre de la emisora y un indicador de carga
+/// Se presenta al iniciar la aplicación antes de navegar a la pantalla principal
 class SplashScreen extends StatefulWidget {
-  final AudioPlayerManager audioManager; // ✅ Agregar parámetro
+  // Instancia del gestor de audio compartida con toda la aplicación
+  final AudioPlayerManager audioManager;
 
-  const SplashScreen({
-    super.key,
-    required this.audioManager, // ✅ Requerido
-  });
+  const SplashScreen({super.key, required this.audioManager});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -17,10 +18,12 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
+  // Controladores de animación
   late AnimationController _logoController;
   late AnimationController _pulseController;
   late AnimationController _fadeController;
 
+  // Animaciones
   late Animation<double> _logoScale;
   late Animation<double> _logoOpacity;
   late Animation<double> _pulseScale;
@@ -29,16 +32,11 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void initState() {
     super.initState();
-
-    // 🔍 Log de diagnóstico
-    debugPrint(
-      '🎵 SplashScreen usando audioManager: ${widget.audioManager.hashCode}',
-    );
-
     _initializeAnimations();
     _startSplashSequence();
   }
 
+  /// Inicializa todas las animaciones de la pantalla splash
   void _initializeAnimations() {
     // Animación del logo (escala y opacidad)
     _logoController = AnimationController(
@@ -79,6 +77,8 @@ class _SplashScreenState extends State<SplashScreen>
     ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
   }
 
+  /// Ejecuta la secuencia de animaciones del splash
+  /// Espera 2 segundos antes de navegar a la pantalla principal
   Future<void> _startSplashSequence() async {
     // Iniciar animación del logo
     await _logoController.forward();
@@ -99,9 +99,6 @@ class _SplashScreenState extends State<SplashScreen>
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) =>
-              // ✅ TEMPORAL: Reemplaza con tu pantalla principal
-              // Si tu app usa HomeScreen en lugar de MainScreen, usa esto:
-              // HomeScreen(audioManager: widget.audioManager),
               MainScreen(audioManager: widget.audioManager),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
@@ -150,7 +147,7 @@ class _SplashScreenState extends State<SplashScreen>
                   children: [
                     const Spacer(flex: 2),
 
-                    // Logo animado
+                    // Logo animado con efecto de escala y pulso
                     AnimatedBuilder(
                       animation: Listenable.merge([
                         _logoController,
@@ -209,7 +206,7 @@ class _SplashScreenState extends State<SplashScreen>
 
                     SizedBox(height: isTablet ? 40 : 32),
 
-                    // Título
+                    // Título de la emisora con animación de opacidad
                     AnimatedBuilder(
                       animation: _logoOpacity,
                       builder: (context, child) {
@@ -228,9 +225,9 @@ class _SplashScreenState extends State<SplashScreen>
                       },
                     ),
 
-                    SizedBox(height: isTablet ? 12 : 8),
+                    SizedBox(height: isTablet ? 14 : 10),
 
-                    // Subtítulo
+                    // Frecuencia de la emisora
                     AnimatedBuilder(
                       animation: _logoOpacity,
                       builder: (context, child) {
@@ -250,7 +247,7 @@ class _SplashScreenState extends State<SplashScreen>
 
                     const Spacer(),
 
-                    // Indicador de carga
+                    // Indicador de carga circular
                     AnimatedBuilder(
                       animation: _logoOpacity,
                       builder: (context, child) {

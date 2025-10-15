@@ -5,6 +5,9 @@ import '../widgets/volume_control.dart';
 import '../widgets/sound_waves.dart';
 import '../core/theme/app_colors.dart';
 
+/// Pantalla principal del reproductor de radio
+/// Muestra controles de reproducción, animaciones visuales y estado de conexión
+/// Incluye disco animado, ondas de sonido y control de volumen
 class RadioPlayerScreen extends StatefulWidget {
   final AudioPlayerManager audioManager;
 
@@ -16,9 +19,13 @@ class RadioPlayerScreen extends StatefulWidget {
 
 class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     with TickerProviderStateMixin {
+  // Estado de reproducción actual
   bool _isPlaying = true;
+
+  // Indica si está cargando/conectando
   bool _isLoading = true;
-  // ❌ ELIMINADO: double _volume = 0.7;
+
+  // Mensaje de error o reconexión
   String? _errorMessage;
 
   @override
@@ -28,6 +35,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     _initializeStates();
   }
 
+  /// Configura los listeners para los diferentes streams del audio manager
   void _setupListeners() {
     // Listener de reproducción
     widget.audioManager.playingStream.listen((isPlaying) {
@@ -47,9 +55,6 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       }
     });
 
-    // ❌ ELIMINADO: Listener de volumen - ya no es necesario aquí
-    // VolumeControl maneja su propio estado con StreamBuilder
-
     // Listener de errores y reconexiones
     widget.audioManager.errorStream.listen((error) {
       if (mounted) {
@@ -57,7 +62,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
           _errorMessage = error;
         });
 
-        // Mostrar SnackBar con el estado
+        // Mostrar SnackBar con el estado de error o reconexión
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -89,12 +94,13 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     });
   }
 
+  /// Inicializa los estados desde el audio manager
   void _initializeStates() {
     _isPlaying = widget.audioManager.isPlaying;
     _isLoading = widget.audioManager.isLoading;
-    // ❌ ELIMINADO: _volume = widget.audioManager.volume;
   }
 
+  /// Alterna entre reproducir y pausar la radio
   Future<void> _togglePlayback() async {
     try {
       await widget.audioManager.togglePlayback();
@@ -112,10 +118,12 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Obtener información de pantalla para diseño responsivo
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
     final textScale = MediaQuery.of(context).textScaler.scale(1.0);
 
+    // Tamaños responsivos
     final padding = isTablet ? 32.0 : 20.0;
     final titleFontSize = (isTablet ? 14.0 : 10.0) * textScale;
     final subtitleFontSize = (isTablet ? 12.0 : 10.0) * textScale;
@@ -123,6 +131,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     final playIconSize = isTablet ? 50.0 : 40.0;
     final loadingSize = isTablet ? 40.0 : 30.0;
 
+    // Espaciados responsivos
     final topSpacing = isTablet ? 80.0 : 60.0;
     final sectionSpacing = isTablet ? 40.0 : 30.0;
     final smallSpacing = isTablet ? 16.0 : 12.0;
@@ -165,12 +174,12 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
               children: [
                 SizedBox(height: topSpacing),
 
-                // Logo/Disco animado
+                // Logo/Disco animado que gira cuando está reproduciendo
                 AnimatedDisc(isPlaying: _isPlaying),
 
                 SizedBox(height: sectionSpacing),
 
-                // Título
+                // Título de la emisora
                 Text(
                   'Ambiente Stereo 88.4 FM',
                   style: TextStyle(
@@ -184,12 +193,12 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
                 SizedBox(height: smallSpacing),
 
-                // Subtítulo con estado mejorado
+                // Subtítulo con estado actual (Conectando/En vivo/Pausado)
                 _buildStatusText(subtitleFontSize),
 
                 SizedBox(height: sectionSpacing),
 
-                // Ondas de sonido animadas
+                // Ondas de sonido animadas (solo cuando está reproduciendo)
                 if (_isPlaying && !_isLoading)
                   Padding(
                     padding: EdgeInsets.symmetric(vertical: isTablet ? 15 : 5),
@@ -198,7 +207,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
                 SizedBox(height: sectionSpacing),
 
-                // Control de reproducción
+                // Botón principal de reproducción/pausa
                 _buildPlayButton(
                   size: playButtonSize,
                   iconSize: playIconSize,
@@ -208,7 +217,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
                 SizedBox(height: sectionSpacing + 10),
 
-                // ✅ Control de volumen sin parámetro volume
+                // Control de volumen
                 VolumeControl(audioManager: widget.audioManager),
 
                 SizedBox(height: sectionSpacing),
@@ -220,7 +229,8 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     );
   }
 
-  // Widget para mostrar el estado actual
+  /// Construye el widget de texto de estado
+  /// Muestra "Conectando...", "En vivo ahora" o "La radio que si quieres"
   Widget _buildStatusText(double fontSize) {
     String statusText;
     Color statusColor;
@@ -239,6 +249,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        // Indicador circular de estado (solo cuando está cargando o reproduciendo)
         if (_isLoading || _isPlaying)
           Container(
             width: 8,
@@ -270,7 +281,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     );
   }
 
-  // Indicador de reconexión en el AppBar
+  /// Construye el indicador de reconexión que aparece en el AppBar
   Widget _buildReconnectingIndicator(bool isTablet) {
     return Container(
       padding: EdgeInsets.symmetric(
@@ -310,6 +321,8 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     );
   }
 
+  /// Construye el botón circular de reproducción/pausa
+  /// Muestra un indicador de carga cuando está conectando
   Widget _buildPlayButton({
     required double size,
     required double iconSize,
@@ -337,6 +350,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
           onTap: _togglePlayback,
           child: Center(
             child: _isLoading
+                // Mostrar indicador de carga
                 ? SizedBox(
                     width: loadingSize,
                     height: loadingSize,
@@ -345,6 +359,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                       strokeWidth: isTablet ? 4 : 3,
                     ),
                   )
+                // Mostrar icono de play o pausa
                 : Icon(
                     _isPlaying ? Icons.pause : Icons.play_arrow,
                     color: AppColors.textPrimary,

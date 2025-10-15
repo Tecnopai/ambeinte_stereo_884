@@ -2,16 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/app.dart';
 
+/// Punto de entrada principal de la aplicación Ambiente Stereo
+/// Configura las orientaciones permitidas y el estilo de la barra de estado
 void main() async {
+  // Asegurar que los bindings de Flutter estén inicializados
+  // Necesario antes de usar servicios de la plataforma
   WidgetsFlutterBinding.ensureInitialized();
 
   // Configurar orientación de pantalla
+  // Solo permitir orientación vertical (portrait)
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
-  // Configurar color de la barra de estado durante el splash
+  // Configurar estilo de la barra de estado del sistema
+  // Barra transparente con iconos claros para modo oscuro
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -20,5 +26,6 @@ void main() async {
     ),
   );
 
+  // Iniciar la aplicación
   runApp(const AmbientStereoApp());
 }

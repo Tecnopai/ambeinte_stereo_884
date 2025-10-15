@@ -2,7 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app_colors.dart';
 
+/// Clase que define el tema y utilidades responsivas de la aplicación
+///
+/// Proporciona un tema oscuro personalizado y métodos auxiliares para
+/// calcular tamaños, padding y otros valores de forma responsiva según
+/// el tamaño de pantalla (móvil o tablet)
 class AppTheme {
+  /// Tema oscuro principal de la aplicación
+  ///
+  /// Configuración completa de Material Design 3 con colores personalizados
+  /// y componentes adaptados para pantallas móviles y tablets
   static ThemeData get darkTheme {
     return ThemeData(
       primarySwatch: MaterialColor(0xFF6366F1, {
@@ -29,6 +38,9 @@ class AppTheme {
     );
   }
 
+  /// Construye el tema del AppBar con soporte responsivo
+  ///
+  /// Los tamaños de texto se calculan dinámicamente en cada pantalla
   static AppBarTheme _buildResponsiveAppBarTheme() {
     return AppBarTheme(
       backgroundColor: AppColors.surface,
@@ -36,16 +48,17 @@ class AppTheme {
       elevation: 0,
       centerTitle: true,
       systemOverlayStyle: SystemUiOverlayStyle.light,
-      // Títulos responsivos se manejan directamente en cada AppBar
       titleTextStyle: TextStyle(
         color: Colors.white,
         fontWeight: FontWeight.w600,
-        // El tamaño se calcula dinámicamente en cada pantalla
       ),
       toolbarHeight: null, // Permite altura adaptativa
     );
   }
 
+  /// Construye el tema de la barra de navegación inferior
+  ///
+  /// Los tamaños de iconos y texto se ajustan dinámicamente en MainScreen
   static BottomNavigationBarThemeData _buildResponsiveBottomNavTheme() {
     return BottomNavigationBarThemeData(
       backgroundColor: AppColors.surface,
@@ -53,12 +66,14 @@ class AppTheme {
       unselectedItemColor: AppColors.textSecondary,
       type: BottomNavigationBarType.fixed,
       elevation: 8,
-      // Los tamaños de iconos y texto se manejan dinámicamente en MainScreen
       selectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
       unselectedLabelStyle: TextStyle(fontWeight: FontWeight.normal),
     );
   }
 
+  /// Construye el tema de los botones elevados
+  ///
+  /// Los paddings y border radius se calculan dinámicamente donde se usen
   static ElevatedButtonThemeData _buildResponsiveElevatedButtonTheme() {
     return ElevatedButtonThemeData(
       style: ButtonStyle(
@@ -68,26 +83,23 @@ class AppTheme {
           if (states.contains(WidgetState.pressed)) return 2;
           return 4;
         }),
-        // Los paddings y border radius se calculan dinámicamente donde se usen
         shape: WidgetStateProperty.all(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12), // Base, se puede override
-          ),
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         textStyle: WidgetStateProperty.all(
-          TextStyle(
-            fontWeight: FontWeight.w600,
-            // fontSize se calcula dinámicamente
-          ),
+          TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
     );
   }
 
+  /// Construye el tema de texto base de la aplicación
+  ///
+  /// Define estilos para headlines, títulos, cuerpo y etiquetas.
+  /// Los tamaños de fuente se calculan dinámicamente en cada widget
   static TextTheme _buildResponsiveTextTheme() {
-    // Base text theme - los tamaños se calculan dinámicamente en cada widget
     return TextTheme(
-      // Headlines
+      // Headlines - Para títulos principales
       headlineLarge: TextStyle(
         color: Colors.white,
         fontWeight: FontWeight.bold,
@@ -104,7 +116,7 @@ class AppTheme {
         height: 1.3,
       ),
 
-      // Titles
+      // Titles - Para títulos de secciones
       titleLarge: TextStyle(
         color: Colors.white,
         fontWeight: FontWeight.bold,
@@ -121,12 +133,12 @@ class AppTheme {
         height: 1.4,
       ),
 
-      // Body text
+      // Body text - Para contenido general
       bodyLarge: TextStyle(color: Colors.white, height: 1.5),
       bodyMedium: TextStyle(color: AppColors.textMuted, height: 1.5),
       bodySmall: TextStyle(color: AppColors.textMuted, height: 1.4),
 
-      // Labels
+      // Labels - Para etiquetas y textos pequeños
       labelLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
       labelMedium: TextStyle(
         color: AppColors.textSecondary,
@@ -139,19 +151,18 @@ class AppTheme {
     );
   }
 
+  /// Construye el tema de las tarjetas (Cards)
   static CardThemeData _buildResponsiveCardTheme() {
     return CardThemeData(
       color: AppColors.surface,
       elevation: 4,
       shadowColor: Colors.black.withValues(alpha: 0.15),
-      // Border radius se calcula dinámicamente
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12), // Base, se puede override
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: EdgeInsets.zero, // Se maneja dinámicamente en cada card
     );
   }
 
+  /// Construye el tema de los sliders
   static SliderThemeData _buildResponsiveSliderTheme() {
     return SliderThemeData(
       activeTrackColor: AppColors.primary,
@@ -163,18 +174,24 @@ class AppTheme {
         color: Colors.white,
         fontWeight: FontWeight.w600,
       ),
-      // Track height y thumb radius se calculan dinámicamente
     );
   }
 
+  /// Construye el tema de los iconos
   static IconThemeData _buildResponsiveIconTheme() {
-    return IconThemeData(
-      color: Colors.white,
-      // Size se calcula dinámicamente en cada widget
-    );
+    return IconThemeData(color: Colors.white);
   }
 
-  // Métodos utilitarios para cálculos responsivos
+  // ============================================
+  // MÉTODOS UTILITARIOS PARA DISEÑO RESPONSIVO
+  // ============================================
+
+  /// Calcula el tamaño de fuente responsivo según el dispositivo
+  ///
+  /// [baseSize] - Tamaño base para móviles
+  /// [tabletMultiplier] - Multiplicador para tablets (por defecto 1.2)
+  ///
+  /// Considera el factor de escala de texto del sistema
   static double getResponsiveFontSize(
     BuildContext context, {
     required double baseSize,
@@ -187,6 +204,10 @@ class AppTheme {
     return (isTablet ? baseSize * tabletMultiplier : baseSize) * textScale;
   }
 
+  /// Calcula padding uniforme responsivo
+  ///
+  /// [basePadding] - Padding base para móviles
+  /// [tabletMultiplier] - Multiplicador para tablets (por defecto 1.3)
   static EdgeInsets getResponsivePadding(
     BuildContext context, {
     required double basePadding,
@@ -199,6 +220,11 @@ class AppTheme {
     return EdgeInsets.all(padding);
   }
 
+  /// Calcula padding simétrico responsivo (horizontal y vertical)
+  ///
+  /// [horizontalBase] - Padding horizontal base para móviles
+  /// [verticalBase] - Padding vertical base para móviles
+  /// [tabletMultiplier] - Multiplicador para tablets (por defecto 1.3)
   static EdgeInsets getResponsiveSymmetricPadding(
     BuildContext context, {
     required double horizontalBase,
@@ -214,6 +240,10 @@ class AppTheme {
     );
   }
 
+  /// Calcula el radio de borde responsivo
+  ///
+  /// [baseRadius] - Radio base para móviles
+  /// [tabletMultiplier] - Multiplicador para tablets (por defecto 1.3)
   static double getResponsiveBorderRadius(
     BuildContext context, {
     required double baseRadius,
@@ -225,6 +255,12 @@ class AppTheme {
     return isTablet ? baseRadius * tabletMultiplier : baseRadius;
   }
 
+  /// Calcula el tamaño de icono responsivo
+  ///
+  /// [baseSize] - Tamaño base para móviles
+  /// [tabletMultiplier] - Multiplicador para tablets (por defecto 1.2)
+  ///
+  /// Considera el factor de escala de texto del sistema
   static double getResponsiveIconSize(
     BuildContext context, {
     required double baseSize,
@@ -237,10 +273,14 @@ class AppTheme {
     return (isTablet ? baseSize * tabletMultiplier : baseSize) * textScale;
   }
 
+  /// Determina si el dispositivo actual es una tablet
+  ///
+  /// Considera tablet cualquier dispositivo con lado más corto >= 600dp
   static bool isTablet(BuildContext context) {
     return MediaQuery.of(context).size.shortestSide >= 600;
   }
 
+  /// Determina si el dispositivo está en orientación horizontal
   static bool isLandscape(BuildContext context) {
     final size = MediaQuery.of(context).size;
     return size.width > size.height;

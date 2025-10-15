@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
 
+/// Widget que muestra ondas de sonido animadas
+/// Las barras se mueven verticalmente simulando un ecualizador
+/// Se puede pausar/reanudar la animación según el estado de reproducción
 class SoundWaves extends StatefulWidget {
-  final bool isPlaying; // Agregamos control para pausar/reanudar animación
+  // Controla si las ondas deben animarse
+  final bool isPlaying;
 
   const SoundWaves({super.key, this.isPlaying = true});
 
@@ -12,12 +16,14 @@ class SoundWaves extends StatefulWidget {
 
 class _SoundWavesState extends State<SoundWaves>
     with SingleTickerProviderStateMixin {
+  // Controlador para la animación de las ondas
   late AnimationController _waveController;
   late Animation<double> _waveAnimation;
 
   @override
   void initState() {
     super.initState();
+    // Configurar animación de 1.5 segundos
     _waveController = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,
@@ -27,6 +33,7 @@ class _SoundWavesState extends State<SoundWaves>
       CurvedAnimation(parent: _waveController, curve: Curves.easeInOut),
     );
 
+    // Iniciar animación si está reproduciendo
     if (widget.isPlaying) {
       _waveController.repeat(reverse: true);
     }
@@ -35,6 +42,7 @@ class _SoundWavesState extends State<SoundWaves>
   @override
   void didUpdateWidget(SoundWaves oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Detectar cambios en el estado de reproducción
     if (widget.isPlaying != oldWidget.isPlaying) {
       if (widget.isPlaying) {
         _waveController.repeat(reverse: true);
@@ -52,17 +60,17 @@ class _SoundWavesState extends State<SoundWaves>
 
   @override
   Widget build(BuildContext context) {
-    // Obtener información del dispositivo
+    // Obtener información del dispositivo para diseño responsivo
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
 
-    // Calcular tamaños dinámicos
+    // Calcular tamaños dinámicos según el dispositivo
     final barCount = isTablet ? 7 : 5; // Más barras en tablets
     final barSpacing = isTablet ? 3.0 : 2.0;
     final barWidth = isTablet ? 6.0 : 4.0;
     final borderRadius = isTablet ? 3.0 : 2.0;
 
-    // Altura base y máxima adaptadas al dispositivo
+    // Calcular alturas base y máxima adaptadas al dispositivo
     double baseHeight;
     double maxHeight;
 
@@ -70,13 +78,12 @@ class _SoundWavesState extends State<SoundWaves>
       baseHeight = 30;
       maxHeight = 60;
     } else {
-      // Para teléfonos, usar un porcentaje del alto de pantalla
-      final availableHeight =
-          screenSize.height * 0.08; // 8% del alto de pantalla
+      // Para teléfonos, usar porcentaje del alto de pantalla
+      final availableHeight = screenSize.height * 0.08; // 8% del alto
       baseHeight = availableHeight * 0.4; // Altura mínima
       maxHeight = availableHeight; // Altura máxima
 
-      // Límites de seguridad
+      // Aplicar límites de seguridad para evitar tamaños extremos
       if (baseHeight < 15) baseHeight = 15;
       if (maxHeight < 30) maxHeight = 30;
       if (baseHeight > 25) baseHeight = 25;
@@ -87,14 +94,14 @@ class _SoundWavesState extends State<SoundWaves>
       animation: _waveAnimation,
       builder: (context, child) {
         return SizedBox(
-          height:
-              maxHeight + 10, // Altura fija del contenedor para evitar saltos
+          // Altura fija del contenedor para evitar saltos visuales
+          height: maxHeight + 10,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment:
-                CrossAxisAlignment.end, // Alineación desde abajo
+            crossAxisAlignment: CrossAxisAlignment.end, // Alinear desde abajo
             children: List.generate(barCount, (index) {
-              // Diferentes patrones de animación para cada barra
+              // Asignar diferentes patrones de animación a cada barra
+              // Esto crea un efecto de ecualizador más realista
               double animationMultiplier;
               switch (index % 4) {
                 case 0:
@@ -113,7 +120,7 @@ class _SoundWavesState extends State<SoundWaves>
                   animationMultiplier = 0.7;
               }
 
-              // Calcular altura de la barra con animación
+              // Calcular altura animada de la barra
               final animatedHeight =
                   baseHeight +
                   ((maxHeight - baseHeight) *
@@ -125,7 +132,7 @@ class _SoundWavesState extends State<SoundWaves>
                 width: barWidth,
                 height: animatedHeight,
                 decoration: BoxDecoration(
-                  // Gradiente más dinámico
+                  // Gradiente de abajo hacia arriba
                   gradient: LinearGradient(
                     begin: Alignment.bottomCenter,
                     end: Alignment.topCenter,
@@ -135,7 +142,7 @@ class _SoundWavesState extends State<SoundWaves>
                     ],
                   ),
                   borderRadius: BorderRadius.circular(borderRadius),
-                  // Sombra sutil para profundidad
+                  // Sombra sutil para dar profundidad
                   boxShadow: [
                     BoxShadow(
                       color: AppColors.primary.withValues(alpha: 0.2),

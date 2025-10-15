@@ -3,17 +3,22 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/article.dart';
 import '../core/theme/app_colors.dart';
 
+/// Pantalla que muestra el detalle completo de un artículo de noticias
+/// Incluye imagen, título, fecha, contenido y enlace al artículo original
 class ArticleDetailScreen extends StatelessWidget {
+  // Artículo a mostrar en detalle
   final Article article;
 
   const ArticleDetailScreen({super.key, required this.article});
 
   @override
   Widget build(BuildContext context) {
+    // Obtener dimensiones de la pantalla para diseño responsivo
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
     final textScale = MediaQuery.of(context).textScaler.scale(1.0);
 
+    // Configurar tamaños responsivos según el tipo de dispositivo
     final padding = isTablet ? 22.0 : 14.0;
     final titleFontSize = (isTablet ? 18.0 : 14.0) * textScale;
     final dateFontSize = (isTablet ? 10.0 : 8.0) * textScale;
@@ -30,10 +35,11 @@ class ArticleDetailScreen extends StatelessWidget {
         title: const Text('Artículo'),
         centerTitle: true,
         actions: [
+          // Botón para compartir el artículo (función pendiente de implementar)
           IconButton(
             icon: Icon(Icons.share, size: isTablet ? 26 : 24),
             onPressed: () {
-              // Implementar compartir si es necesario
+              // tODO Implementar funcionalidad de compartir
             },
           ),
         ],
@@ -43,7 +49,8 @@ class ArticleDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ✨ IMAGEN DESTACADA DEL ARTÍCULO
+            // ===== IMAGEN DESTACADA DEL ARTÍCULO =====
+            // Mostrar solo si el artículo tiene imagen
             if (article.imageUrl != null)
               ClipRRect(
                 borderRadius: BorderRadius.circular(borderRadius),
@@ -52,6 +59,7 @@ class ArticleDetailScreen extends StatelessWidget {
                   height: imageHeight,
                   width: double.infinity,
                   fit: BoxFit.cover,
+                  // Mostrar indicador de carga mientras se descarga la imagen
                   loadingBuilder: (context, child, loadingProgress) {
                     if (loadingProgress == null) return child;
                     return Container(
@@ -65,6 +73,7 @@ class ArticleDetailScreen extends StatelessWidget {
                       ),
                     );
                   },
+                  // Mostrar mensaje de error si la imagen no se puede cargar
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
                       height: imageHeight,
@@ -97,32 +106,36 @@ class ArticleDetailScreen extends StatelessWidget {
                 ),
               ),
 
+            // Espaciado después de la imagen (solo si hay imagen)
             SizedBox(
               height: article.imageUrl != null ? (isTablet ? 24 : 20) : 0,
             ),
 
-            // Título del artículo
+            // ===== TÍTULO DEL ARTÍCULO =====
+            // SelectableText permite al usuario copiar el texto
             SelectableText(
               article.title,
               style: TextStyle(
                 fontSize: titleFontSize,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
-                height: 1.3,
+                height: 1.3, // Altura de línea para mejor legibilidad
               ),
             ),
 
             SizedBox(height: isTablet ? 20 : 16),
 
-            // Fecha y hora
+            // ===== FECHA Y HORA DE PUBLICACIÓN =====
             Row(
               children: [
+                // Icono de reloj
                 Icon(
                   Icons.access_time,
                   size: iconSize,
                   color: AppColors.textSecondary,
                 ),
                 SizedBox(width: isTablet ? 6 : 4),
+                // Fecha formateada
                 Flexible(
                   child: Text(
                     article.formattedDate,
@@ -137,16 +150,18 @@ class ArticleDetailScreen extends StatelessWidget {
 
             SizedBox(height: isTablet ? 32 : 24),
 
-            // Contenido del artículo
+            // ===== CONTENIDO DEL ARTÍCULO =====
             Container(
               width: double.infinity,
               padding: EdgeInsets.all(isTablet ? 18 : 14),
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 borderRadius: BorderRadius.circular(borderRadius),
+                // Borde decorativo con color primario
                 border: Border.all(
                   color: AppColors.primary.withValues(alpha: 0.3),
                 ),
+                // Sombra sutil para dar profundidad
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.05),
@@ -161,14 +176,14 @@ class ArticleDetailScreen extends StatelessWidget {
                 style: TextStyle(
                   fontSize: contentFontSize,
                   color: AppColors.textMuted,
-                  height: 1.6,
+                  height: 1.6, // Espaciado entre líneas para mejor lectura
                 ),
               ),
             ),
 
             SizedBox(height: isTablet ? 32 : 24),
 
-            // Botón para ver artículo completo
+            // ===== BOTÓN PARA VER ARTÍCULO COMPLETO EN EL NAVEGADOR =====
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -198,8 +213,12 @@ class ArticleDetailScreen extends StatelessWidget {
     );
   }
 
+  /// Abre una URL en el navegador externo del dispositivo
+  ///
+  /// [url] - La URL del artículo completo a abrir
   Future<void> _launchUrl(String url) async {
     final uri = Uri.parse(url);
+    // Verificar si se puede abrir la URL antes de intentarlo
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }

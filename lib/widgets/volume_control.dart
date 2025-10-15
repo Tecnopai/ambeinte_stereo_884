@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
 import '../services/audio_player_manager.dart';
 
+/// Control de volumen con botón y slider expandible
+/// Muestra un botón con el icono de volumen actual y porcentaje
+/// Al tocar el botón, expande un slider para ajustar el volumen
 class VolumeControl extends StatefulWidget {
   final AudioPlayerManager audioManager;
 
@@ -12,7 +15,10 @@ class VolumeControl extends StatefulWidget {
 }
 
 class _VolumeControlState extends State<VolumeControl> {
+  // Controla la visibilidad del slider de volumen
   bool _showVolumeSlider = false;
+
+  // Volumen local sincronizado con el audio manager
   double _localVolume = 0.7;
 
   @override
@@ -21,7 +27,7 @@ class _VolumeControlState extends State<VolumeControl> {
     // Inicializar con el volumen actual del manager
     _localVolume = widget.audioManager.volume;
 
-    // Escuchar cambios del stream
+    // Escuchar cambios del stream de volumen
     widget.audioManager.volumeStream.listen((volume) {
       if (mounted) {
         setState(() {
@@ -31,18 +37,21 @@ class _VolumeControlState extends State<VolumeControl> {
     });
   }
 
+  /// Retorna el icono apropiado según el nivel de volumen
   IconData _getVolumeIcon(double volume) {
     if (volume == 0) return Icons.volume_off;
     if (volume < 0.5) return Icons.volume_down;
     return Icons.volume_up;
   }
 
+  /// Alterna la visibilidad del slider de volumen
   void _toggleVolumeSlider() {
     setState(() {
       _showVolumeSlider = !_showVolumeSlider;
     });
   }
 
+  /// Maneja los cambios en el slider y actualiza el volumen
   void _handleVolumeChange(double value) {
     setState(() {
       _localVolume = value;
@@ -52,11 +61,13 @@ class _VolumeControlState extends State<VolumeControl> {
 
   @override
   Widget build(BuildContext context) {
+    // Obtener información del dispositivo para diseño responsivo
     final screenSize = MediaQuery.of(context).size;
     final isTablet = screenSize.shortestSide >= 600;
     final screenWidth = screenSize.width;
     final textScale = MediaQuery.of(context).textScaler.scale(1.0);
 
+    // Calcular tamaños dinámicos según el dispositivo
     final horizontalPadding = isTablet ? 60.0 : (screenWidth * 0.1);
     final buttonPadding = isTablet ? 16.0 : 12.0;
     final buttonRadius = isTablet ? 16.0 : 12.0;
@@ -68,16 +79,18 @@ class _VolumeControlState extends State<VolumeControl> {
     final trackHeight = isTablet ? 6.0 : 4.0;
     final thumbRadius = isTablet ? 14.0 : 12.0;
 
+    // Aplicar límites al padding horizontal
     final clampedHorizontalPadding = horizontalPadding.clamp(20.0, 80.0);
 
     return Container(
       padding: EdgeInsets.symmetric(horizontal: clampedHorizontalPadding),
       child: Column(
         children: [
+          // Fila con botón de volumen y porcentaje
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Botón de volumen
+              // Botón de volumen con icono
               GestureDetector(
                 onTap: _toggleVolumeSlider,
                 child: Container(
@@ -93,6 +106,7 @@ class _VolumeControlState extends State<VolumeControl> {
                         offset: const Offset(0, 2),
                       ),
                     ],
+                    // Borde resaltado cuando el slider está visible
                     border: _showVolumeSlider
                         ? Border.all(
                             color: AppColors.primary.withValues(alpha: 0.3),
@@ -110,7 +124,7 @@ class _VolumeControlState extends State<VolumeControl> {
                 ),
               ),
 
-              // Porcentaje de volumen
+              // Indicador de porcentaje de volumen
               Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: isTablet ? 12 : 8,
@@ -133,7 +147,7 @@ class _VolumeControlState extends State<VolumeControl> {
             ],
           ),
 
-          // Slider animado
+          // Slider expandible de volumen
           if (_showVolumeSlider) ...[
             SizedBox(height: spacing),
             Container(
@@ -155,7 +169,7 @@ class _VolumeControlState extends State<VolumeControl> {
               ),
               child: Column(
                 children: [
-                  // Etiquetas de volumen
+                  // Iconos indicadores de volumen bajo y alto
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -174,7 +188,7 @@ class _VolumeControlState extends State<VolumeControl> {
 
                   SizedBox(height: isTablet ? 8 : 4),
 
-                  // Slider
+                  // Control deslizante de volumen
                   SliderTheme(
                     data: SliderThemeData(
                       activeTrackColor: AppColors.primary,
@@ -195,6 +209,7 @@ class _VolumeControlState extends State<VolumeControl> {
                       onChanged: _handleVolumeChange,
                       min: 0.0,
                       max: 1.0,
+                      // Divisiones para valores discretos
                       divisions: isTablet ? 20 : 10,
                       label: '${(_localVolume * 100).round()}%',
                     ),
