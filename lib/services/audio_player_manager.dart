@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:volume_controller/volume_controller.dart';
 
@@ -19,6 +18,7 @@ class AudioPlayerManager {
   bool _isPlaying = false;
   bool _isLoading = false;
   bool _userStoppedManually = false;
+  bool _isDisposed = false;
   double _volume = 0.7;
 
   // Configuración del stream
@@ -26,17 +26,21 @@ class AudioPlayerManager {
   static const String radioName = 'Ambiente Stereo 88.4 FM';
 
   // Configuración de reconexión automática
-  static const int _maxRetries = 5;
-  static const Duration _initialRetryDelay = Duration(seconds: 2);
-  static const Duration _maxRetryDelay = Duration(seconds: 30);
+  static const int _maxRetries = 3;
+  static const Duration _initialRetryDelay = Duration(seconds: 3);
+  static const Duration _maxRetryDelay = Duration(seconds: 20);
+  static const Duration _minDelayBetweenAttempts = Duration(seconds: 2);
+
   int _retryCount = 0;
   int _consecutiveErrors = 0;
+  DateTime? _lastAttemptTime;
+
   Timer? _retryTimer;
-  Timer? _healthCheckTimer;
   Timer? _connectivityCheckTimer;
 
   bool _isRestarting = false;
   StreamSubscription? _playerStateSubscription;
+  StreamSubscription? _playbackEventSubscription;
 
   // Stream controllers para emitir cambios de estado
   final _playingController = StreamController<bool>.broadcast();
@@ -57,6 +61,8 @@ class AudioPlayerManager {
 
   /// Inicializa el gestor de audio y el controlador de volumen
   Future<void> init() async {
+    if (_isDisposed) return;
+
     try {
       await _initializeVolumeController();
       _initializePlayer();
@@ -84,6 +90,8 @@ class AudioPlayerManager {
 
       // Escuchar cambios en los botones físicos de volumen
       VolumeController.instance.addListener((newVolume) {
+        if (_isDisposed) return;
+
         _volume = newVolume;
 
         if (!_volumeStreamController.isClosed) {
@@ -107,55 +115,32 @@ class AudioPlayerManager {
 
   /// Inicializa el reproductor de audio y configura los listeners
   void _initializePlayer() {
+    if (_isDisposed) return;
+
     try {
+      // Limpiar reproductor anterior si existe
+      _cleanupPlayer();
+
       _audioPlayer = AudioPlayer();
+
+      // Configurar el audio source
+      _audioPlayer!.setAudioSource(
+        AudioSource.uri(Uri.parse(streamUrl)),
+        preload: false,
+      );
 
       // Escuchar cambios de estado del reproductor
       _playerStateSubscription = _audioPlayer!.playerStateStream.listen(
-        (state) {
-          final wasPlaying = _isPlaying;
-          _isPlaying = state.playing;
-          _isLoading =
-              state.processingState == ProcessingState.loading ||
-              state.processingState == ProcessingState.buffering;
-
-          // Si está reproduciendo, reiniciar contadores de error
-          if (_isPlaying) {
-            _retryCount = 0;
-            _consecutiveErrors = 0;
-            if (!_errorController.isClosed) {
-              _errorController.add('');
-            }
-            _startHealthCheck();
-            _startConnectivityCheck();
-          } else {
-            // Si se detuvo inesperadamente, intentar reconectar
-            if (wasPlaying && !_userStoppedManually && !_isRestarting) {
-              _consecutiveErrors++;
-              _scheduleReconnect();
-            }
-          }
-
-          // Emitir cambios de estado
-          if (!_playingController.isClosed) {
-            _playingController.add(_isPlaying);
-          }
-          if (!_loadingController.isClosed) {
-            _loadingController.add(_isLoading);
-          }
-        },
-        onError: (error) {
-          _consecutiveErrors++;
-          _handlePlayerError(error);
-        },
+        _handlePlayerStateChange,
+        onError: _handlePlayerError,
+        cancelOnError: false,
       );
 
       // Escuchar eventos de playback
-      _audioPlayer!.playbackEventStream.listen(
-        (event) {},
-        onError: (error) {
-          _handlePlayerError(error);
-        },
+      _playbackEventSubscription = _audioPlayer!.playbackEventStream.listen(
+        null, // No necesitamos procesar cada evento
+        onError: _handlePlayerError,
+        cancelOnError: false,
       );
 
       // Aplicar volumen inicial
@@ -164,6 +149,49 @@ class AudioPlayerManager {
       if (kDebugMode) {
         print('[AudioPlayerManager] Error al inicializar player: $e');
       }
+    }
+  }
+
+  /// Maneja cambios en el estado del reproductor
+  void _handlePlayerStateChange(PlayerState state) {
+    if (_isDisposed || _isRestarting) return;
+
+    final wasPlaying = _isPlaying;
+    final newIsPlaying = state.playing;
+    final newIsLoading =
+        state.processingState == ProcessingState.loading ||
+        state.processingState == ProcessingState.buffering;
+
+    // Actualizar estados
+    _isPlaying = newIsPlaying;
+    _isLoading = newIsLoading;
+
+    // Si está reproduciendo correctamente, resetear contadores
+    if (_isPlaying && state.processingState == ProcessingState.ready) {
+      _retryCount = 0;
+      _consecutiveErrors = 0;
+      if (!_errorController.isClosed) {
+        _errorController.add('');
+      }
+      _startConnectivityCheck();
+    }
+
+    // Si se detuvo inesperadamente
+    if (wasPlaying && !newIsPlaying && !_userStoppedManually) {
+      // Solo si realmente se detuvo (no es buffering)
+      if (state.processingState == ProcessingState.idle ||
+          state.processingState == ProcessingState.completed) {
+        _consecutiveErrors++;
+        _scheduleReconnect();
+      }
+    }
+
+    // Emitir cambios de estado
+    if (!_playingController.isClosed) {
+      _playingController.add(_isPlaying);
+    }
+    if (!_loadingController.isClosed) {
+      _loadingController.add(_isLoading);
     }
   }
 
@@ -178,7 +206,19 @@ class AudioPlayerManager {
 
   /// Inicia la reproducción del stream
   Future<void> play() async {
-    if (_isRestarting) return;
+    if (_isDisposed || _isRestarting || _isPlaying) return;
+
+    // Prevenir intentos muy frecuentes
+    if (_lastAttemptTime != null) {
+      final timeSinceLastAttempt = DateTime.now().difference(_lastAttemptTime!);
+      if (timeSinceLastAttempt < _minDelayBetweenAttempts) {
+        if (kDebugMode) {
+          print('[AudioPlayerManager] Intento demasiado pronto, esperando...');
+        }
+        return;
+      }
+    }
+    _lastAttemptTime = DateTime.now();
 
     try {
       _userStoppedManually = false;
@@ -187,35 +227,14 @@ class AudioPlayerManager {
         _loadingController.add(_isLoading);
       }
 
-      // Verificar conectividad antes de intentar reproducir
-      final hasConnection = await _checkRealConnectivity();
-
-      if (!hasConnection) {
-        _isLoading = false;
-        _isPlaying = false;
-        if (!_loadingController.isClosed) {
-          _loadingController.add(_isLoading);
-        }
-        if (!_playingController.isClosed) {
-          _playingController.add(_isPlaying);
-        }
-        if (!_errorController.isClosed) {
-          _errorController.add('Sin conexión. Reintentando...');
-        }
-        _scheduleReconnect();
-        return;
-      }
-
       // Si hay muchos errores consecutivos, forzar reinicio
-      if (_consecutiveErrors > 3) {
+      if (_consecutiveErrors > 5) {
         await _forceRestart();
         return;
       }
 
-      // Configurar URL y reproducir
-      await _audioPlayer?.setUrl(streamUrl);
+      // Reproducir
       await _audioPlayer?.play();
-
       _retryCount = 0;
     } catch (e) {
       if (kDebugMode) {
@@ -231,7 +250,7 @@ class AudioPlayerManager {
         _playingController.add(_isPlaying);
       }
       if (!_errorController.isClosed) {
-        _errorController.add('Error al conectar. Reintentando...');
+        _errorController.add('Error de conexión');
       }
       _scheduleReconnect();
     }
@@ -239,22 +258,29 @@ class AudioPlayerManager {
 
   /// Detiene la reproducción
   Future<void> stop() async {
+    if (_isDisposed) return;
+
     try {
       _userStoppedManually = true;
       _isRestarting = false;
       _cancelReconnect();
-      _stopHealthCheck();
       _stopConnectivityCheck();
 
       await _audioPlayer?.stop();
 
       _isPlaying = false;
       _isLoading = false;
+      _consecutiveErrors = 0;
+      _retryCount = 0;
+
       if (!_playingController.isClosed) {
         _playingController.add(_isPlaying);
       }
       if (!_loadingController.isClosed) {
         _loadingController.add(_isLoading);
+      }
+      if (!_errorController.isClosed) {
+        _errorController.add('');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -274,13 +300,12 @@ class AudioPlayerManager {
   /// Realiza un reinicio forzado del reproductor
   /// Se usa cuando hay múltiples errores consecutivos
   Future<void> _forceRestart() async {
-    if (_isRestarting) return;
+    if (_isDisposed || _isRestarting) return;
 
     _isRestarting = true;
 
     try {
       _cancelReconnect();
-      _stopHealthCheck();
       _stopConnectivityCheck();
 
       _isLoading = true;
@@ -295,10 +320,20 @@ class AudioPlayerManager {
         _errorController.add('Reiniciando...');
       }
 
+      // Detener y limpiar
       await _audioPlayer?.stop();
+      await _audioPlayer?.dispose();
+
+      // Esperar para asegurar limpieza completa
+      await Future.delayed(const Duration(seconds: 2));
+
+      // Reinicializar el reproductor
+      _initializePlayer();
+
       await Future.delayed(const Duration(milliseconds: 500));
 
       _consecutiveErrors = 0;
+      _retryCount = 0;
 
       // Si el usuario detuvo manualmente, no continuar
       if (_userStoppedManually) {
@@ -310,24 +345,7 @@ class AudioPlayerManager {
         return;
       }
 
-      // Verificar conectividad
-      final hasConnection = await _checkRealConnectivity();
-
-      if (!hasConnection) {
-        _isRestarting = false;
-        _isLoading = false;
-        if (!_loadingController.isClosed) {
-          _loadingController.add(_isLoading);
-        }
-        if (!_errorController.isClosed) {
-          _errorController.add('Sin conexión. Reintentando...');
-        }
-        _scheduleReconnect();
-        return;
-      }
-
       // Reiniciar reproducción
-      await _audioPlayer?.setUrl(streamUrl);
       await _audioPlayer?.play();
 
       if (!_errorController.isClosed) {
@@ -342,7 +360,7 @@ class AudioPlayerManager {
         _loadingController.add(_isLoading);
       }
       if (!_errorController.isClosed) {
-        _errorController.add('Error. Reintentando...');
+        _errorController.add('Error al reiniciar');
       }
       _scheduleReconnect();
     } finally {
@@ -354,43 +372,28 @@ class AudioPlayerManager {
     }
   }
 
-  /// Verifica la conectividad real haciendo una petición HTTP al stream
-  Future<bool> _checkRealConnectivity() async {
-    try {
-      final response = await http
-          .head(Uri.parse(streamUrl))
-          .timeout(const Duration(seconds: 5));
-
-      return response.statusCode == 200 ||
-          response.statusCode == 302 ||
-          response.statusCode == 301 ||
-          response.statusCode == 403 ||
-          response.statusCode == 400;
-    } catch (e) {
-      return false;
-    }
-  }
-
   /// Inicia un timer para verificar la conectividad periódicamente
   void _startConnectivityCheck() {
+    if (_isDisposed) return;
+
     _stopConnectivityCheck();
 
-    _connectivityCheckTimer = Timer.periodic(const Duration(seconds: 15), (
+    _connectivityCheckTimer = Timer.periodic(const Duration(seconds: 30), (
       timer,
     ) async {
-      if (_isPlaying &&
-          !_userStoppedManually &&
-          !_isLoading &&
-          !_isRestarting) {
-        final hasConnection = await _checkRealConnectivity();
+      if (_isDisposed || !_isPlaying || _userStoppedManually || _isRestarting) {
+        return;
+      }
 
-        if (!hasConnection) {
-          _isPlaying = false;
-          if (!_playingController.isClosed) {
-            _playingController.add(_isPlaying);
-          }
+      // Verificar si el reproductor está en un estado extraño
+      if (_audioPlayer != null) {
+        final state = _audioPlayer!.playerState;
+
+        // Si está en idle cuando debería estar reproduciendo, reconectar
+        if (state.processingState == ProcessingState.idle) {
+          _consecutiveErrors++;
           if (!_errorController.isClosed) {
-            _errorController.add('Sin conexión');
+            _errorController.add('Conexión perdida');
           }
           _scheduleReconnect();
         }
@@ -406,10 +409,16 @@ class AudioPlayerManager {
 
   /// Maneja errores del reproductor
   void _handlePlayerError(dynamic error) {
-    if (_isRestarting) return;
+    if (_isDisposed || _isRestarting || _userStoppedManually) return;
 
+    if (kDebugMode) {
+      print('[AudioPlayerManager] Error del reproductor: $error');
+    }
+
+    _consecutiveErrors++;
     _isLoading = false;
     _isPlaying = false;
+
     if (!_loadingController.isClosed) {
       _loadingController.add(_isLoading);
     }
@@ -417,68 +426,62 @@ class AudioPlayerManager {
       _playingController.add(_isPlaying);
     }
 
-    if (!_userStoppedManually) {
-      if (_consecutiveErrors > 5) {
-        if (!_errorController.isClosed) {
-          _errorController.add('Reiniciando...');
-        }
-        _forceRestart();
-      } else {
-        if (!_errorController.isClosed) {
-          _errorController.add('Reintentando...');
-        }
-        _scheduleReconnect();
+    if (_consecutiveErrors > 3) {
+      if (!_errorController.isClosed) {
+        _errorController.add('Reiniciando...');
       }
+      _forceRestart();
+    } else {
+      if (!_errorController.isClosed) {
+        _errorController.add('Error de reproducción');
+      }
+      _scheduleReconnect();
     }
   }
 
   /// Programa un intento de reconexión con retroceso exponencial
   void _scheduleReconnect() {
-    if (_isRestarting) return;
+    if (_isDisposed || _isRestarting || _userStoppedManually) return;
 
     _cancelReconnect();
 
-    // Si se alcanzó el máximo de intentos, usar el delay máximo
+    // Calcular delay con retroceso exponencial
+    int delaySeconds;
     if (_retryCount >= _maxRetries) {
-      if (!_errorController.isClosed) {
-        _errorController.add('Reintentando en ${_maxRetryDelay.inSeconds}s...');
-      }
-      _retryTimer = Timer(_maxRetryDelay, () {
-        _retryCount = 0;
-        _attemptReconnect();
-      });
-      return;
+      delaySeconds = _maxRetryDelay.inSeconds;
+      _retryCount = 0; // Resetear contador
+    } else {
+      delaySeconds = (_initialRetryDelay.inSeconds * (1 << _retryCount)).clamp(
+        3,
+        _maxRetryDelay.inSeconds,
+      );
     }
 
-    // Calcular delay con retroceso exponencial
-    final delay = Duration(
-      seconds: (_initialRetryDelay.inSeconds * (1 << _retryCount)).clamp(
-        2,
-        _maxRetryDelay.inSeconds,
-      ),
-    );
+    final delay = Duration(seconds: delaySeconds);
+
+    if (kDebugMode) {
+      print('[AudioPlayerManager] Reintentando en $delaySeconds segundos...');
+    }
+
+    if (!_errorController.isClosed) {
+      _errorController.add('Reintentando en ${delaySeconds}s...');
+    }
 
     _retryTimer = Timer(delay, _attemptReconnect);
   }
 
   /// Intenta reconectar al stream
   Future<void> _attemptReconnect() async {
-    if (_userStoppedManually || _isRestarting) return;
+    if (_isDisposed || _userStoppedManually || _isRestarting) return;
 
     _retryCount++;
 
-    final hasConnection = await _checkRealConnectivity();
-
-    if (!hasConnection) {
-      if (!_errorController.isClosed) {
-        _errorController.add('Sin conexión. Reintentando...');
-      }
-      _scheduleReconnect();
-      return;
+    if (kDebugMode) {
+      print('[AudioPlayerManager] Intento de reconexión #$_retryCount');
     }
 
     // Si hay muchos errores, forzar reinicio completo
-    if (_consecutiveErrors > 5) {
+    if (_consecutiveErrors > 3) {
       await _forceRestart();
       return;
     }
@@ -489,18 +492,19 @@ class AudioPlayerManager {
     }
 
     try {
+      // Detener reproducción actual
       await _audioPlayer?.stop();
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 1000));
 
-      await _audioPlayer?.setUrl(streamUrl);
+      // Intentar reproducir nuevamente
       await _audioPlayer?.play();
 
       if (!_errorController.isClosed) {
-        _errorController.add('Reconectado');
+        _errorController.add('');
       }
     } catch (e) {
       if (kDebugMode) {
-        print('[AudioPlayerManager] Error reconexión: $e');
+        print('[AudioPlayerManager] Error en reconexión: $e');
       }
       _consecutiveErrors++;
       _isLoading = false;
@@ -521,24 +525,10 @@ class AudioPlayerManager {
     _retryTimer = null;
   }
 
-  /// Inicia un timer de verificación de salud del reproductor
-  void _startHealthCheck() {
-    _stopHealthCheck();
-    _healthCheckTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (_isPlaying && !_userStoppedManually && !_isRestarting) {
-        // Timer de verificación periódica
-      }
-    });
-  }
-
-  /// Detiene el timer de verificación de salud
-  void _stopHealthCheck() {
-    _healthCheckTimer?.cancel();
-    _healthCheckTimer = null;
-  }
-
   /// Establece el volumen tanto en el reproductor como en el sistema
   Future<void> setVolume(double volume) async {
+    if (_isDisposed) return;
+
     try {
       _volume = volume.clamp(0.0, 1.0);
 
@@ -559,21 +549,35 @@ class AudioPlayerManager {
     }
   }
 
+  /// Limpia el reproductor actual
+  void _cleanupPlayer() {
+    _playerStateSubscription?.cancel();
+    _playerStateSubscription = null;
+
+    _playbackEventSubscription?.cancel();
+    _playbackEventSubscription = null;
+
+    _audioPlayer?.dispose();
+    _audioPlayer = null;
+  }
+
   /// Libera todos los recursos utilizados
   void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
+
     _isRestarting = false;
+    _userStoppedManually = true;
+
     _cancelReconnect();
-    _stopHealthCheck();
     _stopConnectivityCheck();
 
-    _playerStateSubscription?.cancel();
+    _cleanupPlayer();
 
     _playingController.close();
     _loadingController.close();
     _volumeStreamController.close();
     _errorController.close();
-
-    _audioPlayer?.dispose();
 
     // Remover listener del volumen
     VolumeController.instance.removeListener();
