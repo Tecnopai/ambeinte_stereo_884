@@ -60,15 +60,27 @@ class AudioPlayerManager {
   double get volume => _volume;
 
   /// Inicializa el gestor de audio y el controlador de volumen
+  /// Inicia la reproducción si no fue detenida manualmente.
   Future<void> init() async {
     if (_isDisposed) return;
 
     try {
       await _initializeVolumeController();
-      _initializePlayer();
+
+      // 💡 Se espera la inicialización del reproductor, incluyendo la carga de la fuente.
+      await _initializePlayer();
+
+      // 🚀 Lógica de Auto-Play: Intenta reproducir solo si el usuario no detuvo.
+      if (!_userStoppedManually) {
+        await play();
+      }
     } catch (e) {
       if (kDebugMode) {
         print('[AudioPlayerManager] Error al inicializar: $e');
+      }
+      // Si falla la inicialización inicial, notificar error
+      if (!_errorController.isClosed) {
+        _errorController.add('Error al inicializar el reproductor.');
       }
     }
   }
@@ -114,7 +126,8 @@ class AudioPlayerManager {
   }
 
   /// Inicializa el reproductor de audio y configura los listeners
-  void _initializePlayer() {
+  /// 💡 Ahora es asíncrono y espera a que la fuente de audio esté configurada.
+  Future<void> _initializePlayer() async {
     if (_isDisposed) return;
 
     try {
@@ -123,10 +136,10 @@ class AudioPlayerManager {
 
       _audioPlayer = AudioPlayer();
 
-      // Configurar el audio source
-      _audioPlayer!.setAudioSource(
+      // Configurar el audio source y esperar a que se cargue la fuente (CRUCIAL para el inicio)
+      await _audioPlayer!.setAudioSource(
         AudioSource.uri(Uri.parse(streamUrl)),
-        preload: false,
+        // Se omite preload: false para que intente cargar la fuente inmediatamente
       );
 
       // Escuchar cambios de estado del reproductor
@@ -149,6 +162,8 @@ class AudioPlayerManager {
       if (kDebugMode) {
         print('[AudioPlayerManager] Error al inicializar player: $e');
       }
+      // Re-lanzar el error para que init() pueda capturarlo
+      rethrow;
     }
   }
 
@@ -328,7 +343,7 @@ class AudioPlayerManager {
       await Future.delayed(const Duration(seconds: 2));
 
       // Reinicializar el reproductor
-      _initializePlayer();
+      await _initializePlayer(); // 💡 Ahora es await
 
       await Future.delayed(const Duration(milliseconds: 500));
 

@@ -28,7 +28,12 @@ class _AmbientStereoAppState extends State<AmbientStereoApp> {
 
     // Inicializar el AudioPlayerManager singleton
     _audioManager = AudioPlayerManager();
-    _audioManager.init();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Ahora sí, llamar a init() (que contiene la lógica de play())
+      _audioManager.init();
+    });
+
+    //_audioManager.init();
   }
 
   @override
