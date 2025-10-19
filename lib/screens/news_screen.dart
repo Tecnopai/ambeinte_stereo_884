@@ -68,7 +68,7 @@ class _NewsScreenState extends State<NewsScreen>
 
   void _onNewsScroll() {
     if (_newsScrollController.position.pixels >=
-            _newsScrollController.position.maxScrollExtent * 0.8 &&
+        _newsScrollController.position.maxScrollExtent * 0.8 &&
         !_isLoadingMoreNews &&
         _hasMoreNews) {
       _loadMoreNews();
@@ -321,10 +321,10 @@ class _NewsScreenState extends State<NewsScreen>
   }
 
   Widget _buildEmptyState(
-    ResponsiveHelper responsive,
-    IconData icon,
-    String message,
-  ) {
+      ResponsiveHelper responsive,
+      IconData icon,
+      String message,
+      ) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -348,11 +348,11 @@ class _NewsScreenState extends State<NewsScreen>
   }
 
   Widget _buildArticlesList(
-    ResponsiveHelper responsive,
-    List<Article> articles,
-    ScrollController scrollController,
-    bool isLoadingMore,
-  ) {
+      ResponsiveHelper responsive,
+      List<Article> articles,
+      ScrollController scrollController,
+      bool isLoadingMore,
+      ) {
     final padding = responsive.getValue(
       phone: 16.0,
       largePhone: 18.0,
@@ -364,7 +364,7 @@ class _NewsScreenState extends State<NewsScreen>
         ? responsive.getValue(phone: 100.0, tablet: 120.0, desktop: 140.0)
         : padding;
 
-    // Grid para tablets/desktop
+    // Grid para tablets/desktop - CON AJUSTE PARA EVITAR OVERFLOW
     if (responsive.gridColumns > 1) {
       return RefreshIndicator(
         onRefresh: _loadArticles,
@@ -384,7 +384,7 @@ class _NewsScreenState extends State<NewsScreen>
                 crossAxisCount: responsive.gridColumns,
                 crossAxisSpacing: padding,
                 mainAxisSpacing: padding,
-                childAspectRatio: 0.75,
+                childAspectRatio: 0.72, // ✅ Ajustado de 0.75 a 0.72 para dar más altura
               ),
               itemCount: articles.length + (isLoadingMore ? 1 : 0),
               itemBuilder: (context, index) {
@@ -393,7 +393,7 @@ class _NewsScreenState extends State<NewsScreen>
                     child: CircularProgressIndicator(color: AppColors.primary),
                   );
                 }
-                return _buildArticleCard(articles[index], responsive);
+                return _buildArticleCard(articles[index], responsive, isGrid: true);
               },
             ),
           ),
@@ -425,7 +425,7 @@ class _NewsScreenState extends State<NewsScreen>
           }
           return Padding(
             padding: EdgeInsets.only(bottom: padding),
-            child: _buildArticleCard(articles[index], responsive),
+            child: _buildArticleCard(articles[index], responsive, isGrid: false),
           );
         },
       ),
@@ -494,7 +494,11 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
-  Widget _buildArticleCard(Article article, ResponsiveHelper responsive) {
+  /// ✅ MÉTODO CORREGIDO - Evita overflow en tablets con Grid
+  Widget _buildArticleCard(Article article, ResponsiveHelper responsive, {required bool isGrid}) {
+    // ✅ Detectar orientación
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+
     final borderRadius = responsive.getValue(
       phone: 12.0,
       largePhone: 14.0,
@@ -502,18 +506,19 @@ class _NewsScreenState extends State<NewsScreen>
       desktop: 18.0,
     );
 
-    final padding = responsive.getValue(
+    // ✅ Reducir padding en grid para ahorrar espacio
+    final padding = isGrid
+        ? responsive.getValue(
+      phone: 12.0,
+      largePhone: 12.0,
+      tablet: isLandscape ? 8.0 : 10.0,  // Aún menos padding en landscape
+      desktop: 12.0,
+    )
+        : responsive.getValue(
       phone: 12.0,
       largePhone: 14.0,
       tablet: 16.0,
       desktop: 18.0,
-    );
-
-    final imageHeight = responsive.getValue(
-      phone: 180.0,
-      largePhone: 200.0,
-      tablet: 220.0,
-      desktop: 240.0,
     );
 
     return Card(
@@ -533,16 +538,29 @@ class _NewsScreenState extends State<NewsScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (article.imageUrl != null)
-              Image.network(
+            // ✅ Imagen con Expanded para usar espacio flexible
+            Expanded(
+              flex: isGrid ? (isLandscape ? 7 : 6) : 0,  // Más imagen en landscape
+              child: article.imageUrl != null
+                  ? Image.network(
                 article.imageUrl!,
-                height: imageHeight,
+                height: isGrid ? null : responsive.getValue(
+                  phone: 180.0,
+                  largePhone: 200.0,
+                  tablet: 220.0,
+                  desktop: 240.0,
+                ),
                 width: double.infinity,
                 fit: BoxFit.cover,
                 loadingBuilder: (context, child, loadingProgress) {
                   if (loadingProgress == null) return child;
                   return Container(
-                    height: imageHeight,
+                    height: isGrid ? null : responsive.getValue(
+                      phone: 180.0,
+                      largePhone: 200.0,
+                      tablet: 220.0,
+                      desktop: 240.0,
+                    ),
                     color: AppColors.primary.withValues(alpha: 0.1),
                     child: Center(
                       child: CircularProgressIndicator(
@@ -553,7 +571,10 @@ class _NewsScreenState extends State<NewsScreen>
                   );
                 },
                 errorBuilder: (context, error, stackTrace) => Container(
-                  height: imageHeight,
+                  height: isGrid ? null : responsive.getValue(
+                    phone: 180.0,
+                    tablet: 220.0,
+                  ),
                   color: AppColors.primary.withValues(alpha: 0.1),
                   child: Icon(
                     Icons.image_not_supported,
@@ -562,9 +583,11 @@ class _NewsScreenState extends State<NewsScreen>
                   ),
                 ),
               )
-            else
-              Container(
-                height: imageHeight,
+                  : Container(
+                height: isGrid ? null : responsive.getValue(
+                  phone: 180.0,
+                  tablet: 220.0,
+                ),
                 color: AppColors.primary.withValues(alpha: 0.1),
                 child: Icon(
                   Icons.article,
@@ -572,69 +595,140 @@ class _NewsScreenState extends State<NewsScreen>
                   color: AppColors.primary.withValues(alpha: 0.3),
                 ),
               ),
-            Padding(
-              padding: EdgeInsets.all(padding),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    article.title,
-                    style: TextStyle(
-                      fontSize: responsive.h3,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                      height: 1.3,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  SizedBox(height: responsive.spacing(12)),
-                  Text(
-                    article.excerpt,
-                    style: TextStyle(
-                      fontSize: responsive.caption,
-                      color: AppColors.textMuted,
-                      height: 1.4,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  SizedBox(height: responsive.spacing(12)),
-                  Row(
+            ),
+
+            // ✅ Contenido de texto con Expanded en grid
+            if (isGrid)
+              Expanded(
+                flex: 4,
+                child: Padding(
+                  padding: EdgeInsets.all(padding),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.access_time,
-                        size: responsive.getValue(
-                          phone: 14.0,
-                          tablet: 16.0,
-                          desktop: 18.0,
-                        ),
-                        color: AppColors.textSecondary,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
+                      // Título
+                      Flexible(
                         child: Text(
-                          article.formattedDate,
+                          article.title,
                           style: TextStyle(
-                            fontSize: responsive.caption,
+                            fontSize: responsive.getValue(
+                              phone: 14.0,
+                              tablet: 13.0,  // Reducido para tablets
+                              desktop: 14.0,
+                            ),
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                            height: 1.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+
+                      // Espaciador
+                      SizedBox(height: responsive.spacing(6)),
+
+                      // Fecha
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.access_time,
+                            size: responsive.getValue(
+                              phone: 12.0,
+                              tablet: 11.0,  // Reducido para tablets
+                              desktop: 12.0,
+                            ),
                             color: AppColors.textSecondary,
                           ),
-                        ),
-                      ),
-                      Icon(
-                        Icons.arrow_forward_ios,
-                        size: responsive.getValue(
-                          phone: 14.0,
-                          tablet: 16.0,
-                          desktop: 18.0,
-                        ),
-                        color: AppColors.primary,
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              article.formattedDate,
+                              style: TextStyle(
+                                fontSize: responsive.getValue(
+                                  phone: 11.0,
+                                  tablet: 10.0,  // Reducido para tablets
+                                  desktop: 11.0,
+                                ),
+                                color: AppColors.textSecondary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
+              )
+            else
+            // Contenido normal para ListView
+              Padding(
+                padding: EdgeInsets.all(padding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      article.title,
+                      style: TextStyle(
+                        fontSize: responsive.h3,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: responsive.spacing(12)),
+                    Text(
+                      article.excerpt,
+                      style: TextStyle(
+                        fontSize: responsive.caption,
+                        color: AppColors.textMuted,
+                        height: 1.4,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: responsive.spacing(12)),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: responsive.getValue(
+                            phone: 14.0,
+                            tablet: 16.0,
+                            desktop: 18.0,
+                          ),
+                          color: AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            article.formattedDate,
+                            style: TextStyle(
+                              fontSize: responsive.caption,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          size: responsive.getValue(
+                            phone: 14.0,
+                            tablet: 16.0,
+                            desktop: 18.0,
+                          ),
+                          color: AppColors.primary,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -688,45 +782,45 @@ class _NewsScreenState extends State<NewsScreen>
                 borderRadius: BorderRadius.circular(borderRadius * 0.7),
                 child: category.imageUrl != null
                     ? Image.network(
-                        category.imageUrl!,
-                        width: imageSize,
-                        height: imageSize,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          width: imageSize,
-                          height: imageSize,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                AppColors.primary.withValues(alpha: 0.2),
-                                AppColors.primary.withValues(alpha: 0.05),
-                              ],
-                            ),
-                          ),
-                          child: Icon(
-                            Icons.label,
-                            color: AppColors.primary,
-                            size: imageSize * 0.5,
-                          ),
-                        ),
-                      )
-                    : Container(
-                        width: imageSize,
-                        height: imageSize,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              AppColors.primary.withValues(alpha: 0.2),
-                              AppColors.primary.withValues(alpha: 0.05),
-                            ],
-                          ),
-                        ),
-                        child: Icon(
-                          Icons.label,
-                          color: AppColors.primary,
-                          size: imageSize * 0.5,
-                        ),
+                  category.imageUrl!,
+                  width: imageSize,
+                  height: imageSize,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: imageSize,
+                    height: imageSize,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppColors.primary.withValues(alpha: 0.2),
+                          AppColors.primary.withValues(alpha: 0.05),
+                        ],
                       ),
+                    ),
+                    child: Icon(
+                      Icons.label,
+                      color: AppColors.primary,
+                      size: imageSize * 0.5,
+                    ),
+                  ),
+                )
+                    : Container(
+                  width: imageSize,
+                  height: imageSize,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.primary.withValues(alpha: 0.2),
+                        AppColors.primary.withValues(alpha: 0.05),
+                      ],
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.label,
+                    color: AppColors.primary,
+                    size: imageSize * 0.5,
+                  ),
+                ),
               ),
               SizedBox(width: responsive.spacing(16)),
               Expanded(
@@ -793,7 +887,6 @@ class _NewsScreenState extends State<NewsScreen>
       desktop: 28.0,
     );
 
-    // Colores según posición
     Color positionColor;
     IconData positionIcon;
     if (hit.position == 1) {
@@ -826,30 +919,12 @@ class _NewsScreenState extends State<NewsScreen>
                   borderRadius: BorderRadius.circular(borderRadius * 0.7),
                   child: hit.imageUrl != null
                       ? Image.network(
-                          hit.imageUrl!,
-                          width: imageSize,
-                          height: imageSize,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                                width: imageSize,
-                                height: imageSize,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      positionColor.withValues(alpha: 0.3),
-                                      positionColor.withValues(alpha: 0.1),
-                                    ],
-                                  ),
-                                ),
-                                child: Icon(
-                                  Icons.album,
-                                  color: positionColor,
-                                  size: imageSize * 0.5,
-                                ),
-                              ),
-                        )
-                      : Container(
+                    hit.imageUrl!,
+                    width: imageSize,
+                    height: imageSize,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) =>
+                        Container(
                           width: imageSize,
                           height: imageSize,
                           decoration: BoxDecoration(
@@ -866,6 +941,24 @@ class _NewsScreenState extends State<NewsScreen>
                             size: imageSize * 0.5,
                           ),
                         ),
+                  )
+                      : Container(
+                    width: imageSize,
+                    height: imageSize,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          positionColor.withValues(alpha: 0.3),
+                          positionColor.withValues(alpha: 0.1),
+                        ],
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.album,
+                      color: positionColor,
+                      size: imageSize * 0.5,
+                    ),
+                  ),
                 ),
                 Positioned(
                   top: 0,
@@ -1019,7 +1112,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
 
   void _onScroll() {
     if (_scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent * 0.8 &&
+        _scrollController.position.maxScrollExtent * 0.8 &&
         !_isLoadingMore &&
         _hasMore) {
       _loadMoreArticles();

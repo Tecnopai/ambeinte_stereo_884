@@ -25,10 +25,10 @@
 
     <!-- ========== CARACTERÍSTICAS DE HARDWARE (AUTOMOTIVE) ========== -->
     
-    <!-- Declarar soporte para Android Automotive (opcional - no excluye otros dispositivos) -->
+    <!-- Declarar soporte para Android Automotive (opcional - no excluye otros dispositivos)
     <uses-feature
         android:name="android.hardware.type.automotive"
-        android:required="false" />
+        android:required="false" /> -->
 
     <application
         android:label="Ambientestereo884.fm"
@@ -38,10 +38,10 @@
         android:usesCleartextTraffic="true">
         
         <!-- ========== METADATOS PARA ANDROID AUTO ========== -->
-        <!-- Declara que esta app es compatible con Android Auto -->
+        <!-- Declara que esta app es compatible con Android Auto
         <meta-data
             android:name="com.google.android.gms.car.application"
-            android:resource="@xml/automotive_app_desc" />
+            android:resource="@xml/automotive_app_desc" /> -->
         
         <activity
             android:name=".MainActivity"

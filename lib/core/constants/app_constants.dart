@@ -16,7 +16,7 @@ class AppConstants {
     287, // Noticias
     286, // Lo + Leído
     285, // Lo+oído
-    292, // Tu Mundo Gospel
+    384, // Verde Tierra
     // 7,   // Internacional (comentado = no se mostrará)
     // 220, // Policiales (comentado = no se mostrará)
   ];
@@ -41,5 +41,6 @@ class AppConstants {
     287: 'Noticias',
     292: 'Tu Mundo Gospel',
     271: 'Uncategorized',
+    384: 'Verde Tierra',
   };
 }
