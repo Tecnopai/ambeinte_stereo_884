@@ -9,27 +9,23 @@ import '../widgets/mini_player.dart';
 import '../widgets/live_indicator.dart';
 import '../core/theme/app_colors.dart';
 import 'article_detail_screen.dart';
+import '../utils/responsive_helper.dart';
 
-/// Pantalla principal de noticias con tres pestañas: Todas, Categorías y Radio Hits
-/// Muestra artículos con imágenes y permite navegación por categorías
-/// Incluye infinite scroll y mini player cuando hay reproducción activa
+/// Pantalla principal de noticias mejorada con Radio Hits
 class NewsScreen extends StatefulWidget {
   final AudioPlayerManager audioManager;
   const NewsScreen({super.key, required this.audioManager});
+
   @override
   State<NewsScreen> createState() => _NewsScreenState();
 }
 
 class _NewsScreenState extends State<NewsScreen>
     with SingleTickerProviderStateMixin {
-  // Controlador de pestañas
   late TabController _tabController;
-
-  // Servicios para obtener datos
   final NewsService _newsService = NewsService();
   final RadioHitsService _radioHitsService = RadioHitsService();
 
-  // Estado de la pestaña de noticias
   List<Article> _articles = [];
   bool _isLoadingNews = true;
   int _newsPage = 1;
@@ -37,15 +33,12 @@ class _NewsScreenState extends State<NewsScreen>
   bool _isLoadingMoreNews = false;
   final ScrollController _newsScrollController = ScrollController();
 
-  // Estado de la pestaña de categorías
   List<Category> _categories = [];
   bool _isLoadingCategories = true;
 
-  // Estado de la pestaña de Radio Hits
   List<RadioHit> _radioHits = [];
   bool _isLoadingRadioHits = true;
 
-  // Estado de reproducción del audio
   bool _isPlaying = false;
 
   @override
@@ -66,7 +59,6 @@ class _NewsScreenState extends State<NewsScreen>
     super.dispose();
   }
 
-  /// Configura el listener para detectar cambios en el estado de reproducción
   void _setupAudioListener() {
     widget.audioManager.playingStream.listen((isPlaying) {
       if (mounted) setState(() => _isPlaying = isPlaying);
@@ -74,8 +66,6 @@ class _NewsScreenState extends State<NewsScreen>
     _isPlaying = widget.audioManager.isPlaying;
   }
 
-  /// Detecta cuando el usuario hace scroll cerca del final (80%)
-  /// para activar la carga automática de más noticias
   void _onNewsScroll() {
     if (_newsScrollController.position.pixels >=
             _newsScrollController.position.maxScrollExtent * 0.8 &&
@@ -85,7 +75,6 @@ class _NewsScreenState extends State<NewsScreen>
     }
   }
 
-  /// Carga la primera página de artículos
   Future<void> _loadArticles() async {
     try {
       setState(() {
@@ -109,7 +98,6 @@ class _NewsScreenState extends State<NewsScreen>
     }
   }
 
-  /// Carga más artículos (paginación) para la pestaña de noticias
   Future<void> _loadMoreNews() async {
     if (_isLoadingMoreNews || !_hasMoreNews) return;
     setState(() => _isLoadingMoreNews = true);
@@ -133,7 +121,6 @@ class _NewsScreenState extends State<NewsScreen>
     }
   }
 
-  /// Carga las categorías disponibles desde la API
   Future<void> _loadCategories() async {
     try {
       final categories = await _newsService.getCategories();
@@ -148,7 +135,6 @@ class _NewsScreenState extends State<NewsScreen>
     }
   }
 
-  /// Carga el ranking de Radio Hits desde la página web
   Future<void> _loadRadioHits() async {
     try {
       setState(() => _isLoadingRadioHits = true);
@@ -167,24 +153,25 @@ class _NewsScreenState extends State<NewsScreen>
     }
   }
 
-  /// Muestra un mensaje de error en un SnackBar
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppColors.error),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+    final responsive = ResponsiveHelper(context);
 
     return Scaffold(
       appBar: AppBar(
         title: Row(
           children: [
-            const Text('Noticias'),
+            Text('Noticias', style: TextStyle(fontSize: responsive.h2)),
             if (_isPlaying) const LiveIndicator(),
           ],
         ),
@@ -196,11 +183,11 @@ class _NewsScreenState extends State<NewsScreen>
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white.withValues(alpha: 0.7),
           labelStyle: TextStyle(
-            fontSize: (isTablet ? 11.0 : 9.0) * textScale,
+            fontSize: responsive.caption,
             fontWeight: FontWeight.bold,
           ),
           unselectedLabelStyle: TextStyle(
-            fontSize: (isTablet ? 12.0 : 10.0) * textScale,
+            fontSize: responsive.caption,
             fontWeight: FontWeight.normal,
           ),
           tabs: const [
@@ -215,12 +202,11 @@ class _NewsScreenState extends State<NewsScreen>
           TabBarView(
             controller: _tabController,
             children: [
-              _buildNewsTab(),
-              _buildCategoriesTab(),
-              _buildRadioHitsTab(),
+              _buildNewsTab(responsive),
+              _buildCategoriesTab(responsive),
+              _buildRadioHitsTab(responsive),
             ],
           ),
-          // Mini player flotante cuando hay audio reproduciéndose
           if (_isPlaying)
             Positioned(
               bottom: 16,
@@ -233,469 +219,306 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
-  /// Construye la pestaña de categorías
-  Widget _buildCategoriesTab() {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+  Widget _buildNewsTab(ResponsiveHelper responsive) {
+    if (_isLoadingNews) {
+      return _buildLoadingState(responsive, 'Cargando noticias...');
+    }
 
-    // Estado de carga
+    if (_articles.isEmpty) {
+      return _buildEmptyState(
+        responsive,
+        Icons.article_outlined,
+        'No hay artículos disponibles',
+      );
+    }
+
+    return _buildArticlesList(
+      responsive,
+      _articles,
+      _newsScrollController,
+      _isLoadingMoreNews,
+    );
+  }
+
+  Widget _buildCategoriesTab(ResponsiveHelper responsive) {
     if (_isLoadingCategories) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              color: AppColors.primary,
-              strokeWidth: isTablet ? 4 : 3,
-            ),
-            SizedBox(height: isTablet ? 20 : 16),
-            Text(
-              'Cargando categorías...',
-              style: TextStyle(
-                color: AppColors.textMuted,
-                fontSize: (isTablet ? 16.0 : 14.0) * textScale,
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildLoadingState(responsive, 'Cargando categorías...');
     }
 
-    // Estado vacío
     if (_categories.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.category_outlined,
-              size: (isTablet ? 80.0 : 64.0) * textScale,
-              color: AppColors.textSecondary.withValues(alpha: 0.5),
-            ),
-            SizedBox(height: isTablet ? 24 : 16),
-            Text(
-              'No hay categorías disponibles',
-              style: TextStyle(
-                fontSize: (isTablet ? 16.0 : 14.0) * textScale,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
+      return _buildEmptyState(
+        responsive,
+        Icons.category_outlined,
+        'No hay categorías disponibles',
       );
     }
 
-    // Lista de categorías
-    return RefreshIndicator(
-      onRefresh: _loadCategories,
-      color: AppColors.primary,
-      child: ListView.builder(
-        padding: EdgeInsets.only(
-          top: isTablet ? 20 : 16,
-          left: isTablet ? 20 : 16,
-          right: isTablet ? 20 : 16,
-          bottom: _isPlaying ? (isTablet ? 120 : 100) : (isTablet ? 20 : 16),
-        ),
-        itemCount: _categories.length,
-        itemBuilder: (context, index) => _buildCategoryCard(_categories[index]),
+    return _buildCategoriesList(responsive);
+  }
+
+  Widget _buildRadioHitsTab(ResponsiveHelper responsive) {
+    if (_isLoadingRadioHits) {
+      return _buildLoadingState(responsive, 'Cargando Radio Hits...');
+    }
+
+    if (_radioHits.isEmpty) {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.music_note_outlined,
+            size: responsive.getValue(phone: 64.0, tablet: 80.0, desktop: 96.0),
+            color: AppColors.textSecondary.withValues(alpha: 0.5),
+          ),
+          SizedBox(height: responsive.spacing(24)),
+          Text(
+            'No hay Radio Hits disponibles',
+            style: TextStyle(
+              fontSize: responsive.h3,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          SizedBox(height: responsive.spacing(16)),
+          ElevatedButton.icon(
+            onPressed: _loadRadioHits,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Reintentar'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              padding: EdgeInsets.symmetric(
+                horizontal: responsive.spacing(24),
+                vertical: responsive.spacing(12),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return _buildRadioHitsList(responsive);
+  }
+
+  Widget _buildLoadingState(ResponsiveHelper responsive, String message) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(
+            color: AppColors.primary,
+            strokeWidth: responsive.getValue(phone: 3.0, tablet: 4.0),
+          ),
+          SizedBox(height: responsive.spacing(20)),
+          Text(
+            message,
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: responsive.bodyText,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  /// Construye la pestaña de noticias
-  Widget _buildNewsTab() {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+  Widget _buildEmptyState(
+    ResponsiveHelper responsive,
+    IconData icon,
+    String message,
+  ) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            size: responsive.getValue(phone: 64.0, tablet: 80.0, desktop: 96.0),
+            color: AppColors.textSecondary.withValues(alpha: 0.5),
+          ),
+          SizedBox(height: responsive.spacing(24)),
+          Text(
+            message,
+            style: TextStyle(
+              fontSize: responsive.h3,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-    // Estado de carga
-    if (_isLoadingNews) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              color: AppColors.primary,
-              strokeWidth: isTablet ? 4 : 3,
-            ),
-            SizedBox(height: isTablet ? 20 : 16),
-            Text(
-              'Cargando noticias...',
-              style: TextStyle(
-                color: AppColors.textMuted,
-                fontSize: (isTablet ? 16.0 : 14.0) * textScale,
+  Widget _buildArticlesList(
+    ResponsiveHelper responsive,
+    List<Article> articles,
+    ScrollController scrollController,
+    bool isLoadingMore,
+  ) {
+    final padding = responsive.getValue(
+      phone: 16.0,
+      largePhone: 18.0,
+      tablet: 24.0,
+      desktop: 32.0,
+    );
+
+    final bottomPadding = _isPlaying
+        ? responsive.getValue(phone: 100.0, tablet: 120.0, desktop: 140.0)
+        : padding;
+
+    // Grid para tablets/desktop
+    if (responsive.gridColumns > 1) {
+      return RefreshIndicator(
+        onRefresh: _loadArticles,
+        color: AppColors.primary,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: responsive.maxContentWidth),
+            child: GridView.builder(
+              controller: scrollController,
+              padding: EdgeInsets.only(
+                top: padding,
+                left: padding,
+                right: padding,
+                bottom: bottomPadding,
               ),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: responsive.gridColumns,
+                crossAxisSpacing: padding,
+                mainAxisSpacing: padding,
+                childAspectRatio: 0.75,
+              ),
+              itemCount: articles.length + (isLoadingMore ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index == articles.length) {
+                  return Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  );
+                }
+                return _buildArticleCard(articles[index], responsive);
+              },
             ),
-          ],
+          ),
         ),
       );
     }
 
-    // Estado vacío
-    if (_articles.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.article_outlined,
-              size: (isTablet ? 80.0 : 64.0) * textScale,
-              color: AppColors.textSecondary.withValues(alpha: 0.5),
-            ),
-            SizedBox(height: isTablet ? 24 : 16),
-            Text(
-              'No hay artículos disponibles',
-              style: TextStyle(
-                fontSize: (isTablet ? 16.0 : 14.0) * textScale,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Lista de artículos con infinite scroll
+    // Lista para móviles
     return RefreshIndicator(
       onRefresh: _loadArticles,
       color: AppColors.primary,
       child: ListView.builder(
-        controller: _newsScrollController,
+        controller: scrollController,
         padding: EdgeInsets.only(
-          top: isTablet ? 20 : 16,
-          left: isTablet ? 20 : 16,
-          right: isTablet ? 20 : 16,
-          bottom: _isPlaying ? (isTablet ? 120 : 100) : (isTablet ? 20 : 16),
+          top: padding,
+          left: padding,
+          right: padding,
+          bottom: bottomPadding,
         ),
-        itemCount: _articles.length + (_isLoadingMoreNews ? 1 : 0),
+        itemCount: articles.length + (isLoadingMore ? 1 : 0),
         itemBuilder: (context, index) {
-          // Indicador de carga al final de la lista
-          if (index == _articles.length) {
+          if (index == articles.length) {
             return Center(
               child: Padding(
-                padding: EdgeInsets.all(isTablet ? 20.0 : 16.0),
-                child: CircularProgressIndicator(
-                  color: AppColors.primary,
-                  strokeWidth: isTablet ? 3.5 : 3,
-                ),
+                padding: EdgeInsets.all(padding),
+                child: CircularProgressIndicator(color: AppColors.primary),
               ),
             );
           }
-          return _buildArticleCard(_articles[index]);
+          return Padding(
+            padding: EdgeInsets.only(bottom: padding),
+            child: _buildArticleCard(articles[index], responsive),
+          );
         },
       ),
     );
   }
 
-  /// Construye la pestaña de Radio Hits
-  Widget _buildRadioHitsTab() {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+  Widget _buildCategoriesList(ResponsiveHelper responsive) {
+    final padding = responsive.getValue(
+      phone: 16.0,
+      largePhone: 18.0,
+      tablet: 24.0,
+      desktop: 32.0,
+    );
 
-    // Estado de carga
-    if (_isLoadingRadioHits) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              color: AppColors.primary,
-              strokeWidth: isTablet ? 4 : 3,
-            ),
-            SizedBox(height: isTablet ? 20 : 16),
-            Text(
-              'Cargando Radio Hits...',
-              style: TextStyle(
-                color: AppColors.textMuted,
-                fontSize: (isTablet ? 16.0 : 14.0) * textScale,
-              ),
-            ),
-          ],
+    final bottomPadding = _isPlaying
+        ? responsive.getValue(phone: 100.0, tablet: 120.0, desktop: 140.0)
+        : padding;
+
+    return RefreshIndicator(
+      onRefresh: _loadCategories,
+      color: AppColors.primary,
+      child: ListView.builder(
+        padding: EdgeInsets.only(
+          top: padding,
+          left: padding,
+          right: padding,
+          bottom: bottomPadding,
         ),
-      );
-    }
-
-    // Estado vacío
-    if (_radioHits.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.music_note_outlined,
-              size: (isTablet ? 80.0 : 64.0) * textScale,
-              color: AppColors.textSecondary.withValues(alpha: 0.5),
-            ),
-            SizedBox(height: isTablet ? 24 : 16),
-            Text(
-              'No hay Radio Hits disponibles',
-              style: TextStyle(
-                fontSize: (isTablet ? 16.0 : 14.0) * textScale,
-                color: AppColors.textSecondary,
-              ),
-            ),
-            SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _loadRadioHits,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
-            ),
-          ],
+        itemCount: _categories.length,
+        itemBuilder: (context, index) => Padding(
+          padding: EdgeInsets.only(bottom: padding),
+          child: _buildCategoryCard(_categories[index], responsive),
         ),
-      );
-    }
+      ),
+    );
+  }
 
-    // Lista de Radio Hits
+  Widget _buildRadioHitsList(ResponsiveHelper responsive) {
+    final padding = responsive.getValue(
+      phone: 16.0,
+      largePhone: 18.0,
+      tablet: 24.0,
+      desktop: 32.0,
+    );
+
+    final bottomPadding = _isPlaying
+        ? responsive.getValue(phone: 100.0, tablet: 120.0, desktop: 140.0)
+        : padding;
+
     return RefreshIndicator(
       onRefresh: _loadRadioHits,
       color: AppColors.primary,
       child: ListView.builder(
         padding: EdgeInsets.only(
-          top: isTablet ? 20 : 16,
-          left: isTablet ? 20 : 16,
-          right: isTablet ? 20 : 16,
-          bottom: _isPlaying ? (isTablet ? 120 : 100) : (isTablet ? 20 : 16),
+          top: padding,
+          left: padding,
+          right: padding,
+          bottom: bottomPadding,
         ),
         itemCount: _radioHits.length,
-        itemBuilder: (context, index) => _buildRadioHitCard(_radioHits[index]),
-      ),
-    );
-  }
-
-  /// Construye una tarjeta de Radio Hit con imagen, posición y datos de la canción
-  Widget _buildRadioHitCard(RadioHit hit) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
-
-    // Tamaños responsivos
-    final positionSize = (isTablet ? 10.0 : 8.0) * textScale;
-    final titleFontSize = (isTablet ? 14.0 : 12.0) * textScale;
-    final artistFontSize = (isTablet ? 12.0 : 10.0) * textScale;
-    final cardPadding = isTablet ? 16.0 : 12.0;
-    final borderRadius = isTablet ? 16.0 : 12.0;
-    final cardMargin = isTablet ? 16.0 : 12.0;
-    final imageSize = isTablet ? 80.0 : 70.0;
-    final positionBadgeSize = (isTablet ? 24.0 : 20.0) * textScale;
-
-    // Determinar color según posición (Top 3 destacados)
-    Color positionColor;
-    IconData positionIcon;
-    if (hit.position == 1) {
-      positionColor = const Color(0xFFFFD700); // Oro
-      positionIcon = Icons.emoji_events;
-    } else if (hit.position == 2) {
-      positionColor = const Color(0xFFC0C0C0); // Plata
-      positionIcon = Icons.emoji_events;
-    } else if (hit.position == 3) {
-      positionColor = const Color(0xFFCD7F32); // Bronce
-      positionIcon = Icons.emoji_events;
-    } else {
-      positionColor = AppColors.primary;
-      positionIcon = Icons.music_note;
-    }
-
-    return Card(
-      color: AppColors.cardBackground,
-      margin: EdgeInsets.only(bottom: cardMargin),
-      elevation: isTablet ? 6 : 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(borderRadius),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(cardPadding),
-        child: Row(
-          children: [
-            // Imagen de la canción con badge de posición
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(isTablet ? 12 : 10),
-                  child: hit.imageUrl != null
-                      ? Image.network(
-                          hit.imageUrl!,
-                          width: imageSize,
-                          height: imageSize,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Container(
-                              width: imageSize,
-                              height: imageSize,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    positionColor.withValues(alpha: 0.3),
-                                    positionColor.withValues(alpha: 0.1),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                              ),
-                              child: Center(
-                                child: CircularProgressIndicator(
-                                  color: positionColor,
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                                width: imageSize,
-                                height: imageSize,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      positionColor.withValues(alpha: 0.3),
-                                      positionColor.withValues(alpha: 0.1),
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                ),
-                                child: Icon(
-                                  Icons.album,
-                                  color: positionColor,
-                                  size: (isTablet ? 40.0 : 35.0) * textScale,
-                                ),
-                              ),
-                        )
-                      : Container(
-                          width: imageSize,
-                          height: imageSize,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                positionColor.withValues(alpha: 0.3),
-                                positionColor.withValues(alpha: 0.1),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(
-                              isTablet ? 12 : 10,
-                            ),
-                          ),
-                          child: Icon(
-                            Icons.album,
-                            color: positionColor,
-                            size: (isTablet ? 40.0 : 35.0) * textScale,
-                          ),
-                        ),
-                ),
-                // Badge de posición superpuesto
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  child: Container(
-                    width: positionBadgeSize,
-                    height: positionBadgeSize,
-                    decoration: BoxDecoration(
-                      color: positionColor,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(isTablet ? 12 : 10),
-                        bottomRight: Radius.circular(isTablet ? 12 : 10),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: positionColor.withValues(alpha: 0.4),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Center(
-                      child: Text(
-                        '${hit.position}',
-                        style: TextStyle(
-                          fontSize: positionSize,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(width: isTablet ? 16 : 12),
-            // Información de la canción
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    hit.songTitle,
-                    style: TextStyle(
-                      fontSize: titleFontSize,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  SizedBox(height: isTablet ? 6 : 4),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.person_outline,
-                        size: (isTablet ? 14.0 : 12.0) * textScale,
-                        color: AppColors.textSecondary,
-                      ),
-                      SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          hit.artist,
-                          style: TextStyle(
-                            fontSize: artistFontSize,
-                            color: AppColors.textSecondary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            // Icono de trofeo para el Top 3
-            if (hit.position <= 3)
-              Icon(
-                positionIcon,
-                color: positionColor,
-                size: (isTablet ? 28.0 : 24.0) * textScale,
-              ),
-          ],
+        itemBuilder: (context, index) => Padding(
+          padding: EdgeInsets.only(bottom: padding),
+          child: _buildRadioHitCard(_radioHits[index], responsive),
         ),
       ),
     );
   }
 
-  /// Construye una tarjeta de artículo con imagen
-  Widget _buildArticleCard(Article article) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+  Widget _buildArticleCard(Article article, ResponsiveHelper responsive) {
+    final borderRadius = responsive.getValue(
+      phone: 12.0,
+      largePhone: 14.0,
+      tablet: 16.0,
+      desktop: 18.0,
+    );
 
-    // Tamaños responsivos
-    final titleFontSize = (isTablet ? 14.0 : 12.0) * textScale;
-    final excerptFontSize = (isTablet ? 10.0 : 8.0) * textScale;
-    final dateFontSize = (isTablet ? 10.0 : 8.0) * textScale;
-    final cardPadding = isTablet ? 16.0 : 12.0;
-    final borderRadius = isTablet ? 16.0 : 12.0;
-    final timeIconSize = (isTablet ? 16.0 : 14.0) * textScale;
-    final arrowIconSize = (isTablet ? 18.0 : 16.0) * textScale;
-    final cardMargin = isTablet ? 20.0 : 16.0;
-    final imageHeight = isTablet ? 200.0 : 180.0;
+    final padding = responsive.getValue(
+      phone: 12.0,
+      largePhone: 14.0,
+      tablet: 16.0,
+      desktop: 18.0,
+    );
+
+    final imageHeight = responsive.getValue(
+      phone: 180.0,
+      largePhone: 200.0,
+      tablet: 220.0,
+      desktop: 240.0,
+    );
 
     return Card(
       color: AppColors.cardBackground,
-      margin: EdgeInsets.only(bottom: cardMargin),
-      elevation: isTablet ? 6 : 4,
+      elevation: responsive.getValue(phone: 4.0, tablet: 6.0),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(borderRadius),
       ),
@@ -710,7 +533,6 @@ class _NewsScreenState extends State<NewsScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Imagen del artículo
             if (article.imageUrl != null)
               Image.network(
                 article.imageUrl!,
@@ -726,10 +548,6 @@ class _NewsScreenState extends State<NewsScreen>
                       child: CircularProgressIndicator(
                         color: AppColors.primary,
                         strokeWidth: 2,
-                        value: loadingProgress.expectedTotalBytes != null
-                            ? loadingProgress.cumulativeBytesLoaded /
-                                  loadingProgress.expectedTotalBytes!
-                            : null,
                       ),
                     ),
                   );
@@ -737,23 +555,10 @@ class _NewsScreenState extends State<NewsScreen>
                 errorBuilder: (context, error, stackTrace) => Container(
                   height: imageHeight,
                   color: AppColors.primary.withValues(alpha: 0.1),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.image_not_supported,
-                        size: isTablet ? 48 : 40,
-                        color: AppColors.textSecondary.withValues(alpha: 0.5),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Imagen no disponible',
-                        style: TextStyle(
-                          fontSize: (isTablet ? 12.0 : 10.0) * textScale,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
+                  child: Icon(
+                    Icons.image_not_supported,
+                    size: responsive.getValue(phone: 40.0, tablet: 48.0),
+                    color: AppColors.textSecondary.withValues(alpha: 0.5),
                   ),
                 ),
               )
@@ -761,61 +566,68 @@ class _NewsScreenState extends State<NewsScreen>
               Container(
                 height: imageHeight,
                 color: AppColors.primary.withValues(alpha: 0.1),
-                child: Center(
-                  child: Icon(
-                    Icons.article,
-                    size: isTablet ? 60 : 50,
-                    color: AppColors.primary.withValues(alpha: 0.3),
-                  ),
+                child: Icon(
+                  Icons.article,
+                  size: responsive.getValue(phone: 50.0, tablet: 60.0),
+                  color: AppColors.primary.withValues(alpha: 0.3),
                 ),
               ),
-            // Contenido de la tarjeta
             Padding(
-              padding: EdgeInsets.all(cardPadding),
+              padding: EdgeInsets.all(padding),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     article.title,
                     style: TextStyle(
-                      fontSize: titleFontSize,
+                      fontSize: responsive.h3,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
+                      height: 1.3,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  SizedBox(height: isTablet ? 12 : 8),
+                  SizedBox(height: responsive.spacing(12)),
                   Text(
                     article.excerpt,
                     style: TextStyle(
-                      fontSize: excerptFontSize,
+                      fontSize: responsive.caption,
                       color: AppColors.textMuted,
+                      height: 1.4,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  SizedBox(height: isTablet ? 12 : 10),
+                  SizedBox(height: responsive.spacing(12)),
                   Row(
                     children: [
                       Icon(
                         Icons.access_time,
-                        size: timeIconSize,
+                        size: responsive.getValue(
+                          phone: 14.0,
+                          tablet: 16.0,
+                          desktop: 18.0,
+                        ),
                         color: AppColors.textSecondary,
                       ),
-                      SizedBox(width: isTablet ? 6 : 4),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           article.formattedDate,
                           style: TextStyle(
-                            fontSize: dateFontSize,
+                            fontSize: responsive.caption,
                             color: AppColors.textSecondary,
                           ),
                         ),
                       ),
                       Icon(
                         Icons.arrow_forward_ios,
-                        size: arrowIconSize,
+                        size: responsive.getValue(
+                          phone: 14.0,
+                          tablet: 16.0,
+                          desktop: 18.0,
+                        ),
                         color: AppColors.primary,
                       ),
                     ],
@@ -829,25 +641,31 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
-  /// Construye una tarjeta de categoría con imagen opcional
-  Widget _buildCategoryCard(Category category) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+  Widget _buildCategoryCard(Category category, ResponsiveHelper responsive) {
+    final borderRadius = responsive.getValue(
+      phone: 12.0,
+      largePhone: 14.0,
+      tablet: 16.0,
+      desktop: 18.0,
+    );
 
-    // Tamaños responsivos
-    final titleFontSize = (isTablet ? 14.0 : 12.0) * textScale;
-    final countFontSize = (isTablet ? 10.0 : 8.0) * textScale;
-    final cardPadding = isTablet ? 20.0 : 16.0;
-    final borderRadius = isTablet ? 16.0 : 12.0;
-    final imageSize = isTablet ? 70.0 : 60.0;
-    final arrowIconSize = (isTablet ? 20.0 : 18.0) * textScale;
-    final cardMargin = isTablet ? 20.0 : 16.0;
+    final padding = responsive.getValue(
+      phone: 16.0,
+      largePhone: 18.0,
+      tablet: 20.0,
+      desktop: 24.0,
+    );
+
+    final imageSize = responsive.getValue(
+      phone: 60.0,
+      largePhone: 65.0,
+      tablet: 70.0,
+      desktop: 80.0,
+    );
 
     return Card(
       color: AppColors.cardBackground,
-      margin: EdgeInsets.only(bottom: cardMargin),
-      elevation: isTablet ? 6 : 4,
+      elevation: responsive.getValue(phone: 4.0, tablet: 6.0),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(borderRadius),
       ),
@@ -863,41 +681,17 @@ class _NewsScreenState extends State<NewsScreen>
           ),
         ),
         child: Padding(
-          padding: EdgeInsets.all(cardPadding),
+          padding: EdgeInsets.all(padding),
           child: Row(
             children: [
-              // Imagen o icono de categoría
               ClipRRect(
-                borderRadius: BorderRadius.circular(isTablet ? 12 : 10),
+                borderRadius: BorderRadius.circular(borderRadius * 0.7),
                 child: category.imageUrl != null
                     ? Image.network(
                         category.imageUrl!,
                         width: imageSize,
                         height: imageSize,
                         fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Container(
-                            width: imageSize,
-                            height: imageSize,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  AppColors.primary.withValues(alpha: 0.2),
-                                  AppColors.primary.withValues(alpha: 0.05),
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                            ),
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                color: AppColors.primary,
-                                strokeWidth: 2,
-                              ),
-                            ),
-                          );
-                        },
                         errorBuilder: (context, error, stackTrace) => Container(
                           width: imageSize,
                           height: imageSize,
@@ -907,14 +701,12 @@ class _NewsScreenState extends State<NewsScreen>
                                 AppColors.primary.withValues(alpha: 0.2),
                                 AppColors.primary.withValues(alpha: 0.05),
                               ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
                             ),
                           ),
                           child: Icon(
                             Icons.label,
                             color: AppColors.primary,
-                            size: (isTablet ? 32.0 : 28.0) * textScale,
+                            size: imageSize * 0.5,
                           ),
                         ),
                       )
@@ -927,19 +719,16 @@ class _NewsScreenState extends State<NewsScreen>
                               AppColors.primary.withValues(alpha: 0.2),
                               AppColors.primary.withValues(alpha: 0.05),
                             ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
                           ),
                         ),
                         child: Icon(
                           Icons.label,
                           color: AppColors.primary,
-                          size: (isTablet ? 32.0 : 28.0) * textScale,
+                          size: imageSize * 0.5,
                         ),
                       ),
               ),
-              SizedBox(width: isTablet ? 16 : 12),
-              // Información de la categoría
+              SizedBox(width: responsive.spacing(16)),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -947,16 +736,16 @@ class _NewsScreenState extends State<NewsScreen>
                     Text(
                       category.name,
                       style: TextStyle(
-                        fontSize: titleFontSize,
+                        fontSize: responsive.h3,
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    SizedBox(height: isTablet ? 6 : 4),
+                    const SizedBox(height: 4),
                     Text(
                       '${category.count} ${category.count == 1 ? 'artículo' : 'artículos'}',
                       style: TextStyle(
-                        fontSize: countFontSize,
+                        fontSize: responsive.caption,
                         color: AppColors.textSecondary,
                       ),
                     ),
@@ -965,7 +754,7 @@ class _NewsScreenState extends State<NewsScreen>
               ),
               Icon(
                 Icons.arrow_forward_ios,
-                size: arrowIconSize,
+                size: responsive.getValue(phone: 18.0, tablet: 20.0),
                 color: AppColors.primary,
               ),
             ],
@@ -974,11 +763,214 @@ class _NewsScreenState extends State<NewsScreen>
       ),
     );
   }
+
+  Widget _buildRadioHitCard(RadioHit hit, ResponsiveHelper responsive) {
+    final borderRadius = responsive.getValue(
+      phone: 12.0,
+      largePhone: 14.0,
+      tablet: 16.0,
+      desktop: 18.0,
+    );
+
+    final padding = responsive.getValue(
+      phone: 12.0,
+      largePhone: 14.0,
+      tablet: 16.0,
+      desktop: 18.0,
+    );
+
+    final imageSize = responsive.getValue(
+      phone: 70.0,
+      largePhone: 75.0,
+      tablet: 80.0,
+      desktop: 90.0,
+    );
+
+    final badgeSize = responsive.getValue(
+      phone: 20.0,
+      largePhone: 22.0,
+      tablet: 24.0,
+      desktop: 28.0,
+    );
+
+    // Colores según posición
+    Color positionColor;
+    IconData positionIcon;
+    if (hit.position == 1) {
+      positionColor = const Color(0xFFFFD700);
+      positionIcon = Icons.emoji_events;
+    } else if (hit.position == 2) {
+      positionColor = const Color(0xFFC0C0C0);
+      positionIcon = Icons.emoji_events;
+    } else if (hit.position == 3) {
+      positionColor = const Color(0xFFCD7F32);
+      positionIcon = Icons.emoji_events;
+    } else {
+      positionColor = AppColors.primary;
+      positionIcon = Icons.music_note;
+    }
+
+    return Card(
+      color: AppColors.cardBackground,
+      elevation: responsive.getValue(phone: 4.0, tablet: 6.0),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(padding),
+        child: Row(
+          children: [
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(borderRadius * 0.7),
+                  child: hit.imageUrl != null
+                      ? Image.network(
+                          hit.imageUrl!,
+                          width: imageSize,
+                          height: imageSize,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                width: imageSize,
+                                height: imageSize,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      positionColor.withValues(alpha: 0.3),
+                                      positionColor.withValues(alpha: 0.1),
+                                    ],
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.album,
+                                  color: positionColor,
+                                  size: imageSize * 0.5,
+                                ),
+                              ),
+                        )
+                      : Container(
+                          width: imageSize,
+                          height: imageSize,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                positionColor.withValues(alpha: 0.3),
+                                positionColor.withValues(alpha: 0.1),
+                              ],
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.album,
+                            color: positionColor,
+                            size: imageSize * 0.5,
+                          ),
+                        ),
+                ),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  child: Container(
+                    width: badgeSize,
+                    height: badgeSize,
+                    decoration: BoxDecoration(
+                      color: positionColor,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(borderRadius * 0.7),
+                        bottomRight: Radius.circular(borderRadius * 0.7),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: positionColor.withValues(alpha: 0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${hit.position}',
+                        style: TextStyle(
+                          fontSize: responsive.getValue(
+                            phone: 10.0,
+                            largePhone: 11.0,
+                            tablet: 12.0,
+                            desktop: 14.0,
+                          ),
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(width: responsive.spacing(12)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    hit.songTitle,
+                    style: TextStyle(
+                      fontSize: responsive.h3,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  SizedBox(
+                    height: responsive.getValue(phone: 4.0, tablet: 6.0),
+                  ),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.person_outline,
+                        size: responsive.getValue(
+                          phone: 12.0,
+                          tablet: 14.0,
+                          desktop: 16.0,
+                        ),
+                        color: AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          hit.artist,
+                          style: TextStyle(
+                            fontSize: responsive.caption,
+                            color: AppColors.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (hit.position <= 3)
+              Icon(
+                positionIcon,
+                color: positionColor,
+                size: responsive.getValue(
+                  phone: 24.0,
+                  largePhone: 26.0,
+                  tablet: 28.0,
+                  desktop: 32.0,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-/// Pantalla de artículos filtrados por categoría
-/// Muestra todos los artículos que pertenecen a una categoría específica
-/// Incluye infinite scroll y mini player
+/// Pantalla de artículos por categoría (responsive)
 class CategoryNewsScreen extends StatefulWidget {
   final Category category;
   final AudioPlayerManager audioManager;
@@ -997,7 +989,6 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
   final NewsService _newsService = NewsService();
   final ScrollController _scrollController = ScrollController();
 
-  // Estado de la pantalla
   List<Article> _articles = [];
   bool _isLoading = true;
   bool _isLoadingMore = false;
@@ -1019,7 +1010,6 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     super.dispose();
   }
 
-  /// Configura el listener para el estado de reproducción
   void _setupAudioListener() {
     widget.audioManager.playingStream.listen((isPlaying) {
       if (mounted) setState(() => _isPlaying = isPlaying);
@@ -1027,7 +1017,6 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     _isPlaying = widget.audioManager.isPlaying;
   }
 
-  /// Detecta scroll para activar infinite scroll
   void _onScroll() {
     if (_scrollController.position.pixels >=
             _scrollController.position.maxScrollExtent * 0.8 &&
@@ -1037,7 +1026,6 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     }
   }
 
-  /// Carga artículos de la categoría seleccionada
   Future<void> _loadArticles() async {
     try {
       setState(() {
@@ -1058,12 +1046,16 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showErrorSnackBar('Error al cargar artículos');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Error al cargar artículos'),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     }
   }
 
-  /// Carga más artículos (paginación)
   Future<void> _loadMoreArticles() async {
     if (_isLoadingMore || !_hasMore) return;
     setState(() => _isLoadingMore = true);
@@ -1090,15 +1082,10 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     }
   }
 
-  /// Muestra mensaje de error
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppColors.error),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final responsive = ResponsiveHelper(context);
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -1106,6 +1093,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
             Expanded(
               child: Text(
                 widget.category.name,
+                style: TextStyle(fontSize: responsive.h2),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -1116,8 +1104,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
       ),
       body: Stack(
         children: [
-          _buildContent(),
-          // Mini player flotante
+          _buildContent(responsive),
           if (_isPlaying)
             Positioned(
               bottom: 16,
@@ -1130,13 +1117,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     );
   }
 
-  /// Construye el contenido principal con estados de carga, vacío y lista
-  Widget _buildContent() {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
-
-    // Estado de carga
+  Widget _buildContent(ResponsiveHelper responsive) {
     if (_isLoading) {
       return Center(
         child: Column(
@@ -1144,14 +1125,14 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
           children: [
             CircularProgressIndicator(
               color: AppColors.primary,
-              strokeWidth: isTablet ? 4 : 3,
+              strokeWidth: responsive.getValue(phone: 3.0, tablet: 4.0),
             ),
-            SizedBox(height: isTablet ? 20 : 16),
+            SizedBox(height: responsive.spacing(20)),
             Text(
               'Cargando artículos...',
               style: TextStyle(
                 color: AppColors.textMuted,
-                fontSize: (isTablet ? 16.0 : 14.0) * textScale,
+                fontSize: responsive.bodyText,
               ),
             ),
           ],
@@ -1159,7 +1140,6 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
       );
     }
 
-    // Estado vacío
     if (_articles.isEmpty) {
       return Center(
         child: Column(
@@ -1167,14 +1147,14 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
           children: [
             Icon(
               Icons.article_outlined,
-              size: (isTablet ? 80.0 : 64.0) * textScale,
+              size: responsive.getValue(phone: 64.0, tablet: 80.0),
               color: AppColors.textSecondary.withValues(alpha: 0.5),
             ),
-            SizedBox(height: isTablet ? 24 : 16),
+            SizedBox(height: responsive.spacing(24)),
             Text(
               'No hay artículos en esta categoría',
               style: TextStyle(
-                fontSize: (isTablet ? 16.0 : 14.0) * textScale,
+                fontSize: responsive.h3,
                 color: AppColors.textSecondary,
               ),
             ),
@@ -1183,59 +1163,72 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
       );
     }
 
-    // Lista de artículos
+    final padding = responsive.getValue(
+      phone: 16.0,
+      largePhone: 18.0,
+      tablet: 24.0,
+      desktop: 32.0,
+    );
+
+    final bottomPadding = _isPlaying
+        ? responsive.getValue(phone: 100.0, tablet: 120.0, desktop: 140.0)
+        : padding;
+
     return RefreshIndicator(
       onRefresh: _loadArticles,
       color: AppColors.primary,
       child: ListView.builder(
         controller: _scrollController,
         padding: EdgeInsets.only(
-          top: isTablet ? 20 : 16,
-          left: isTablet ? 20 : 16,
-          right: isTablet ? 20 : 16,
-          bottom: _isPlaying ? (isTablet ? 120 : 100) : (isTablet ? 20 : 16),
+          top: padding,
+          left: padding,
+          right: padding,
+          bottom: bottomPadding,
         ),
         itemCount: _articles.length + (_isLoadingMore ? 1 : 0),
         itemBuilder: (context, index) {
-          // Indicador de carga al final de la lista
           if (index == _articles.length) {
             return Center(
               child: Padding(
-                padding: EdgeInsets.all(isTablet ? 20.0 : 16.0),
-                child: CircularProgressIndicator(
-                  color: AppColors.primary,
-                  strokeWidth: isTablet ? 3.5 : 3,
-                ),
+                padding: EdgeInsets.all(padding),
+                child: CircularProgressIndicator(color: AppColors.primary),
               ),
             );
           }
-          return _buildArticleCard(_articles[index]);
+          return Padding(
+            padding: EdgeInsets.only(bottom: padding),
+            child: _buildArticleCard(_articles[index], responsive),
+          );
         },
       ),
     );
   }
 
-  /// Construye una tarjeta de artículo con imagen para la vista de categoría
-  Widget _buildArticleCard(Article article) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+  Widget _buildArticleCard(Article article, ResponsiveHelper responsive) {
+    final borderRadius = responsive.getValue(
+      phone: 12.0,
+      largePhone: 14.0,
+      tablet: 16.0,
+      desktop: 18.0,
+    );
 
-    // Tamaños responsivos
-    final titleFontSize = (isTablet ? 12.0 : 10.0) * textScale;
-    final excerptFontSize = (isTablet ? 10.0 : 8.0) * textScale;
-    final dateFontSize = (isTablet ? 10.0 : 8.0) * textScale;
-    final cardPadding = isTablet ? 16.0 : 12.0;
-    final borderRadius = isTablet ? 16.0 : 12.0;
-    final timeIconSize = (isTablet ? 16.0 : 14.0) * textScale;
-    final arrowIconSize = (isTablet ? 18.0 : 16.0) * textScale;
-    final cardMargin = isTablet ? 20.0 : 16.0;
-    final imageHeight = isTablet ? 180.0 : 160.0;
+    final padding = responsive.getValue(
+      phone: 12.0,
+      largePhone: 14.0,
+      tablet: 16.0,
+      desktop: 18.0,
+    );
+
+    final imageHeight = responsive.getValue(
+      phone: 160.0,
+      largePhone: 180.0,
+      tablet: 200.0,
+      desktop: 220.0,
+    );
 
     return Card(
       color: AppColors.cardBackground,
-      margin: EdgeInsets.only(bottom: cardMargin),
-      elevation: isTablet ? 6 : 4,
+      elevation: responsive.getValue(phone: 4.0, tablet: 6.0),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(borderRadius),
       ),
@@ -1250,7 +1243,6 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Imagen del artículo
             if (article.imageUrl != null)
               Image.network(
                 article.imageUrl!,
@@ -1273,23 +1265,10 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
                 errorBuilder: (context, error, stackTrace) => Container(
                   height: imageHeight,
                   color: AppColors.primary.withValues(alpha: 0.1),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.image_not_supported,
-                        size: isTablet ? 48 : 40,
-                        color: AppColors.textSecondary.withValues(alpha: 0.5),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Imagen no disponible',
-                        style: TextStyle(
-                          fontSize: (isTablet ? 12.0 : 10.0) * textScale,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
+                  child: Icon(
+                    Icons.image_not_supported,
+                    size: responsive.getValue(phone: 40.0, tablet: 48.0),
+                    color: AppColors.textSecondary.withValues(alpha: 0.5),
                   ),
                 ),
               )
@@ -1297,61 +1276,68 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
               Container(
                 height: imageHeight,
                 color: AppColors.primary.withValues(alpha: 0.1),
-                child: Center(
-                  child: Icon(
-                    Icons.article,
-                    size: isTablet ? 60 : 50,
-                    color: AppColors.primary.withValues(alpha: 0.3),
-                  ),
+                child: Icon(
+                  Icons.article,
+                  size: responsive.getValue(phone: 50.0, tablet: 60.0),
+                  color: AppColors.primary.withValues(alpha: 0.3),
                 ),
               ),
-            // Contenido de la tarjeta
             Padding(
-              padding: EdgeInsets.all(cardPadding),
+              padding: EdgeInsets.all(padding),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     article.title,
                     style: TextStyle(
-                      fontSize: titleFontSize,
+                      fontSize: responsive.h3,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
+                      height: 1.3,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  SizedBox(height: isTablet ? 12 : 8),
+                  SizedBox(height: responsive.spacing(12)),
                   Text(
                     article.excerpt,
                     style: TextStyle(
-                      fontSize: excerptFontSize,
+                      fontSize: responsive.caption,
                       color: AppColors.textMuted,
+                      height: 1.4,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  SizedBox(height: isTablet ? 12 : 10),
+                  SizedBox(height: responsive.spacing(12)),
                   Row(
                     children: [
                       Icon(
                         Icons.access_time,
-                        size: timeIconSize,
+                        size: responsive.getValue(
+                          phone: 14.0,
+                          tablet: 16.0,
+                          desktop: 18.0,
+                        ),
                         color: AppColors.textSecondary,
                       ),
-                      SizedBox(width: isTablet ? 6 : 4),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           article.formattedDate,
                           style: TextStyle(
-                            fontSize: dateFontSize,
+                            fontSize: responsive.caption,
                             color: AppColors.textSecondary,
                           ),
                         ),
                       ),
                       Icon(
                         Icons.arrow_forward_ios,
-                        size: arrowIconSize,
+                        size: responsive.getValue(
+                          phone: 14.0,
+                          tablet: 16.0,
+                          desktop: 18.0,
+                        ),
                         color: AppColors.primary,
                       ),
                     ],

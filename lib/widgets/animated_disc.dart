@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
+import '../utils/responsive_helper.dart';
 
 /// Widget de disco animado que rota cuando está reproduciendo
 /// Simula un disco de vinilo girando con el logo de la emisora
@@ -54,43 +55,49 @@ class _AnimatedDiscState extends State<AnimatedDisc>
 
   @override
   Widget build(BuildContext context) {
-    // Obtener información del dispositivo para diseño responsivo
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final isLandscape = screenSize.width > screenSize.height;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+    final responsive = ResponsiveHelper(context);
 
-    // Variables para tamaños dinámicos
-    double discSize;
-    double innerSize;
-    double shadowBlur;
-    double shadowSpread;
+    // Tamaños responsivos del disco usando ResponsiveHelper
+    final discSize = responsive.getValue(
+      smallPhone: 120.0,
+      phone: 140.0,
+      largePhone: 160.0,
+      tablet: 180.0,
+      largeTablet: 200.0,
+      desktop: 220.0,
+      automotive: 170.0,
+    );
 
-    if (isTablet) {
-      // Tamaños para tablets
-      discSize = isLandscape ? 200 : 180;
-      shadowBlur = 25;
-      shadowSpread = 6;
-    } else {
-      // Tamaños para teléfonos - usar porcentaje del ancho de pantalla
-      final screenWidth = screenSize.width;
-      discSize = screenWidth * 0.4; // 40% del ancho de pantalla
+    // Blur y spread de la sombra
+    final shadowBlur = responsive.getValue(
+      smallPhone: 15.0,
+      phone: 20.0,
+      largePhone: 22.0,
+      tablet: 25.0,
+      desktop: 30.0,
+      automotive: 22.0,
+    );
 
-      // Aplicar límites mínimos y máximos
-      if (discSize < 120) discSize = 120; // Mínimo para pantallas muy pequeñas
-      if (discSize > 160) discSize = 160; // Máximo para pantallas grandes
+    final shadowSpread = responsive.getValue(
+      smallPhone: 3.0,
+      phone: 5.0,
+      tablet: 6.0,
+      desktop: 8.0,
+      automotive: 5.0,
+    );
 
-      shadowBlur = 20;
-      shadowSpread = 5;
-    }
-
-    // Reducir tamaño si la escala de texto es muy grande
-    if (textScale > 1.2) {
-      discSize = discSize * 0.9;
-    }
+    // Tamaño del icono de error
+    final iconSize = responsive.getValue(
+      smallPhone: 48.0,
+      phone: 56.0,
+      largePhone: 64.0,
+      tablet: 72.0,
+      desktop: 88.0,
+      automotive: 68.0,
+    );
 
     // El contenedor interior es 85% del tamaño exterior
-    innerSize = discSize * 0.85;
+    final innerSize = discSize * 0.85;
 
     return AnimatedBuilder(
       animation: _rotationController,
@@ -132,7 +139,7 @@ class _AnimatedDiscState extends State<AnimatedDisc>
                       return Icon(
                         Icons.music_note,
                         color: AppColors.primary,
-                        size: innerSize * 0.4,
+                        size: iconSize * 0.4,
                       );
                     },
                   ),

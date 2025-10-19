@@ -4,6 +4,7 @@ import '../widgets/animated_disc.dart';
 import '../widgets/volume_control.dart';
 import '../widgets/sound_waves.dart';
 import '../core/theme/app_colors.dart';
+import '../utils/responsive_helper.dart';
 
 /// Pantalla principal del reproductor de radio
 /// Muestra controles de reproducción, animaciones visuales y estado de conexión
@@ -118,30 +119,83 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Obtener información de pantalla para diseño responsivo
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+    final responsive = ResponsiveHelper(context);
 
     // Tamaños responsivos
-    final padding = isTablet ? 32.0 : 20.0;
-    final titleFontSize = (isTablet ? 14.0 : 10.0) * textScale;
-    final subtitleFontSize = (isTablet ? 12.0 : 10.0) * textScale;
-    final playButtonSize = isTablet ? 100.0 : 80.0;
-    final playIconSize = isTablet ? 50.0 : 40.0;
-    final loadingSize = isTablet ? 40.0 : 30.0;
+    final padding = responsive.getValue(
+      smallPhone: 16.0,
+      phone: 20.0,
+      largePhone: 24.0,
+      tablet: 32.0,
+      desktop: 40.0,
+      automotive: 24.0,
+    );
+
+    final titleFontSize = responsive.getValue(
+      smallPhone: 13.0,
+      phone: 14.0,
+      largePhone: 15.0,
+      tablet: 16.0,
+      desktop: 18.0,
+      automotive: 16.0,
+    );
+
+    final appBarTitleSize = responsive.getValue(
+      smallPhone: 16.0,
+      phone: 18.0,
+      largePhone: 19.0,
+      tablet: 20.0,
+      desktop: 22.0,
+      automotive: 20.0,
+    );
+
+    final subtitleFontSize = responsive.getValue(
+      smallPhone: 13.0,
+      phone: 14.0,
+      largePhone: 15.0,
+      tablet: 16.0,
+      desktop: 18.0,
+      automotive: 16.0,
+    );
+
+    final playButtonSize = responsive.getValue(
+      smallPhone: 70.0,
+      phone: 80.0,
+      largePhone: 90.0,
+      tablet: 100.0,
+      desktop: 120.0,
+      automotive: 90.0,
+    );
+
+    final playIconSize = responsive.getValue(
+      smallPhone: 35.0,
+      phone: 40.0,
+      largePhone: 45.0,
+      tablet: 50.0,
+      desktop: 60.0,
+      automotive: 45.0,
+    );
+
+    final loadingSize = responsive.getValue(
+      smallPhone: 26.0,
+      phone: 30.0,
+      largePhone: 34.0,
+      tablet: 40.0,
+      desktop: 48.0,
+      automotive: 36.0,
+    );
 
     // Espaciados responsivos
-    final topSpacing = isTablet ? 80.0 : 60.0;
-    final sectionSpacing = isTablet ? 40.0 : 30.0;
-    final smallSpacing = isTablet ? 16.0 : 12.0;
+    final topSpacing = responsive.spacing(60);
+    final sectionSpacing = responsive.spacing(30);
+    final smallSpacing = responsive.spacing(12);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
           'Ambiente Stereo 88.4 FM',
           style: TextStyle(
-            fontSize: (isTablet ? 16.0 : 14.0) * textScale,
+            fontSize: appBarTitleSize,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -151,7 +205,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
           if (_errorMessage != null)
             Padding(
               padding: const EdgeInsets.only(right: 16),
-              child: Center(child: _buildReconnectingIndicator(isTablet)),
+              child: Center(child: _buildReconnectingIndicator(responsive)),
             ),
         ],
       ),
@@ -164,7 +218,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
           child: ConstrainedBox(
             constraints: BoxConstraints(
               minHeight:
-                  screenSize.height -
+                  MediaQuery.of(context).size.height -
                   (AppBar().preferredSize.height +
                       MediaQuery.of(context).padding.top +
                       padding * 2),
@@ -194,14 +248,22 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                 SizedBox(height: smallSpacing),
 
                 // Subtítulo con estado actual (Conectando/En vivo/Pausado)
-                _buildStatusText(subtitleFontSize),
+                _buildStatusText(responsive, subtitleFontSize),
 
                 SizedBox(height: sectionSpacing),
 
                 // Ondas de sonido animadas (solo cuando está reproduciendo)
                 if (_isPlaying && !_isLoading)
                   Padding(
-                    padding: EdgeInsets.symmetric(vertical: isTablet ? 15 : 5),
+                    padding: EdgeInsets.symmetric(
+                      vertical: responsive.getValue(
+                        phone: 5.0,
+                        largePhone: 8.0,
+                        tablet: 15.0,
+                        desktop: 20.0,
+                        automotive: 10.0,
+                      ),
+                    ),
                     child: SoundWaves(isPlaying: _isPlaying),
                   ),
 
@@ -209,10 +271,10 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
                 // Botón principal de reproducción/pausa
                 _buildPlayButton(
+                  responsive: responsive,
                   size: playButtonSize,
                   iconSize: playIconSize,
                   loadingSize: loadingSize,
-                  isTablet: isTablet,
                 ),
 
                 SizedBox(height: sectionSpacing + 10),
@@ -231,7 +293,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
   /// Construye el widget de texto de estado
   /// Muestra "Conectando...", "En vivo ahora" o "La radio que si quieres"
-  Widget _buildStatusText(double fontSize) {
+  Widget _buildStatusText(ResponsiveHelper responsive, double fontSize) {
     String statusText;
     Color statusColor;
 
@@ -246,15 +308,33 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       statusColor = AppColors.textMuted;
     }
 
+    final indicatorSize = responsive.getValue(
+      smallPhone: 7.0,
+      phone: 8.0,
+      largePhone: 9.0,
+      tablet: 10.0,
+      desktop: 11.0,
+      automotive: 9.0,
+    );
+
+    final indicatorSpacing = responsive.getValue(
+      smallPhone: 6.0,
+      phone: 8.0,
+      largePhone: 9.0,
+      tablet: 10.0,
+      desktop: 11.0,
+      automotive: 9.0,
+    );
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         // Indicador circular de estado (solo cuando está cargando o reproduciendo)
         if (_isLoading || _isPlaying)
           Container(
-            width: 8,
-            height: 8,
-            margin: const EdgeInsets.only(right: 8),
+            width: indicatorSize,
+            height: indicatorSize,
+            margin: EdgeInsets.only(right: indicatorSpacing),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: statusColor,
@@ -282,11 +362,56 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   }
 
   /// Construye el indicador de reconexión que aparece en el AppBar
-  Widget _buildReconnectingIndicator(bool isTablet) {
+  Widget _buildReconnectingIndicator(ResponsiveHelper responsive) {
+    final horizontalPadding = responsive.getValue(
+      smallPhone: 6.0,
+      phone: 8.0,
+      largePhone: 10.0,
+      tablet: 12.0,
+      desktop: 14.0,
+      automotive: 10.0,
+    );
+
+    final verticalPadding = responsive.getValue(
+      smallPhone: 3.0,
+      phone: 4.0,
+      largePhone: 5.0,
+      tablet: 6.0,
+      desktop: 7.0,
+      automotive: 5.0,
+    );
+
+    final indicatorSize = responsive.getValue(
+      smallPhone: 11.0,
+      phone: 12.0,
+      largePhone: 13.0,
+      tablet: 14.0,
+      desktop: 16.0,
+      automotive: 13.0,
+    );
+
+    final spacing = responsive.getValue(
+      smallPhone: 5.0,
+      phone: 6.0,
+      largePhone: 7.0,
+      tablet: 8.0,
+      desktop: 9.0,
+      automotive: 7.0,
+    );
+
+    final fontSize = responsive.getValue(
+      smallPhone: 9.0,
+      phone: 10.0,
+      largePhone: 11.0,
+      tablet: 12.0,
+      desktop: 13.0,
+      automotive: 11.0,
+    );
+
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: isTablet ? 12 : 8,
-        vertical: isTablet ? 6 : 4,
+        horizontal: horizontalPadding,
+        vertical: verticalPadding,
       ),
       decoration: BoxDecoration(
         color: AppColors.warning.withValues(alpha: 0.2),
@@ -300,18 +425,18 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: isTablet ? 14 : 12,
-            height: isTablet ? 14 : 12,
-            child: CircularProgressIndicator(
+            width: indicatorSize,
+            height: indicatorSize,
+            child: const CircularProgressIndicator(
               strokeWidth: 2,
               valueColor: AlwaysStoppedAnimation<Color>(AppColors.warning),
             ),
           ),
-          SizedBox(width: isTablet ? 8 : 6),
+          SizedBox(width: spacing),
           Text(
             'Reconectando...',
             style: TextStyle(
-              fontSize: isTablet ? 12 : 10,
+              fontSize: fontSize,
               color: AppColors.warning,
               fontWeight: FontWeight.w600,
             ),
@@ -324,11 +449,38 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   /// Construye el botón circular de reproducción/pausa
   /// Muestra un indicador de carga cuando está conectando
   Widget _buildPlayButton({
+    required ResponsiveHelper responsive,
     required double size,
     required double iconSize,
     required double loadingSize,
-    required bool isTablet,
   }) {
+    final shadowBlur = responsive.getValue(
+      smallPhone: 12.0,
+      phone: 15.0,
+      largePhone: 17.0,
+      tablet: 20.0,
+      desktop: 25.0,
+      automotive: 17.0,
+    );
+
+    final shadowSpread = responsive.getValue(
+      smallPhone: 1.5,
+      phone: 2.0,
+      largePhone: 2.5,
+      tablet: 3.0,
+      desktop: 4.0,
+      automotive: 2.5,
+    );
+
+    final strokeWidth = responsive.getValue(
+      smallPhone: 2.5,
+      phone: 3.0,
+      largePhone: 3.5,
+      tablet: 4.0,
+      desktop: 4.5,
+      automotive: 3.5,
+    );
+
     return Container(
       width: size,
       height: size,
@@ -338,8 +490,8 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
         boxShadow: [
           BoxShadow(
             color: const Color.fromARGB(77, 203, 203, 229),
-            blurRadius: isTablet ? 20 : 15,
-            spreadRadius: isTablet ? 3 : 2,
+            blurRadius: shadowBlur,
+            spreadRadius: shadowSpread,
           ),
         ],
       ),
@@ -356,7 +508,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                     height: loadingSize,
                     child: CircularProgressIndicator(
                       color: AppColors.textPrimary,
-                      strokeWidth: isTablet ? 4 : 3,
+                      strokeWidth: strokeWidth,
                     ),
                   )
                 // Mostrar icono de play o pausa

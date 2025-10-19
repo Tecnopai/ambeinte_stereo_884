@@ -23,12 +23,25 @@
     <!-- permisos para botones de volumen -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
 
+    <!-- ========== CARACTERÍSTICAS DE HARDWARE (AUTOMOTIVE) ========== -->
+    
+    <!-- Declarar soporte para Android Automotive (opcional - no excluye otros dispositivos) -->
+    <uses-feature
+        android:name="android.hardware.type.automotive"
+        android:required="false" />
+
     <application
         android:label="Ambientestereo884.fm"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="true">
+        
+        <!-- ========== METADATOS PARA ANDROID AUTO ========== -->
+        <!-- Declara que esta app es compatible con Android Auto -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
         
         <activity
             android:name=".MainActivity"
@@ -53,6 +66,10 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+                
+                <!-- ========== CATEGORÍA PARA ANDROID AUTO ========== -->
+                <!-- Indica que es una aplicación de música/audio -->
+                <category android:name="android.intent.category.APP_MUSIC"/>
             </intent-filter>
         </activity>
         

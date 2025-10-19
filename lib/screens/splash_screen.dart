@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
 import '../services/audio_player_manager.dart';
+import '../utils/responsive_helper.dart';
 import 'main_screen.dart';
 
 /// Pantalla de bienvenida con animaciones
@@ -119,15 +120,82 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Información del dispositivo para responsividad
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
+    final responsive = ResponsiveHelper(context);
 
-    // Tamaños responsivos
-    final logoSize = isTablet ? 160.0 : 120.0;
-    final titleFontSize = isTablet ? 28.0 : 24.0;
-    final subtitleFontSize = isTablet ? 18.0 : 16.0;
-    final loadingSize = isTablet ? 40.0 : 32.0;
+    // Tamaños responsivos usando ResponsiveHelper
+    final logoSize = responsive.getValue(
+      smallPhone: 100.0,
+      phone: 120.0,
+      largePhone: 130.0,
+      tablet: 160.0,
+      desktop: 180.0,
+      automotive: 140.0,
+    );
+
+    final titleFontSize = responsive.getValue(
+      smallPhone: 22.0,
+      phone: 24.0,
+      largePhone: 26.0,
+      tablet: 28.0,
+      desktop: 32.0,
+      automotive: 26.0,
+    );
+
+    final subtitleFontSize = responsive.getValue(
+      smallPhone: 14.0,
+      phone: 16.0,
+      largePhone: 17.0,
+      tablet: 18.0,
+      desktop: 20.0,
+      automotive: 18.0,
+    );
+
+    final loadingSize = responsive.getValue(
+      smallPhone: 28.0,
+      phone: 32.0,
+      largePhone: 36.0,
+      tablet: 40.0,
+      desktop: 44.0,
+      automotive: 36.0,
+    );
+
+    final loadingStrokeWidth = responsive.getValue(
+      smallPhone: 2.0,
+      phone: 2.5,
+      tablet: 3.0,
+      desktop: 3.5,
+      automotive: 3.0,
+    );
+
+    final loadingTextSize = responsive.getValue(
+      smallPhone: 12.0,
+      phone: 14.0,
+      largePhone: 15.0,
+      tablet: 16.0,
+      desktop: 18.0,
+      automotive: 16.0,
+    );
+
+    // Espaciados adaptativos
+    final spacing1 = responsive.spacing(32);
+    final spacing2 = responsive.spacing(10);
+    final spacing3 = responsive.spacing(16);
+    final spacing4 = responsive.spacing(40);
+
+    // Blur radius para sombras
+    final blurRadius = responsive.getValue(
+      phone: 20.0,
+      tablet: 30.0,
+      desktop: 35.0,
+      automotive: 25.0,
+    );
+
+    final spreadRadius = responsive.getValue(
+      phone: 5.0,
+      tablet: 10.0,
+      desktop: 12.0,
+      automotive: 8.0,
+    );
 
     return Scaffold(
       body: AnimatedBuilder(
@@ -178,8 +246,8 @@ class _SplashScreenState extends State<SplashScreen>
                                       201,
                                       242,
                                     ).withValues(alpha: 0.1),
-                                    blurRadius: isTablet ? 30 : 20,
-                                    spreadRadius: isTablet ? 10 : 5,
+                                    blurRadius: blurRadius,
+                                    spreadRadius: spreadRadius,
                                   ),
                                 ],
                               ),
@@ -204,7 +272,7 @@ class _SplashScreenState extends State<SplashScreen>
                       },
                     ),
 
-                    SizedBox(height: isTablet ? 40 : 32),
+                    SizedBox(height: spacing1),
 
                     // Título de la emisora con animación de opacidad
                     AnimatedBuilder(
@@ -225,7 +293,7 @@ class _SplashScreenState extends State<SplashScreen>
                       },
                     ),
 
-                    SizedBox(height: isTablet ? 14 : 10),
+                    SizedBox(height: spacing2),
 
                     // Frecuencia de la emisora
                     AnimatedBuilder(
@@ -260,15 +328,15 @@ class _SplashScreenState extends State<SplashScreen>
                                 height: loadingSize,
                                 child: CircularProgressIndicator(
                                   color: AppColors.primary,
-                                  strokeWidth: isTablet ? 3 : 2.5,
+                                  strokeWidth: loadingStrokeWidth,
                                 ),
                               ),
-                              SizedBox(height: isTablet ? 20 : 16),
+                              SizedBox(height: spacing3),
                               Text(
                                 'Cargando...',
                                 style: TextStyle(
                                   color: AppColors.textMuted,
-                                  fontSize: isTablet ? 16 : 14,
+                                  fontSize: loadingTextSize,
                                   letterSpacing: 0.5,
                                 ),
                               ),
@@ -278,7 +346,7 @@ class _SplashScreenState extends State<SplashScreen>
                       },
                     ),
 
-                    SizedBox(height: isTablet ? 60 : 40),
+                    SizedBox(height: spacing4),
                   ],
                 ),
               ),

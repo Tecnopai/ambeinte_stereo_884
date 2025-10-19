@@ -9,11 +9,11 @@ import '../services/audio_player_manager.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/live_indicator.dart';
 import '../core/theme/app_colors.dart';
+import '../utils/responsive_helper.dart';
 
 /// Pantalla "Acerca de" que muestra información sobre la aplicación y la emisora
 /// Incluye logo, descripción, versión, enlaces web y soporte
 class AboutScreen extends StatefulWidget {
-  // Gestor del reproductor de audio para controlar el mini player
   final AudioPlayerManager audioManager;
 
   const AboutScreen({super.key, required this.audioManager});
@@ -23,25 +23,17 @@ class AboutScreen extends StatefulWidget {
 }
 
 class _AboutScreenState extends State<AboutScreen> {
-  // Versión de la aplicación obtenida del package_info
   String _version = 'Cargando...';
-
-  // Contenido "Acerca de" cargado desde el sitio web
   List<Widget> _aboutContent = [];
-
-  // Indica si se está cargando el contenido web
   bool _isLoadingContent = true;
 
   @override
   void initState() {
     super.initState();
-    // Cargar versión y contenido al iniciar
     _loadVersion();
     _loadAboutContent();
   }
 
-  /// Obtiene la versión de la aplicación desde package_info
-  /// Si falla, establece una versión por defecto
   Future<void> _loadVersion() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -55,21 +47,14 @@ class _AboutScreenState extends State<AboutScreen> {
     }
   }
 
-  /// Carga el contenido "Acerca de" desde el sitio web de la emisora
-  /// Parsea el HTML y extrae los títulos y párrafos
-  /// Si falla, muestra un mensaje por defecto
   Future<void> _loadAboutContent() async {
     try {
-      // Hacer petición HTTP al sitio web
       final response = await http
           .get(Uri.parse('https://ambientestereo.fm/sitio/sobre-nosotros/'))
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        // Parsear el HTML de la respuesta
         final document = html_parser.parse(response.body);
-
-        // Buscar el contenedor principal del contenido
         var contentElement =
             document.querySelector('.entry-content') ??
             document.querySelector('article') ??
@@ -78,78 +63,75 @@ class _AboutScreenState extends State<AboutScreen> {
         List<Widget> widgets = [];
 
         if (contentElement != null) {
-          // Remover el título principal (h1)
           contentElement.querySelector('h1.entry-title')?.remove();
           final children = contentElement.children;
 
-          // Procesar cada elemento hijo del contenido
+          // Verificar que el widget sigue montado antes de usar context
+          if (!mounted) return;
+
+          final responsive = ResponsiveHelper(context);
+
+          // Tamaños de fuente accesibles
+          final headerSize = responsive.h3; // 14-20px
+          final bodySize = responsive.bodyText; // 14-18px
+
           for (var element in children) {
             final tagName = element.localName;
             final text = element.text.trim();
 
-            // Ignorar elementos vacíos
             if (text.isEmpty) continue;
 
-            // ===== DETECTAR ENCABEZADOS (h2, h3, h4) =====
             final isHeader =
                 tagName == 'h2' || tagName == 'h3' || tagName == 'h4';
 
             if (isHeader) {
-              // Agregar espaciado antes del título
               if (widgets.isNotEmpty) {
-                widgets.add(const SizedBox(height: 20));
+                widgets.add(SizedBox(height: responsive.spacing(20)));
               }
 
-              // Agregar el título como widget de texto
               widgets.add(
                 Text(
                   text,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 11,
+                    fontSize: headerSize,
                     color: AppColors.textPrimary,
                     height: 1.4,
                   ),
                 ),
               );
 
-              widgets.add(const SizedBox(height: 8));
+              widgets.add(SizedBox(height: responsive.spacing(8)));
             } else if (tagName == 'p') {
-              // ===== DETECTAR TÍTULOS EN PÁRRAFOS CON <strong> =====
-              // Verificar si el párrafo comienza con un <strong> en mayúsculas
               final strong = element.querySelector('strong');
 
               if (strong != null) {
                 final strongText = strong.text.trim();
-                // Verificar si es un título: texto en mayúsculas de longitud razonable
                 final isAllCaps =
                     strongText == strongText.toUpperCase() &&
                     strongText.length > 3 &&
                     strongText.length < 50;
 
                 if (isAllCaps) {
-                  // El <strong> es un título, separarlo del resto del párrafo
                   if (widgets.isNotEmpty) {
-                    widgets.add(const SizedBox(height: 20));
+                    widgets.add(SizedBox(height: responsive.spacing(20)));
                   }
 
-                  // Agregar el título
                   widgets.add(
                     Text(
                       strongText,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 11,
+                        fontSize: headerSize,
                         color: AppColors.textPrimary,
                         height: 1.4,
                       ),
                     ),
                   );
 
-                  widgets.add(const SizedBox(height: 8));
+                  widgets.add(SizedBox(height: responsive.spacing(8)));
 
-                  // Procesar el resto del contenido del párrafo sin el <strong>
-                  strong.remove(); // Remover el elemento strong
+                  strong.remove();
                   final remainingText = element.text.trim();
 
                   if (remainingText.isNotEmpty) {
@@ -160,8 +142,8 @@ class _AboutScreenState extends State<AboutScreen> {
                       widgets.add(
                         RichText(
                           text: TextSpan(
-                            style: const TextStyle(
-                              fontSize: 8.5,
+                            style: TextStyle(
+                              fontSize: bodySize,
                               color: AppColors.textMuted,
                               height: 1.6,
                               letterSpacing: 0.2,
@@ -172,16 +154,14 @@ class _AboutScreenState extends State<AboutScreen> {
                         ),
                       );
 
-                      widgets.add(const SizedBox(height: 10));
+                      widgets.add(SizedBox(height: responsive.spacing(10)));
                     }
                   }
 
-                  continue; // Ya procesamos este elemento
+                  continue;
                 }
               }
 
-              // ===== PROCESAR PÁRRAFO NORMAL =====
-              // Es un párrafo normal (sin título strong)
               List<InlineSpan> spans = [];
               _processParagraph(element, spans);
 
@@ -189,8 +169,8 @@ class _AboutScreenState extends State<AboutScreen> {
                 widgets.add(
                   RichText(
                     text: TextSpan(
-                      style: const TextStyle(
-                        fontSize: 8.5,
+                      style: TextStyle(
+                        fontSize: bodySize,
                         color: AppColors.textMuted,
                         height: 1.6,
                         letterSpacing: 0.2,
@@ -201,17 +181,17 @@ class _AboutScreenState extends State<AboutScreen> {
                   ),
                 );
 
-                widgets.add(const SizedBox(height: 10));
+                widgets.add(SizedBox(height: responsive.spacing(10)));
               }
             }
           }
         }
 
-        // Si no se pudo cargar ningún contenido, mostrar mensaje
         if (widgets.isEmpty) {
           widgets = [const Text('No se pudo cargar el contenido.')];
         }
 
+        if (!mounted) return; // Verificar antes de setState
         setState(() {
           _aboutContent = widgets;
           _isLoadingContent = false;
@@ -220,13 +200,16 @@ class _AboutScreenState extends State<AboutScreen> {
         throw Exception('Error ${response.statusCode}');
       }
     } catch (e) {
-      // En caso de error, mostrar texto por defecto
+      if (!mounted) return; // Verificar antes de usar context
+      final responsive = ResponsiveHelper(context);
+
+      if (!mounted) return; // Verificar antes de setState
       setState(() {
         _aboutContent = [
-          const Text(
+          Text(
             'Nuestro propósito es promover la protección y conservación del medio ambiente, la participación ciudadana y los valores familiares y sociales a través de una programación variada, educativa y cristocéntrica.',
             style: TextStyle(
-              fontSize: 8.5,
+              fontSize: responsive.bodyText,
               color: AppColors.textMuted,
               height: 1.6,
             ),
@@ -237,28 +220,19 @@ class _AboutScreenState extends State<AboutScreen> {
     }
   }
 
-  /// Procesa un párrafo HTML y extrae sus elementos de texto con formato
-  /// Maneja enlaces, negritas, cursivas y texto normal
-  ///
-  /// [paragraph] - Elemento DOM del párrafo a procesar
-  /// [spans] - Lista donde se agregan los TextSpans procesados
   void _processParagraph(dom.Element paragraph, List<InlineSpan> spans) {
     for (var node in paragraph.nodes) {
-      // Procesar nodos de texto plano
       if (node.nodeType == dom.Node.TEXT_NODE) {
         final text = node.text ?? '';
         if (text.trim().isNotEmpty) {
           spans.add(TextSpan(text: text));
         }
-      }
-      // Procesar elementos HTML (etiquetas)
-      else if (node.nodeType == dom.Node.ELEMENT_NODE) {
+      } else if (node.nodeType == dom.Node.ELEMENT_NODE) {
         final element = node as dom.Element;
         final text = element.text.trim();
 
         if (text.isEmpty) continue;
 
-        // Procesar enlaces <a>
         if (element.localName == 'a') {
           final href = element.attributes['href'] ?? '';
           spans.add(
@@ -272,9 +246,7 @@ class _AboutScreenState extends State<AboutScreen> {
                 ..onTap = () => _launchUrl(href),
             ),
           );
-        }
-        // Procesar texto en negrita <strong> o <b>
-        else if (element.localName == 'strong' || element.localName == 'b') {
+        } else if (element.localName == 'strong' || element.localName == 'b') {
           spans.add(
             TextSpan(
               text: text,
@@ -284,18 +256,14 @@ class _AboutScreenState extends State<AboutScreen> {
               ),
             ),
           );
-        }
-        // Procesar texto en cursiva <em> o <i>
-        else if (element.localName == 'em' || element.localName == 'i') {
+        } else if (element.localName == 'em' || element.localName == 'i') {
           spans.add(
             TextSpan(
               text: text,
               style: const TextStyle(fontStyle: FontStyle.italic),
             ),
           );
-        }
-        // Procesar elementos anidados recursivamente
-        else {
+        } else {
           if (element.nodes.isNotEmpty) {
             _processParagraph(element, spans);
           } else {
@@ -308,7 +276,8 @@ class _AboutScreenState extends State<AboutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Escuchar cambios en el estado de reproducción para mostrar/ocultar mini player
+    final responsive = ResponsiveHelper(context);
+
     return StreamBuilder<bool>(
       stream: widget.audioManager.playingStream,
       initialData: widget.audioManager.isPlaying,
@@ -320,7 +289,6 @@ class _AboutScreenState extends State<AboutScreen> {
             title: Row(
               children: [
                 const Text('Nosotros'),
-                // Mostrar indicador "EN VIVO" si está reproduciendo
                 if (isPlaying) const LiveIndicator(),
               ],
             ),
@@ -328,39 +296,35 @@ class _AboutScreenState extends State<AboutScreen> {
           ),
           body: Stack(
             children: [
-              // ===== CONTENIDO PRINCIPAL SCROLLABLE =====
               SingleChildScrollView(
-                padding: _getPadding(context, isPlaying),
+                padding: _getPadding(responsive, isPlaying),
                 child: Column(
                   children: [
-                    _buildLogo(context),
-                    _getSpacing(context, 32),
-                    _buildTitle(context),
-                    _getSpacing(context, 8),
-                    _buildSubtitle(context),
-                    _getSpacing(context, 32),
-                    _buildDescriptionCard(context),
-                    _getSpacing(context, 24),
-                    _buildInfoCard(context, 'Versión', _version),
-                    _getSpacing(context, 14),
+                    _buildLogo(responsive),
+                    SizedBox(height: responsive.spacing(32)),
+                    _buildTitle(responsive),
+                    SizedBox(height: responsive.spacing(8)),
+                    _buildSubtitle(responsive),
+                    SizedBox(height: responsive.spacing(32)),
+                    _buildDescriptionCard(responsive),
+                    SizedBox(height: responsive.spacing(24)),
+                    _buildInfoCard(responsive, 'Versión', _version),
+                    SizedBox(height: responsive.spacing(14)),
                     _buildInfoCard(
-                      context,
+                      responsive,
                       'Emisora oficial de',
                       'La Iglesia Cristiana PAI',
                     ),
-                    _getSpacing(context, 14),
-                    _buildWebsiteButton(context),
-                    _getSpacing(context, 14),
-                    _buildWebsiteButton2(context),
-                    _getSpacing(context, 14),
-                    _buildWebsiteButton1(context),
-                    // Espacio extra para el mini player si está reproduciendo
-                    if (isPlaying) _getSpacing(context, 20),
+                    SizedBox(height: responsive.spacing(14)),
+                    _buildWebsiteButton(responsive),
+                    SizedBox(height: responsive.spacing(14)),
+                    _buildWebsiteButton2(responsive),
+                    SizedBox(height: responsive.spacing(14)),
+                    _buildWebsiteButton1(responsive),
+                    if (isPlaying) SizedBox(height: responsive.spacing(20)),
                   ],
                 ),
               ),
-              // ===== MINI PLAYER FLOTANTE =====
-              // Solo se muestra si hay reproducción activa
               if (isPlaying)
                 Positioned(
                   bottom: 16,
@@ -375,16 +339,42 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
-  /// Calcula el padding adaptativo según el dispositivo y estado de reproducción
-  EdgeInsets _getPadding(BuildContext context, bool isPlaying) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final horizontalPadding = isTablet ? 40.0 : 24.0;
-    final topPadding = isTablet ? 32.0 : 24.0;
-    // Padding inferior mayor si hay mini player visible
+  EdgeInsets _getPadding(ResponsiveHelper responsive, bool isPlaying) {
+    final horizontalPadding = responsive.getValue(
+      smallPhone: 20.0,
+      phone: 24.0,
+      largePhone: 28.0,
+      tablet: 40.0,
+      desktop: 60.0,
+      automotive: 32.0,
+    );
+
+    final topPadding = responsive.getValue(
+      smallPhone: 20.0,
+      phone: 24.0,
+      largePhone: 28.0,
+      tablet: 32.0,
+      desktop: 40.0,
+      automotive: 28.0,
+    );
+
     final bottomPadding = isPlaying
-        ? (isTablet ? 120.0 : 100.0)
-        : (isTablet ? 32.0 : 24.0);
+        ? responsive.getValue(
+            smallPhone: 90.0,
+            phone: 100.0,
+            largePhone: 110.0,
+            tablet: 120.0,
+            desktop: 140.0,
+            automotive: 110.0,
+          )
+        : responsive.getValue(
+            smallPhone: 20.0,
+            phone: 24.0,
+            largePhone: 28.0,
+            tablet: 32.0,
+            desktop: 40.0,
+            automotive: 28.0,
+          );
 
     return EdgeInsets.only(
       top: topPadding,
@@ -394,20 +384,17 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
-  /// Calcula el espaciado vertical adaptativo según el dispositivo
-  SizedBox _getSpacing(BuildContext context, double baseSize) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final spacing = isTablet ? baseSize * 1.2 : baseSize;
-    return SizedBox(height: spacing);
-  }
+  Widget _buildLogo(ResponsiveHelper responsive) {
+    final logoSize = responsive.getValue(
+      smallPhone: 100.0,
+      phone: 120.0,
+      largePhone: 130.0,
+      tablet: 140.0,
+      desktop: 160.0,
+      automotive: 130.0,
+    );
 
-  /// Construye el logo circular de la emisora con gradiente y sombra
-  Widget _buildLogo(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final logoSize = isTablet ? 140.0 : 120.0;
-    final iconSize = isTablet ? 70.0 : 60.0;
+    final iconSize = logoSize * 0.5;
 
     return Container(
       width: logoSize,
@@ -429,7 +416,6 @@ class _AboutScreenState extends State<AboutScreen> {
           width: iconSize,
           height: iconSize,
           fit: BoxFit.cover,
-          // Icono por defecto si la imagen no carga
           errorBuilder: (context, error, stackTrace) {
             return Icon(
               Icons.radio,
@@ -442,17 +428,11 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
-  /// Construye el título principal "Ambiente Stereo 88.4 FM"
-  Widget _buildTitle(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
-    final fontSize = (isTablet ? 28.0 : 14.0) * textScale;
-
+  Widget _buildTitle(ResponsiveHelper responsive) {
     return Text(
       'Ambiente Stereo 88.4 FM',
       style: TextStyle(
-        fontSize: fontSize,
+        fontSize: responsive.h1, // 22-32px
         fontWeight: FontWeight.bold,
         color: AppColors.textPrimary,
       ),
@@ -460,26 +440,35 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
-  /// Construye el subtítulo "La radio que si quieres"
-  Widget _buildSubtitle(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
-    final fontSize = (isTablet ? 14.0 : 12.0) * textScale;
-
+  Widget _buildSubtitle(ResponsiveHelper responsive) {
     return Text(
       'La radio que si quieres',
-      style: TextStyle(fontSize: fontSize, color: AppColors.textMuted),
+      style: TextStyle(
+        fontSize: responsive.h3, // 16-20px
+        color: AppColors.textMuted,
+      ),
       textAlign: TextAlign.center,
     );
   }
 
-  /// Construye la tarjeta con el contenido "Acerca de" cargado desde el web
-  Widget _buildDescriptionCard(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final padding = isTablet ? 20.0 : 18.0;
-    final borderRadius = isTablet ? 16.0 : 12.0;
+  Widget _buildDescriptionCard(ResponsiveHelper responsive) {
+    final padding = responsive.getValue(
+      smallPhone: 16.0,
+      phone: 18.0,
+      largePhone: 19.0,
+      tablet: 20.0,
+      desktop: 24.0,
+      automotive: 19.0,
+    );
+
+    final borderRadius = responsive.getValue(
+      smallPhone: 10.0,
+      phone: 12.0,
+      largePhone: 14.0,
+      tablet: 16.0,
+      desktop: 18.0,
+      automotive: 14.0,
+    );
 
     return Container(
       padding: EdgeInsets.all(padding),
@@ -495,9 +484,7 @@ class _AboutScreenState extends State<AboutScreen> {
         ],
       ),
       child: _isLoadingContent
-          // Mostrar indicador de carga mientras se obtiene el contenido
           ? const Center(child: CircularProgressIndicator())
-          // Mostrar contenido parseado del HTML
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: _aboutContent,
@@ -505,17 +492,49 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
-  /// Construye una tarjeta de información con título y valor
-  /// Usada para mostrar versión y otros datos
-  Widget _buildInfoCard(BuildContext context, String title, String value) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
-    final titleFontSize = (isTablet ? 12.0 : 10.0) * textScale;
-    final valueFontSize = (isTablet ? 10.0 : 8.0) * textScale;
-    final horizontalPadding = isTablet ? 24.0 : 20.0;
-    final verticalPadding = isTablet ? 20.0 : 16.0;
-    final borderRadius = isTablet ? 12.0 : 8.0;
+  Widget _buildInfoCard(
+    ResponsiveHelper responsive,
+    String title,
+    String value,
+  ) {
+    final titleFontSize = responsive.caption; // 12-16px
+    final valueFontSize = responsive.bodyText; // 14-18px
+
+    final horizontalPadding = responsive.getValue(
+      smallPhone: 18.0,
+      phone: 20.0,
+      largePhone: 22.0,
+      tablet: 24.0,
+      desktop: 28.0,
+      automotive: 22.0,
+    );
+
+    final verticalPadding = responsive.getValue(
+      smallPhone: 14.0,
+      phone: 16.0,
+      largePhone: 18.0,
+      tablet: 20.0,
+      desktop: 24.0,
+      automotive: 18.0,
+    );
+
+    final borderRadius = responsive.getValue(
+      smallPhone: 6.0,
+      phone: 8.0,
+      largePhone: 10.0,
+      tablet: 12.0,
+      desktop: 14.0,
+      automotive: 10.0,
+    );
+
+    final spacing = responsive.getValue(
+      smallPhone: 4.0,
+      phone: 4.0,
+      largePhone: 5.0,
+      tablet: 6.0,
+      desktop: 7.0,
+      automotive: 5.0,
+    );
 
     return Container(
       width: double.infinity,
@@ -540,7 +559,6 @@ class _AboutScreenState extends State<AboutScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Etiqueta del campo
           Text(
             title,
             style: TextStyle(
@@ -548,8 +566,7 @@ class _AboutScreenState extends State<AboutScreen> {
               color: AppColors.textMuted,
             ),
           ),
-          SizedBox(height: isTablet ? 6 : 4),
-          // Valor del campo
+          SizedBox(height: spacing),
           Text(
             value,
             style: TextStyle(
@@ -563,84 +580,25 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
-  /// Botón para visitar el sitio web de la Iglesia Cristiana PAI
-  Widget _buildWebsiteButton2(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
-    final fontSize = (isTablet ? 10.0 : 8.0) * textScale;
-    final iconSize = (isTablet ? 20.0 : 16.0) * textScale;
-    final horizontalPadding = isTablet ? 40.0 : 32.0;
-    final verticalPadding = isTablet ? 16.0 : 12.0;
-    final borderRadius = isTablet ? 12.0 : 8.0;
-
-    return ElevatedButton.icon(
-      onPressed: () => _launchUrl('https://iglesiacristianapai.org/'),
-      icon: Icon(Icons.web, size: iconSize),
-      label: Text(
-        'Web Iglesia Cristiana PAI',
-        style: TextStyle(fontSize: fontSize),
-      ),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.textPrimary,
-        padding: EdgeInsets.symmetric(
-          horizontal: horizontalPadding,
-          vertical: verticalPadding,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(borderRadius),
-        ),
-        elevation: 4,
-        shadowColor: AppColors.primary.withValues(alpha: 0.3),
-      ),
+  Widget _buildWebsiteButton(ResponsiveHelper responsive) {
+    return _buildButton(
+      responsive,
+      'Web Ambiente Stereo',
+      Icons.web,
+      () => _launchUrl('https://ambientestereo.fm'),
     );
   }
 
-  /// Botón para visitar el sitio web de Ambiente Stereo
-  Widget _buildWebsiteButton(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
-    final fontSize = (isTablet ? 10.0 : 8.0) * textScale;
-    final iconSize = (isTablet ? 20.0 : 16.0) * textScale;
-    final horizontalPadding = isTablet ? 40.0 : 32.0;
-    final verticalPadding = isTablet ? 16.0 : 12.0;
-    final borderRadius = isTablet ? 12.0 : 8.0;
-
-    return ElevatedButton.icon(
-      onPressed: () => _launchUrl('https://ambientestereo.fm'),
-      icon: Icon(Icons.web, size: iconSize),
-      label: Text('Web Ambiente Stereo', style: TextStyle(fontSize: fontSize)),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.textPrimary,
-        padding: EdgeInsets.symmetric(
-          horizontal: horizontalPadding,
-          vertical: verticalPadding,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(borderRadius),
-        ),
-        elevation: 4,
-        shadowColor: AppColors.primary.withValues(alpha: 0.3),
-      ),
+  Widget _buildWebsiteButton2(ResponsiveHelper responsive) {
+    return _buildButton(
+      responsive,
+      'Web Iglesia Cristiana PAI',
+      Icons.web,
+      () => _launchUrl('https://iglesiacristianapai.org/'),
     );
   }
 
-  /// Botón para contactar soporte técnico vía email
-  /// Abre el cliente de correo con asunto y cuerpo predefinidos
-  Widget _buildWebsiteButton1(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
-    final fontSize = (isTablet ? 10.0 : 8.0) * textScale;
-    final iconSize = (isTablet ? 20.0 : 16.0) * textScale;
-    final horizontalPadding = isTablet ? 40.0 : 32.0;
-    final verticalPadding = isTablet ? 16.0 : 12.0;
-    final borderRadius = isTablet ? 12.0 : 8.0;
-
-    // Función auxiliar para codificar parámetros de URL
+  Widget _buildWebsiteButton1(ResponsiveHelper responsive) {
     String? encodeQueryParameters(Map<String, String> params) {
       return params.entries
           .map(
@@ -650,7 +608,6 @@ class _AboutScreenState extends State<AboutScreen> {
           .join('&');
     }
 
-    // Crear URI de mailto con asunto y cuerpo predefinidos
     final Uri emailUri = Uri(
       scheme: 'mailto',
       path: 'tecnologia@iglesiacristianapai.org',
@@ -660,14 +617,60 @@ class _AboutScreenState extends State<AboutScreen> {
       })!,
     );
 
+    return _buildButton(responsive, 'Soporte app', Icons.email, () async {
+      if (await canLaunchUrl(emailUri)) {
+        await launchUrl(emailUri);
+      }
+    });
+  }
+
+  Widget _buildButton(
+    ResponsiveHelper responsive,
+    String label,
+    IconData icon,
+    VoidCallback onPressed,
+  ) {
+    final fontSize = responsive.buttonText; // 14-18px
+    final iconSize = responsive.getValue(
+      smallPhone: 18.0,
+      phone: 20.0,
+      largePhone: 22.0,
+      tablet: 24.0,
+      desktop: 26.0,
+      automotive: 22.0,
+    );
+
+    final horizontalPadding = responsive.getValue(
+      smallPhone: 28.0,
+      phone: 32.0,
+      largePhone: 36.0,
+      tablet: 40.0,
+      desktop: 48.0,
+      automotive: 36.0,
+    );
+
+    final verticalPadding = responsive.getValue(
+      smallPhone: 10.0,
+      phone: 12.0,
+      largePhone: 14.0,
+      tablet: 16.0,
+      desktop: 18.0,
+      automotive: 14.0,
+    );
+
+    final borderRadius = responsive.getValue(
+      smallPhone: 6.0,
+      phone: 8.0,
+      largePhone: 10.0,
+      tablet: 12.0,
+      desktop: 14.0,
+      automotive: 10.0,
+    );
+
     return ElevatedButton.icon(
-      onPressed: () async {
-        if (await canLaunchUrl(emailUri)) {
-          await launchUrl(emailUri);
-        }
-      },
-      icon: Icon(Icons.email, size: iconSize),
-      label: Text('Soporte app', style: TextStyle(fontSize: fontSize)),
+      onPressed: onPressed,
+      icon: Icon(icon, size: iconSize),
+      label: Text(label, style: TextStyle(fontSize: fontSize)),
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.textPrimary,
@@ -684,7 +687,6 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
-  /// Abre una URL en el navegador externo del dispositivo
   Future<void> _launchUrl(String url) async {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {

@@ -4,13 +4,10 @@ import '../models/category.dart';
 import '../services/news_service.dart';
 import '../core/theme/app_colors.dart';
 import 'article_detail_screen.dart';
+import '../utils/responsive_helper.dart';
 
-/// Pantalla que muestra una lista de artículos de noticias
-/// Puede mostrar todas las noticias o filtradas por categoría
-/// Implementa carga paginada con infinite scroll
+/// Pantalla mejorada de lista de artículos con responsive design
 class NewsListScreen extends StatefulWidget {
-  // Categoría opcional para filtrar artículos
-  // Si es null, muestra todas las noticias
   final Category? category;
 
   const NewsListScreen({super.key, this.category});
@@ -20,36 +17,20 @@ class NewsListScreen extends StatefulWidget {
 }
 
 class _NewsListScreenState extends State<NewsListScreen> {
-  // Servicio para obtener artículos desde la API
   final NewsService _newsService = NewsService();
-
-  // Controlador para detectar el scroll y cargar más artículos
   final ScrollController _scrollController = ScrollController();
 
-  // Lista de artículos cargados
   List<Article> _articles = [];
-
-  // Indica si se está cargando la primera página
   bool _isLoading = true;
-
-  // Indica si se están cargando más artículos (paginación)
   bool _isLoadingMore = false;
-
-  // Almacena el mensaje de error si ocurre algún problema
   String? _error;
-
-  // Página actual para la paginación
   int _currentPage = 1;
-
-  // Indica si hay más artículos para cargar
   bool _hasMore = true;
 
   @override
   void initState() {
     super.initState();
-    // Cargar artículos iniciales
     _loadArticles();
-    // Escuchar eventos de scroll para infinite scroll
     _scrollController.addListener(_onScroll);
   }
 
@@ -59,10 +40,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
     super.dispose();
   }
 
-  /// Detecta cuando el usuario hace scroll cerca del final de la lista
-  /// Carga más artículos automáticamente (infinite scroll)
   void _onScroll() {
-    // Cargar más cuando esté al 80% del scroll
     if (_scrollController.position.pixels >=
             _scrollController.position.maxScrollExtent * 0.8 &&
         !_isLoadingMore &&
@@ -71,8 +49,6 @@ class _NewsListScreenState extends State<NewsListScreen> {
     }
   }
 
-  /// Carga la primera página de artículos
-  /// Puede cargar todos los artículos o filtrados por categoría
   Future<void> _loadArticles() async {
     try {
       setState(() {
@@ -82,7 +58,6 @@ class _NewsListScreenState extends State<NewsListScreen> {
         _hasMore = true;
       });
 
-      // Cargar artículos según si hay categoría seleccionada o no
       final articles = widget.category != null
           ? await _newsService.getArticlesByCategory(widget.category!.id)
           : await _newsService.getArticles();
@@ -91,7 +66,6 @@ class _NewsListScreenState extends State<NewsListScreen> {
         setState(() {
           _articles = articles;
           _isLoading = false;
-          // Si vienen menos de 20 artículos, no hay más páginas
           _hasMore = articles.length >= 20;
         });
       }
@@ -105,20 +79,14 @@ class _NewsListScreenState extends State<NewsListScreen> {
     }
   }
 
-  /// Carga la siguiente página de artículos (paginación)
-  /// Se activa automáticamente cuando el usuario hace scroll hacia abajo
   Future<void> _loadMoreArticles() async {
-    // Evitar múltiples cargas simultáneas
     if (_isLoadingMore || !_hasMore) return;
 
-    setState(() {
-      _isLoadingMore = true;
-    });
+    setState(() => _isLoadingMore = true);
 
     try {
       _currentPage++;
 
-      // Cargar siguiente página según categoría
       final newArticles = widget.category != null
           ? await _newsService.getArticlesByCategory(
               widget.category!.id,
@@ -128,10 +96,8 @@ class _NewsListScreenState extends State<NewsListScreen> {
 
       if (mounted) {
         setState(() {
-          // Agregar nuevos artículos a la lista existente
           _articles.addAll(newArticles);
           _isLoadingMore = false;
-          // Si vienen menos de 20, no hay más páginas
           _hasMore = newArticles.length >= 20;
         });
       }
@@ -139,7 +105,6 @@ class _NewsListScreenState extends State<NewsListScreen> {
       if (mounted) {
         setState(() {
           _isLoadingMore = false;
-          // Revertir el incremento de página en caso de error
           _currentPage--;
         });
       }
@@ -148,128 +113,269 @@ class _NewsListScreenState extends State<NewsListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Obtener dimensiones para diseño responsivo
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
-    final padding = isTablet ? 20.0 : 16.0;
+    final responsive = ResponsiveHelper(context);
 
     return Scaffold(
       appBar: AppBar(
-        // Mostrar nombre de categoría o "Todas las noticias"
-        title: Text(widget.category?.name ?? 'Todas las noticias'),
+        title: Text(
+          widget.category?.name ?? 'Todas las noticias',
+          style: TextStyle(fontSize: responsive.h2),
+        ),
         centerTitle: true,
       ),
-      body: _isLoading
-          // ===== ESTADO DE CARGA INICIAL =====
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          // ===== ESTADO DE ERROR =====
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Icono de error
-                    Icon(
-                      Icons.error_outline,
-                      size: isTablet ? 80 : 64,
-                      color: Colors.red.shade300,
-                    ),
-                    SizedBox(height: isTablet ? 24 : 16),
-
-                    // Mensaje de error
-                    Text(
-                      _error!,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: isTablet ? 18 : 16,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    SizedBox(height: isTablet ? 24 : 16),
-
-                    // Botón para reintentar
-                    ElevatedButton.icon(
-                      onPressed: _loadArticles,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Reintentar'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isTablet ? 32 : 24,
-                          vertical: isTablet ? 16 : 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : _articles.isEmpty
-          // ===== ESTADO VACÍO =====
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.article_outlined,
-                    size: isTablet ? 80 : 64,
-                    color: AppColors.textSecondary.withValues(alpha: 0.5),
-                  ),
-                  SizedBox(height: isTablet ? 24 : 16),
-                  Text(
-                    'No hay artículos disponibles',
-                    style: TextStyle(
-                      fontSize: isTablet ? 18 : 16,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          // ===== LISTA DE ARTÍCULOS =====
-          : RefreshIndicator(
-              // Pull-to-refresh para recargar artículos
-              onRefresh: _loadArticles,
-              child: ListView.builder(
-                controller: _scrollController,
-                padding: EdgeInsets.all(padding),
-                // +1 item para mostrar indicador de carga al final
-                itemCount: _articles.length + (_isLoadingMore ? 1 : 0),
-                itemBuilder: (context, index) {
-                  // Mostrar indicador de carga al final de la lista
-                  if (index == _articles.length) {
-                    return const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: CircularProgressIndicator(),
-                      ),
-                    );
-                  }
-                  // Mostrar tarjeta de artículo
-                  return _buildArticleCard(_articles[index], isTablet);
-                },
-              ),
-            ),
+      body: _buildBody(responsive),
     );
   }
 
-  /// Construye una tarjeta individual para cada artículo
-  /// Muestra título, fecha y permite navegar al detalle
-  ///
-  /// [article] - El artículo a mostrar
-  /// [isTablet] - Indica si el dispositivo es una tablet para ajustar tamaños
-  Widget _buildArticleCard(Article article, bool isTablet) {
+  Widget _buildBody(ResponsiveHelper responsive) {
+    if (_isLoading) {
+      return _buildLoadingState(responsive);
+    }
+
+    if (_error != null) {
+      return _buildErrorState(responsive);
+    }
+
+    if (_articles.isEmpty) {
+      return _buildEmptyState(responsive);
+    }
+
+    return _buildArticlesList(responsive);
+  }
+
+  Widget _buildLoadingState(ResponsiveHelper responsive) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(
+            color: AppColors.primary,
+            strokeWidth: responsive.getValue(phone: 3.0, tablet: 4.0),
+          ),
+          SizedBox(height: responsive.spacing(20)),
+          Text(
+            'Cargando artículos...',
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: responsive.bodyText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(ResponsiveHelper responsive) {
+    final iconSize = responsive.getValue(
+      phone: 64.0,
+      largePhone: 70.0,
+      tablet: 80.0,
+      desktop: 96.0,
+    );
+
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(responsive.spacing(24)),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: iconSize,
+              color: Colors.red.shade300,
+            ),
+            SizedBox(height: responsive.spacing(24)),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: responsive.h3,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            SizedBox(height: responsive.spacing(24)),
+            ElevatedButton.icon(
+              onPressed: _loadArticles,
+              icon: Icon(
+                Icons.refresh,
+                size: responsive.getValue(phone: 20.0, tablet: 24.0),
+              ),
+              label: Text(
+                'Reintentar',
+                style: TextStyle(fontSize: responsive.bodyText),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(
+                  horizontal: responsive.getValue(
+                    phone: 24.0,
+                    largePhone: 28.0,
+                    tablet: 32.0,
+                    desktop: 40.0,
+                  ),
+                  vertical: responsive.getValue(
+                    phone: 12.0,
+                    largePhone: 14.0,
+                    tablet: 16.0,
+                    desktop: 20.0,
+                  ),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(
+                    responsive.getValue(
+                      phone: 8.0,
+                      tablet: 12.0,
+                      desktop: 16.0,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(ResponsiveHelper responsive) {
+    final iconSize = responsive.getValue(
+      phone: 64.0,
+      largePhone: 70.0,
+      tablet: 80.0,
+      desktop: 96.0,
+    );
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.article_outlined,
+            size: iconSize,
+            color: AppColors.textSecondary.withValues(alpha: 0.5),
+          ),
+          SizedBox(height: responsive.spacing(24)),
+          Text(
+            'No hay artículos disponibles',
+            style: TextStyle(
+              fontSize: responsive.h3,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildArticlesList(ResponsiveHelper responsive) {
+    final padding = responsive.getValue(
+      smallPhone: 12.0,
+      phone: 16.0,
+      largePhone: 18.0,
+      tablet: 24.0,
+      desktop: 32.0,
+      automotive: 20.0,
+    );
+
+    // Grid layout para tablets y desktop
+    if (responsive.gridColumns > 1) {
+      return RefreshIndicator(
+        onRefresh: _loadArticles,
+        color: AppColors.primary,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: responsive.maxContentWidth),
+            child: GridView.builder(
+              controller: _scrollController,
+              padding: EdgeInsets.all(padding),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: responsive.gridColumns,
+                crossAxisSpacing: padding,
+                mainAxisSpacing: padding,
+                childAspectRatio: responsive.getValue(
+                  phone: 3.0,
+                  tablet: 3.0,
+                  desktop: 3.5,
+                  automotive: 3.0,
+                ),
+              ),
+              itemCount: _articles.length + (_isLoadingMore ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index == _articles.length) {
+                  return Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  );
+                }
+                return _buildArticleCard(_articles[index], responsive);
+              },
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Lista para móviles
+    return RefreshIndicator(
+      onRefresh: _loadArticles,
+      color: AppColors.primary,
+      child: ListView.builder(
+        controller: _scrollController,
+        padding: EdgeInsets.all(padding),
+        itemCount: _articles.length + (_isLoadingMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == _articles.length) {
+            return Center(
+              child: Padding(
+                padding: EdgeInsets.all(responsive.spacing(16)),
+                child: CircularProgressIndicator(color: AppColors.primary),
+              ),
+            );
+          }
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: responsive.getValue(
+                phone: 12.0,
+                largePhone: 14.0,
+                tablet: 16.0,
+              ),
+            ),
+            child: _buildArticleCard(_articles[index], responsive),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildArticleCard(Article article, ResponsiveHelper responsive) {
+    final borderRadius = responsive.getValue(
+      phone: 12.0,
+      largePhone: 14.0,
+      tablet: 16.0,
+      desktop: 18.0,
+    );
+
+    final padding = responsive.getValue(
+      phone: 14.0,
+      largePhone: 16.0,
+      tablet: 18.0,
+      desktop: 20.0,
+    );
+
+    final elevation = responsive.getValue(
+      phone: 2.0,
+      tablet: 4.0,
+      desktop: 6.0,
+    );
+
     return Card(
-      margin: EdgeInsets.only(bottom: isTablet ? 16 : 12),
-      elevation: 2,
+      color: AppColors.cardBackground,
+      elevation: elevation,
+      shadowColor: Colors.black.withValues(alpha: 0.1),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(isTablet ? 16 : 12),
+        borderRadius: BorderRadius.circular(borderRadius),
       ),
       child: InkWell(
-        // Navegar al detalle del artículo al tocar
         onTap: () {
           Navigator.push(
             context,
@@ -278,53 +384,63 @@ class _NewsListScreenState extends State<NewsListScreen> {
             ),
           );
         },
-        borderRadius: BorderRadius.circular(isTablet ? 16 : 12),
+        borderRadius: BorderRadius.circular(borderRadius),
         child: Padding(
-          padding: EdgeInsets.all(isTablet ? 18 : 14),
+          padding: EdgeInsets.all(padding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // ===== TÍTULO DEL ARTÍCULO =====
+              // Título
               Text(
                 article.title,
                 style: TextStyle(
-                  fontSize: isTablet ? 18 : 16,
+                  fontSize: responsive.h3,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
                   height: 1.3,
                 ),
-                maxLines: 3, // Máximo 3 líneas
-                overflow:
-                    TextOverflow.ellipsis, // Agregar "..." si es muy largo
+                maxLines: responsive.getValue(
+                  phone: 3,
+                  tablet: 2,
+                  automotive: 2,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
-              SizedBox(height: isTablet ? 12 : 8),
 
-              // ===== FECHA Y FLECHA =====
+              SizedBox(height: responsive.spacing(12)),
+
+              // Fecha y flecha
               Row(
                 children: [
-                  // Icono de reloj
                   Icon(
                     Icons.access_time,
-                    size: isTablet ? 16 : 14,
+                    size: responsive.getValue(
+                      phone: 14.0,
+                      largePhone: 15.0,
+                      tablet: 16.0,
+                      desktop: 18.0,
+                    ),
                     color: AppColors.textSecondary,
                   ),
-                  SizedBox(width: isTablet ? 6 : 4),
-
-                  // Fecha formateada
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       article.formattedDate,
                       style: TextStyle(
-                        fontSize: isTablet ? 13 : 11,
+                        fontSize: responsive.caption,
                         color: AppColors.textSecondary,
                       ),
                     ),
                   ),
-
-                  // Flecha indicadora de navegación
                   Icon(
                     Icons.arrow_forward_ios,
-                    size: isTablet ? 16 : 14,
+                    size: responsive.getValue(
+                      phone: 14.0,
+                      largePhone: 15.0,
+                      tablet: 16.0,
+                      desktop: 18.0,
+                    ),
                     color: AppColors.textSecondary.withValues(alpha: 0.5),
                   ),
                 ],

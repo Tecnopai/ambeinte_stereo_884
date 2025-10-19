@@ -2,7 +2,7 @@ name: ambeinte_stereo_884
 description: "Ambiente Stereo 884"
 publish_to: 'none'
 
-version: 2.0.0+1
+version: 2.0.2+6
 
 environment:
   sdk: ^3.8.1
@@ -46,6 +46,9 @@ dependencies:
 
   #Obtener la versión automáticamente
   package_info_plus: ^9.0.0
+
+  # Compartir contenido
+  share_plus: ^7.2.1
 
 dev_dependencies:
   flutter_test:

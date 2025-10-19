@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
+import '../utils/responsive_helper.dart';
 
 /// Widget que muestra ondas de sonido animadas
 /// Las barras se mueven verticalmente simulando un ecualizador
@@ -60,42 +61,92 @@ class _SoundWavesState extends State<SoundWaves>
 
   @override
   Widget build(BuildContext context) {
-    // Obtener información del dispositivo para diseño responsivo
-    final screenSize = MediaQuery.of(context).size;
-    final isTablet = screenSize.shortestSide >= 600;
+    final responsive = ResponsiveHelper(context);
 
-    // Calcular tamaños dinámicos según el dispositivo
-    final barCount = isTablet ? 7 : 5; // Más barras en tablets
-    final barSpacing = isTablet ? 3.0 : 2.0;
-    final barWidth = isTablet ? 6.0 : 4.0;
-    final borderRadius = isTablet ? 3.0 : 2.0;
+    // Número de barras según dispositivo
+    final barCount = responsive.getValue(
+      smallPhone: 5,
+      phone: 5,
+      largePhone: 6,
+      tablet: 7,
+      desktop: 9,
+      automotive: 6,
+    );
 
-    // Calcular alturas base y máxima adaptadas al dispositivo
-    double baseHeight;
-    double maxHeight;
+    // Espaciado entre barras
+    final barSpacing = responsive.getValue(
+      smallPhone: 1.5,
+      phone: 2.0,
+      largePhone: 2.5,
+      tablet: 3.0,
+      desktop: 3.5,
+      automotive: 2.5,
+    );
 
-    if (isTablet) {
-      baseHeight = 30;
-      maxHeight = 60;
-    } else {
-      // Para teléfonos, usar porcentaje del alto de pantalla
-      final availableHeight = screenSize.height * 0.08; // 8% del alto
-      baseHeight = availableHeight * 0.4; // Altura mínima
-      maxHeight = availableHeight; // Altura máxima
+    // Ancho de cada barra
+    final barWidth = responsive.getValue(
+      smallPhone: 3.5,
+      phone: 4.0,
+      largePhone: 5.0,
+      tablet: 6.0,
+      desktop: 7.0,
+      automotive: 5.0,
+    );
 
-      // Aplicar límites de seguridad para evitar tamaños extremos
-      if (baseHeight < 15) baseHeight = 15;
-      if (maxHeight < 30) maxHeight = 30;
-      if (baseHeight > 25) baseHeight = 25;
-      if (maxHeight > 50) maxHeight = 50;
-    }
+    // Border radius de las barras
+    final borderRadius = responsive.getValue(
+      smallPhone: 1.8,
+      phone: 2.0,
+      largePhone: 2.5,
+      tablet: 3.0,
+      desktop: 3.5,
+      automotive: 2.5,
+    );
+
+    // Altura base de las barras (mínima)
+    final baseHeight = responsive.getValue(
+      smallPhone: 15.0,
+      phone: 18.0,
+      largePhone: 22.0,
+      tablet: 30.0,
+      desktop: 35.0,
+      automotive: 24.0,
+    );
+
+    // Altura máxima de las barras
+    final maxHeight = responsive.getValue(
+      smallPhone: 32.0,
+      phone: 38.0,
+      largePhone: 45.0,
+      tablet: 60.0,
+      desktop: 70.0,
+      automotive: 48.0,
+    );
+
+    // Blur de la sombra
+    final shadowBlur = responsive.getValue(
+      smallPhone: 1.5,
+      phone: 2.0,
+      tablet: 3.0,
+      desktop: 4.0,
+      automotive: 2.5,
+    );
+
+    // Padding adicional del contenedor
+    final containerPadding = responsive.getValue(
+      smallPhone: 8.0,
+      phone: 10.0,
+      tablet: 12.0,
+      desktop: 14.0,
+      automotive: 10.0,
+    );
 
     return AnimatedBuilder(
       animation: _waveAnimation,
       builder: (context, child) {
         return SizedBox(
           // Altura fija del contenedor para evitar saltos visuales
-          height: maxHeight + 10,
+          height: maxHeight + containerPadding,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end, // Alinear desde abajo
@@ -146,7 +197,7 @@ class _SoundWavesState extends State<SoundWaves>
                   boxShadow: [
                     BoxShadow(
                       color: AppColors.primary.withValues(alpha: 0.2),
-                      blurRadius: isTablet ? 3 : 2,
+                      blurRadius: shadowBlur,
                       spreadRadius: 0,
                       offset: const Offset(0, 1),
                     ),
