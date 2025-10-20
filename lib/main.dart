@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
+import 'core/app.dart';
 
+/// Punto de entrada principal de la aplicación Ambiente Stereo
+/// Configura las orientaciones permitidas y el estilo de la barra de estado
 void main() async {
+  // Asegurar que los bindings de Flutter estén inicializados
+  // Necesario antes de usar servicios de la plataforma
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Configurar orientación de pantalla
+  // Solo permitir orientación vertical (portrait)
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -42,42 +46,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-enum DeviceType { mobile, tablet, desktop }
-
-class ResponsiveHelper {
-  static DeviceType getDeviceType(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-
-    if (screenWidth < 600) {
-      return DeviceType.mobile;
-    } else if (screenWidth < 1200) {
-      return DeviceType.tablet;
-    } else {
-      return DeviceType.desktop;
-    }
-  }
-
-  static bool isLandscape(BuildContext context) {
-    return MediaQuery.of(context).orientation == Orientation.landscape;
-  }
-
-  static double getResponsiveSize(
-    BuildContext context, {
-    required double mobile,
-    required double tablet,
-    required double desktop,
-  }) {
-    switch (getDeviceType(context)) {
-      case DeviceType.mobile:
-        return mobile;
-      case DeviceType.tablet:
-        return tablet;
-      case DeviceType.desktop:
-        return desktop;
-    }
-  }
-}
-
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key});
 
@@ -91,21 +59,16 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
-  bool _isInitialized = false;
 
   late AnimationController _logoAnimationController;
   late Animation<double> _logoScaleAnimation;
   late Animation<double> _logoOpacityAnimation;
-
-  // Timeout para detectar problemas de carga
-  static const Duration _loadTimeout = Duration(seconds: 30);
 
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
     _initializeWebView();
-    _startLoadTimeout();
   }
 
   void _initializeAnimations() {
@@ -131,429 +94,202 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
     _logoAnimationController.repeat(reverse: true);
   }
 
-  void _startLoadTimeout() {
-    Future.delayed(_loadTimeout, () {
-      if (mounted && _isLoading && !_hasError) {
-        setState(() {
-          _hasError = true;
-          _isLoading = false;
-          _errorMessage =
-              'La página está tardando demasiado en cargar. Por favor, verifica tu conexión a internet.';
-        });
-      }
-    });
-  }
-
   void _initializeWebView() {
-    try {
-      _controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(Colors.white)
-        ..setUserAgent(
-          'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-        )
-        ..enableZoom(false)
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onProgress: (int progress) {
-              if (mounted && progress != _progress) {
-                setState(() {
-                  _progress = progress;
-                  // Si hay progreso, la conexión está funcionando
-                  if (progress > 0 && _hasError) {
-                    _hasError = false;
-                  }
-                });
-              }
-            },
-            onPageStarted: (String url) {
-              debugPrint('📄 Página iniciada: $url');
-              if (mounted) {
-                setState(() {
-                  _isLoading = true;
-                  _hasError = false;
-                  _progress = 0;
-                });
-              }
-            },
-            onPageFinished: (String url) {
-              debugPrint('✅ Página cargada: $url');
-              if (mounted) {
-                Future.delayed(const Duration(milliseconds: 500), () {
-                  if (mounted) {
-                    setState(() {
-                      _progress = 100;
-                      _isLoading = false;
-                      _isInitialized = true;
-                    });
-                    _logoAnimationController.stop();
-                  }
-                });
-              }
-            },
-            onWebResourceError: (WebResourceError error) {
-              debugPrint(
-                '❌ Error de recurso: ${error.errorType} - ${error.description}',
-              );
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.white)
+      ..setUserAgent(
+        'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+      )
+      // Configuraciones adicionales para mejor rendimiento
+      ..enableZoom(false)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onProgress: (int progress) {
+            if (mounted && progress != _progress) {
+              setState(() {
+                _progress = progress;
+              });
+            }
+          },
+          onPageStarted: (String url) {
+            if (mounted) {
+              setState(() {
+                _isLoading = true;
+                _hasError = false;
+                _progress = 0;
+              });
+            }
+          },
+          onPageFinished: (String url) {
+            if (mounted) {
+              // Agregar un pequeño delay para suavizar la transición
+              Future.delayed(const Duration(milliseconds: 500), () {
+                if (mounted) {
+                  setState(() {
+                    _progress = 100;
+                    _isLoading = false;
+                  });
+                  _logoAnimationController.stop();
+                }
+              });
+            }
+          },
+          onWebResourceError: (WebResourceError error) {
+            if (mounted && error.errorType != WebResourceErrorType.unknown) {
+              setState(() {
+                _hasError = true;
+                _isLoading = false;
+                _errorMessage = error.description;
+              });
+            }
+          },
+          onNavigationRequest: (NavigationRequest request) {
+            if (request.url.startsWith('https://ambientestereo.fm/')) {
+              return NavigationDecision.navigate;
+            }
+            return NavigationDecision.prevent;
+          },
+        ),
+      );
 
-              // Solo mostrar error si es crítico
-              if (mounted && _shouldShowError(error)) {
-                setState(() {
-                  _hasError = true;
-                  _isLoading = false;
-                  _errorMessage = _getUserFriendlyError(error);
-                });
-              }
-            },
-            onNavigationRequest: (NavigationRequest request) {
-              debugPrint('🔗 Navegación solicitada: ${request.url}');
-              if (request.url.startsWith('https://ambientestereo.fm/')) {
-                return NavigationDecision.navigate;
-              }
-              return NavigationDecision.prevent;
-            },
-          ),
-        );
-
-      _loadWebsite();
-    } catch (e) {
-      debugPrint('❌ Error al inicializar WebView: $e');
-      if (mounted) {
-        setState(() {
-          _hasError = true;
-          _isLoading = false;
-          _errorMessage = 'Error al inicializar la aplicación: $e';
-        });
-      }
-    }
-  }
-
-  bool _shouldShowError(WebResourceError error) {
-    // No mostrar errores menores como favicon o recursos opcionales
-    final minorErrors = [
-      WebResourceErrorType.unknown,
-      WebResourceErrorType.fileNotFound,
-    ];
-
-    // Solo mostrar error si no se ha cargado nada todavía
-    return !_isInitialized && !minorErrors.contains(error.errorType);
-  }
-
-  String _getUserFriendlyError(WebResourceError error) {
-    switch (error.errorType) {
-      case WebResourceErrorType.hostLookup:
-        return 'No se puede conectar al servidor. Verifica tu conexión a internet.';
-      case WebResourceErrorType.timeout:
-        return 'La conexión ha excedido el tiempo de espera. Intenta de nuevo.';
-      case WebResourceErrorType.connect:
-        return 'No se puede establecer conexión. Verifica tu conexión a internet.';
-      case WebResourceErrorType.authentication:
-        return 'Error de autenticación con el servidor.';
-      case WebResourceErrorType.unsupportedScheme:
-        return 'Protocolo no soportado.';
-      default:
-        return error.description.isNotEmpty
-            ? error.description
-            : 'Error al cargar la página. Por favor, intenta de nuevo.';
-    }
+    // Cargar la URL con manejo de errores
+    _loadWebsite();
   }
 
   void _loadWebsite() async {
     try {
-      debugPrint('🌐 Cargando sitio web...');
       await _controller.loadRequest(
         Uri.parse('https://ambientestereo.fm/sitio/'),
       );
     } catch (e) {
-      debugPrint('❌ Error al cargar sitio: $e');
       if (mounted) {
         setState(() {
           _hasError = true;
           _isLoading = false;
-          _errorMessage = 'Error al cargar la página: $e';
+          _errorMessage = 'Error al cargar la página';
         });
       }
     }
   }
 
   void _reloadPage() {
-    debugPrint('🔄 Recargando página...');
     setState(() {
       _hasError = false;
       _isLoading = true;
       _progress = 0;
     });
     _logoAnimationController.repeat(reverse: true);
-    _startLoadTimeout(); // Reiniciar timeout
     _loadWebsite();
   }
 
-  Widget _buildResponsiveLogo(BuildContext context) {
-    final logoSize = ResponsiveHelper.getResponsiveSize(
-      context,
-      mobile: 100.0,
-      tablet: 140.0,
-      desktop: 160.0,
-    );
-
-    final isLandscape = ResponsiveHelper.isLandscape(context);
-    final adjustedSize = isLandscape ? logoSize * 0.8 : logoSize;
-
+  // Método para construir el logo personalizado
+  Widget _buildCustomLogo() {
+    // OPCIÓN 1: Logo desde archivo de imagen
+    ///*
     return Container(
-      width: adjustedSize,
-      height: adjustedSize,
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(20)),
+      width: 120,
+      height: 120,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        /*boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            spreadRadius: 5,
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],*/
+      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: Image.asset(
-          'assets/images/ambiente_logo.png',
-          width: adjustedSize,
-          height: adjustedSize,
+          'assets/images/ambiente_logo.png', // logo aquí
+          width: 120,
+          height: 120,
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            debugPrint('❌ Error al cargar logo: $error');
-            return Container(
-              color: const Color(0xFF39A935),
-              child: const Icon(Icons.radio, color: Colors.white, size: 50),
-            );
-          },
         ),
       ),
     );
-  }
+    //*/
 
-  Widget _buildLoadingScreen(BuildContext context) {
-    final isLandscape = ResponsiveHelper.isLandscape(context);
-    final deviceType = ResponsiveHelper.getDeviceType(context);
-
-    if (isLandscape && deviceType == DeviceType.mobile) {
-      return Container(
-        width: double.infinity,
-        height: double.infinity,
-        color: Colors.white,
-        child: Row(
-          children: [
-            Expanded(
-              flex: 1,
-              child: Center(
-                child: AnimatedBuilder(
-                  animation: _logoAnimationController,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: _logoScaleAnimation.value,
-                      child: Opacity(
-                        opacity: _logoOpacityAnimation.value,
-                        child: _buildResponsiveLogo(context),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-            Expanded(
-              flex: 1,
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [_buildTitleAndProgress(context)],
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
+    // OPCIÓN 2: Logo personalizado creado con código
+    /*
     return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: Colors.white,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          AnimatedBuilder(
-            animation: _logoAnimationController,
-            builder: (context, child) {
-              return Transform.scale(
-                scale: _logoScaleAnimation.value,
-                child: Opacity(
-                  opacity: _logoOpacityAnimation.value,
-                  child: _buildResponsiveLogo(context),
-                ),
-              );
-            },
+      width: 120,
+      height: 120,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF4A90E2),
+            const Color(0xFF7B68EE),
+            const Color(0xFF9370DB),
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ),
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF7B68EE).withOpacity(0.4),
+            spreadRadius: 8,
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
-
-          SizedBox(height: isLandscape ? 20 : 30),
-
-          _buildTitleAndProgress(context),
         ],
       ),
-    );
-  }
-
-  Widget _buildTitleAndProgress(BuildContext context) {
-    final titleSize = ResponsiveHelper.getResponsiveSize(
-      context,
-      mobile: 24.0,
-      tablet: 28.0,
-      desktop: 32.0,
-    );
-
-    final progressBarWidth = ResponsiveHelper.getResponsiveSize(
-      context,
-      mobile: MediaQuery.of(context).size.width * 0.6,
-      tablet: 300.0,
-      desktop: 400.0,
-    );
-
-    return Column(
-      children: [
-        Text(
-          'Ambientestereo.fm',
-          style: TextStyle(
-            fontSize: titleSize,
-            fontWeight: FontWeight.bold,
-            color: const Color(0xFF39A935),
-            letterSpacing: 1.2,
-          ),
-        ),
-        const SizedBox(height: 10),
-
-        Text(
-          'Cargando...',
-          style: TextStyle(
-            fontSize: ResponsiveHelper.getResponsiveSize(
-              context,
-              mobile: 16.0,
-              tablet: 18.0,
-              desktop: 20.0,
-            ),
-            color: Colors.grey[600],
-          ),
-        ),
-        const SizedBox(height: 40),
-
-        Container(
-          width: progressBarWidth,
-          height: 6,
-          decoration: BoxDecoration(
-            color: Colors.grey[200],
-            borderRadius: BorderRadius.circular(3),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: LinearProgressIndicator(
-              value: _progress / 100,
-              backgroundColor: Colors.transparent,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFF6B73FF),
-              ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Círculo de fondo decorativo
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
             ),
           ),
-        ),
-        const SizedBox(height: 15),
-
-        Text(
-          '${_progress}%',
-          style: TextStyle(
-            fontSize: ResponsiveHelper.getResponsiveSize(
-              context,
-              mobile: 14.0,
-              tablet: 16.0,
-              desktop: 18.0,
-            ),
-            color: Colors.grey[600],
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildErrorScreen(BuildContext context) {
-    final iconSize = ResponsiveHelper.getResponsiveSize(
-      context,
-      mobile: 80.0,
-      tablet: 100.0,
-      desktop: 120.0,
-    );
-
-    final buttonPadding = ResponsiveHelper.getResponsiveSize(
-      context,
-      mobile: 30.0,
-      tablet: 40.0,
-      desktop: 50.0,
-    );
-
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: Colors.white,
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: buttonPadding),
-          child: Column(
+          // Icono principal
+          Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              SizedBox(height: MediaQuery.of(context).size.height * 0.2),
-
-              Icon(Icons.error_outline, size: iconSize, color: Colors.red[400]),
-              const SizedBox(height: 20),
-
+              const Icon(
+                Icons.radio_rounded,
+                size: 40,
+                color: Colors.white,
+              ),
+              const SizedBox(height: 4),
+              // Texto pequeño en el logo
               Text(
-                'Error de conexión',
+                'FM',
                 style: TextStyle(
-                  fontSize: ResponsiveHelper.getResponsiveSize(
-                    context,
-                    mobile: 22.0,
-                    tablet: 26.0,
-                    desktop: 30.0,
-                  ),
+                  color: Colors.white,
+                  fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: Colors.red,
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              Text(
-                _errorMessage.isNotEmpty
-                    ? _errorMessage
-                    : 'No se pudo cargar la página. Verifica tu conexión a internet.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: ResponsiveHelper.getResponsiveSize(
-                    context,
-                    mobile: 16.0,
-                    tablet: 18.0,
-                    desktop: 20.0,
-                  ),
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              ElevatedButton.icon(
-                onPressed: _reloadPage,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Reintentar'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B73FF),
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: buttonPadding,
-                    vertical: 15,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(25),
-                  ),
+                  letterSpacing: 2,
                 ),
               ),
             ],
           ),
-        ),
+          // Efecto de brillo
+          Positioned(
+            top: 15,
+            right: 15,
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ],
       ),
     );
+    */
   }
 
   @override
@@ -569,11 +305,136 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
       body: SafeArea(
         child: Stack(
           children: [
+            // WebView
             WebViewWidget(controller: _controller),
 
-            if (_isLoading && !_hasError) _buildLoadingScreen(context),
+            // Pantalla de carga con logo
+            if (_isLoading && !_hasError)
+              Container(
+                width: double.infinity,
+                height: double.infinity,
+                color: Colors.white,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Logo personalizado animado
+                    AnimatedBuilder(
+                      animation: _logoAnimationController,
+                      builder: (context, child) {
+                        return Transform.scale(
+                          scale: _logoScaleAnimation.value,
+                          child: Opacity(
+                            opacity: _logoOpacityAnimation.value,
+                            child: _buildCustomLogo(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 30),
 
-            if (_hasError) _buildErrorScreen(context),
+                    // Título
+                    const Text(
+                      'Ambientestereo.fm',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF39A935),
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Subtítulo
+                    Text(
+                      'Cargando...',
+                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 40),
+
+                    // Barra de progreso mejorada
+                    Container(
+                      width: 200,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: LinearProgressIndicator(
+                          value: _progress / 100,
+                          backgroundColor: Colors.transparent,
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFF6B73FF),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+
+                    // Porcentaje de carga
+                    Text(
+                      '${_progress}%',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Pantalla de error
+            if (_hasError)
+              Container(
+                width: double.infinity,
+                height: double.infinity,
+                color: Colors.white,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, size: 80, color: Colors.red[400]),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Error de conexión',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 40),
+                      child: Text(
+                        _errorMessage.isNotEmpty
+                            ? _errorMessage
+                            : 'No se pudo cargar la página. Verifica tu conexión a internet.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                    ElevatedButton.icon(
+                      onPressed: _reloadPage,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Reintentar'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF6B73FF),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 30,
+                          vertical: 15,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),

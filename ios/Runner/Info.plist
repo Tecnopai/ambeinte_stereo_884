@@ -45,5 +45,56 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	
+	<!-- ========== NUEVAS CONFIGURACIONES PARA AUDIO EN BACKGROUND ========== -->
+	
+	<!-- Permitir reproducción de audio en background -->
+	<!-- CRÍTICO: Sin esto, el audio se detiene al minimizar la app -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+	
+	<!-- Permitir conexiones HTTP (además de HTTPS) -->
+	<!-- Necesario si tu stream usa HTTP: https://radio06.cehis.net:9036/stream -->
+	<!-- Si tu stream usa HTTPS, puedes omitir NSAllowsArbitraryLoads y usar solo NSExceptionDomains -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Opción 1: Permitir todas las conexiones HTTP (más simple pero menos seguro) -->
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		
+		<!-- Opción 2: Permitir solo dominios específicos (más seguro - descomentar si prefieres esto) -->
+		<!--
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>radio06.cehis.net</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+			<key>ambientestereo.fm</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+		-->
+	</dict>
+	
+	<!-- Soporte para vistas embebidas (usado por webview_flutter) -->
+	<key>io.flutter.embedded_views_preview</key>
+	<true/>
+	
+	<!-- Descripción para acceso a red local (requerido por Apple) -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Necesitamos acceso a la red para transmitir el audio de la radio en vivo.</string>
+	
 </dict>
 </plist>

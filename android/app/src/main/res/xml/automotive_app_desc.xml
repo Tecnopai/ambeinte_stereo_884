@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Descriptor de aplicación para Android Auto/Automotive -->
+<automotiveApp>
+    <!-- Declarar que es una aplicación de medios/música -->
+    <uses name="media"/>
+    
+    <!-- Configuración opcional para notificaciones -->
+    <uses name="notification"/>
+</automotiveApp>
