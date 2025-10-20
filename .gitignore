@@ -117,5 +117,6 @@ app.*.symbols
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
-**/android/.kotlin/sessions/
-
+.idea/caches/deviceStreaming.xml
+.idea/deviceManager.xml
+.idea/caches/deviceStreaming.xml
