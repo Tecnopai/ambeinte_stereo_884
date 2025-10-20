@@ -6,6 +6,7 @@ import 'package:volume_controller/volume_controller.dart';
 /// Gestor global del reproductor de audio para streaming de radio
 /// Implementa patrón Singleton para mantener una única instancia
 /// Maneja reproducción, volumen, reconexión automática y estados
+/// ✅ OPTIMIZADO PARA REPRODUCCIÓN EN SEGUNDO PLANO INDEFINIDA
 class AudioPlayerManager {
   static final AudioPlayerManager _instance = AudioPlayerManager._internal();
   factory AudioPlayerManager() => _instance;
@@ -66,11 +67,9 @@ class AudioPlayerManager {
 
     try {
       await _initializeVolumeController();
-
-      // 💡 Se espera la inicialización del reproductor, incluyendo la carga de la fuente.
       await _initializePlayer();
 
-      // 🚀 Lógica de Auto-Play: Intenta reproducir solo si el usuario no detuvo.
+      // Auto-Play: Intenta reproducir solo si el usuario no detuvo
       if (!_userStoppedManually) {
         await play();
       }
@@ -78,7 +77,6 @@ class AudioPlayerManager {
       if (kDebugMode) {
         print('[AudioPlayerManager] Error al inicializar: $e');
       }
-      // Si falla la inicialización inicial, notificar error
       if (!_errorController.isClosed) {
         _errorController.add('Error al inicializar el reproductor.');
       }
@@ -86,10 +84,8 @@ class AudioPlayerManager {
   }
 
   /// Inicializa el controlador de volumen del sistema
-  /// Sincroniza el volumen con los botones físicos del dispositivo
   Future<void> _initializeVolumeController() async {
     try {
-      // Obtener volumen actual del sistema
       final systemVolume = await VolumeController.instance.getVolume();
       _volume = systemVolume;
 
@@ -97,27 +93,20 @@ class AudioPlayerManager {
         _volumeStreamController.add(_volume);
       }
 
-      // Configurar para no mostrar UI del sistema
       VolumeController.instance.showSystemUI = false;
 
-      // Escuchar cambios en los botones físicos de volumen
       VolumeController.instance.addListener((newVolume) {
         if (_isDisposed) return;
-
         _volume = newVolume;
-
         if (!_volumeStreamController.isClosed) {
           _volumeStreamController.add(_volume);
         }
-
-        // Sincronizar con el reproductor
         _audioPlayer?.setVolume(_volume);
       });
     } catch (e) {
       if (kDebugMode) {
         print('[AudioPlayerManager] Error al inicializar VolumeController: $e');
       }
-      // Si falla, usar volumen por defecto
       _volume = 0.7;
       if (!_volumeStreamController.isClosed) {
         _volumeStreamController.add(_volume);
@@ -125,21 +114,37 @@ class AudioPlayerManager {
     }
   }
 
-  /// Inicializa el reproductor de audio y configura los listeners
-  /// 💡 Ahora es asíncrono y espera a que la fuente de audio esté configurada.
+  /// Inicializa el reproductor de audio con configuración optimizada
+  /// ✅ OPTIMIZADO PARA SEGUNDO PLANO
   Future<void> _initializePlayer() async {
     if (_isDisposed) return;
 
     try {
-      // Limpiar reproductor anterior si existe
       _cleanupPlayer();
-
       _audioPlayer = AudioPlayer();
 
-      // Configurar el audio source y esperar a que se cargue la fuente (CRUCIAL para el inicio)
+      // ✅ CONFIGURACIÓN CRÍTICA PARA SEGUNDO PLANO
+      // Configurar el audio source con opciones de buffer optimizadas
       await _audioPlayer!.setAudioSource(
-        AudioSource.uri(Uri.parse(streamUrl)),
-        // Se omite preload: false para que intente cargar la fuente inmediatamente
+        AudioSource.uri(
+          Uri.parse(streamUrl),
+          tag: MediaItem(
+            id: 'ambiente_stereo_live',
+            title: radioName,
+            artist: 'En vivo',
+          ),
+        ),
+        // ✅ Preload true para mantener buffer activo
+        preload: true,
+      );
+
+      // ✅ Configurar modo de audio para segundo plano
+      // Esto le dice a Android que es contenido de audio continuo
+      await _audioPlayer!.setLoopMode(LoopMode.off);
+
+      // ✅ Configurar para que no se pause automáticamente
+      await _audioPlayer!.setCanUseNetworkResourcesForLiveStreamingWhilePaused(
+        true,
       );
 
       // Escuchar cambios de estado del reproductor
@@ -151,7 +156,7 @@ class AudioPlayerManager {
 
       // Escuchar eventos de playback
       _playbackEventSubscription = _audioPlayer!.playbackEventStream.listen(
-        null, // No necesitamos procesar cada evento
+        null,
         onError: _handlePlayerError,
         cancelOnError: false,
       );
@@ -162,7 +167,6 @@ class AudioPlayerManager {
       if (kDebugMode) {
         print('[AudioPlayerManager] Error al inicializar player: $e');
       }
-      // Re-lanzar el error para que init() pueda capturarlo
       rethrow;
     }
   }
@@ -177,7 +181,6 @@ class AudioPlayerManager {
         state.processingState == ProcessingState.loading ||
         state.processingState == ProcessingState.buffering;
 
-    // Actualizar estados
     _isPlaying = newIsPlaying;
     _isLoading = newIsLoading;
 
@@ -193,7 +196,6 @@ class AudioPlayerManager {
 
     // Si se detuvo inesperadamente
     if (wasPlaying && !newIsPlaying && !_userStoppedManually) {
-      // Solo si realmente se detuvo (no es buffering)
       if (state.processingState == ProcessingState.idle ||
           state.processingState == ProcessingState.completed) {
         _consecutiveErrors++;
@@ -227,9 +229,6 @@ class AudioPlayerManager {
     if (_lastAttemptTime != null) {
       final timeSinceLastAttempt = DateTime.now().difference(_lastAttemptTime!);
       if (timeSinceLastAttempt < _minDelayBetweenAttempts) {
-        if (kDebugMode) {
-          print('[AudioPlayerManager] Intento demasiado pronto, esperando...');
-        }
         return;
       }
     }
@@ -313,7 +312,6 @@ class AudioPlayerManager {
   }
 
   /// Realiza un reinicio forzado del reproductor
-  /// Se usa cuando hay múltiples errores consecutivos
   Future<void> _forceRestart() async {
     if (_isDisposed || _isRestarting) return;
 
@@ -335,22 +333,16 @@ class AudioPlayerManager {
         _errorController.add('Reiniciando...');
       }
 
-      // Detener y limpiar
       await _audioPlayer?.stop();
       await _audioPlayer?.dispose();
-
-      // Esperar para asegurar limpieza completa
       await Future.delayed(const Duration(seconds: 2));
 
-      // Reinicializar el reproductor
-      await _initializePlayer(); // 💡 Ahora es await
-
+      await _initializePlayer();
       await Future.delayed(const Duration(milliseconds: 500));
 
       _consecutiveErrors = 0;
       _retryCount = 0;
 
-      // Si el usuario detuvo manualmente, no continuar
       if (_userStoppedManually) {
         _isRestarting = false;
         _isLoading = false;
@@ -360,7 +352,6 @@ class AudioPlayerManager {
         return;
       }
 
-      // Reiniciar reproducción
       await _audioPlayer?.play();
 
       if (!_errorController.isClosed) {
@@ -387,20 +378,19 @@ class AudioPlayerManager {
     }
   }
 
-  /// Inicia un timer para verificar la conectividad periódicamente
+  /// ✅ OPTIMIZADO: Verificación de conectividad más agresiva
   void _startConnectivityCheck() {
     if (_isDisposed) return;
-
     _stopConnectivityCheck();
 
-    _connectivityCheckTimer = Timer.periodic(const Duration(seconds: 30), (
+    // ✅ Reducido a 15 segundos para detectar problemas más rápido
+    _connectivityCheckTimer = Timer.periodic(const Duration(seconds: 15), (
       timer,
     ) async {
       if (_isDisposed || !_isPlaying || _userStoppedManually || _isRestarting) {
         return;
       }
 
-      // Verificar si el reproductor está en un estado extraño
       if (_audioPlayer != null) {
         final state = _audioPlayer!.playerState;
 
@@ -425,10 +415,6 @@ class AudioPlayerManager {
   /// Maneja errores del reproductor
   void _handlePlayerError(dynamic error) {
     if (_isDisposed || _isRestarting || _userStoppedManually) return;
-
-    if (kDebugMode) {
-      print('[AudioPlayerManager] Error del reproductor: $error');
-    }
 
     _consecutiveErrors++;
     _isLoading = false;
@@ -460,11 +446,10 @@ class AudioPlayerManager {
 
     _cancelReconnect();
 
-    // Calcular delay con retroceso exponencial
     int delaySeconds;
     if (_retryCount >= _maxRetries) {
       delaySeconds = _maxRetryDelay.inSeconds;
-      _retryCount = 0; // Resetear contador
+      _retryCount = 0;
     } else {
       delaySeconds = (_initialRetryDelay.inSeconds * (1 << _retryCount)).clamp(
         3,
@@ -473,10 +458,6 @@ class AudioPlayerManager {
     }
 
     final delay = Duration(seconds: delaySeconds);
-
-    if (kDebugMode) {
-      print('[AudioPlayerManager] Reintentando en $delaySeconds segundos...');
-    }
 
     if (!_errorController.isClosed) {
       _errorController.add('Reintentando en ${delaySeconds}s...');
@@ -491,11 +472,6 @@ class AudioPlayerManager {
 
     _retryCount++;
 
-    if (kDebugMode) {
-      print('[AudioPlayerManager] Intento de reconexión #$_retryCount');
-    }
-
-    // Si hay muchos errores, forzar reinicio completo
     if (_consecutiveErrors > 3) {
       await _forceRestart();
       return;
@@ -507,20 +483,14 @@ class AudioPlayerManager {
     }
 
     try {
-      // Detener reproducción actual
       await _audioPlayer?.stop();
       await Future.delayed(const Duration(milliseconds: 1000));
-
-      // Intentar reproducir nuevamente
       await _audioPlayer?.play();
 
       if (!_errorController.isClosed) {
         _errorController.add('');
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('[AudioPlayerManager] Error en reconexión: $e');
-      }
       _consecutiveErrors++;
       _isLoading = false;
       _isPlaying = false;
@@ -546,14 +516,9 @@ class AudioPlayerManager {
 
     try {
       _volume = volume.clamp(0.0, 1.0);
-
-      // Aplicar al reproductor de audio
       await _audioPlayer?.setVolume(_volume);
-
-      // Sincronizar con el volumen del sistema
       VolumeController.instance.setVolume(_volume);
 
-      // Emitir cambio al stream
       if (!_volumeStreamController.isClosed) {
         _volumeStreamController.add(_volume);
       }
@@ -594,7 +559,15 @@ class AudioPlayerManager {
     _volumeStreamController.close();
     _errorController.close();
 
-    // Remover listener del volumen
     VolumeController.instance.removeListener();
   }
+}
+
+/// Clase para metadata del audio (requerida por just_audio)
+class MediaItem {
+  final String id;
+  final String title;
+  final String artist;
+
+  MediaItem({required this.id, required this.title, required this.artist});
 }

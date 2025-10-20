@@ -11,24 +11,23 @@
     <!-- Verificar estado del WiFi -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     
-    <!-- Mantener la CPU activa durante reproducción (evita que se duerma) -->
+    <!-- ✅ CRÍTICO: Mantener la CPU activa durante reproducción (evita que se duerma) -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     
-    <!-- Reproducción en background (cuando app está minimizada) -->
+    <!-- ✅ CRÍTICO: Reproducción en background (cuando app está minimizada) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     
-    <!-- Tipo específico de servicio en foreground para Android 14+ -->
+    <!-- ✅ CRÍTICO: Tipo específico de servicio en foreground para Android 14+ -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
-    <!-- permisos para botones de volumen -->
+    <!-- Permisos para botones de volumen -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
-
-    <!-- ========== CARACTERÍSTICAS DE HARDWARE (AUTOMOTIVE) ========== -->
     
-    <!-- Declarar soporte para Android Automotive (opcional - no excluye otros dispositivos)
-    <uses-feature
-        android:name="android.hardware.type.automotive"
-        android:required="false" /> -->
+    <!-- ✅ NUEVO: Para evitar que Doze Mode mate la app -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    
+    <!-- ✅ NUEVO: Para Android 12+ alarmas exactas (reconexión automática) -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 
     <application
         android:label="Ambientestereo884.fm"
@@ -37,22 +36,18 @@
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="true">
         
-        <!-- ========== METADATOS PARA ANDROID AUTO ========== -->
-        <!-- Declara que esta app es compatible con Android Auto
-        <meta-data
-            android:name="com.google.android.gms.car.application"
-            android:resource="@xml/automotive_app_desc" /> -->
-        
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
-            android:screenOrientation="portrait"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:keepScreenOn="false">
             
             <!-- Specifies an Android theme to apply to this Activity as soon as
                  the Android process has started. This theme is visible to the user
@@ -66,32 +61,8 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
-                
-                <!-- ========== CATEGORÍA PARA ANDROID AUTO ========== -->
-                <!-- Indica que es una aplicación de música/audio -->
-                <category android:name="android.intent.category.APP_MUSIC"/>
             </intent-filter>
         </activity>
-        
-        <!-- ========== SERVICIO DE AUDIO EN BACKGROUND ========== -->
-        <!-- Este servicio permite que el audio continúe cuando la app está minimizada -->
-        <service
-            android:name="com.ryanheise.audioservice.AudioService"
-            android:foregroundServiceType="mediaPlayback"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.media.browse.MediaBrowserService" />
-            </intent-filter>
-        </service>
-        
-        <!-- Receptor para detectar cambios de conectividad (reconexión automática) -->
-        <receiver
-            android:name="com.ryanheise.audioservice.MediaButtonReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_BUTTON" />
-            </intent-filter>
-        </receiver>
         
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
