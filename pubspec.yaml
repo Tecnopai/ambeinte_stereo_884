@@ -13,9 +13,7 @@ dependencies:
 
   # Audio
   volume_controller: ^3.4.0
-  
-  # Radio streaming
-  # radio_player: ^2.1.0
+  audio_session: ^0.1.18
   just_audio: ^0.10.5 
 
   # Controles en pantalla de bloqueo y notificaciones

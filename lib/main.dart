@@ -6,11 +6,9 @@ import 'core/app.dart';
 /// Configura las orientaciones permitidas y el estilo de la barra de estado
 void main() async {
   // Asegurar que los bindings de Flutter estén inicializados
-  // Necesario antes de usar servicios de la plataforma
   WidgetsFlutterBinding.ensureInitialized();
 
   // Configurar orientación de pantalla
-  // Solo permitir orientación vertical (portrait)
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -19,7 +17,6 @@ void main() async {
   ]);
 
   // Configurar estilo de la barra de estado del sistema
-  // Barra transparente con iconos claros para modo oscuro
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,

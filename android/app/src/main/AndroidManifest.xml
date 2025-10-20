@@ -23,10 +23,10 @@
     <!-- Permisos para botones de volumen -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     
-    <!-- ✅ NUEVO: Para evitar que Doze Mode mate la app -->
+    <!-- ✅ Para evitar que Doze Mode mate la app -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     
-    <!-- ✅ NUEVO: Para Android 12+ alarmas exactas (reconexión automática) -->
+    <!-- ✅ Para Android 12+ alarmas exactas (reconexión automática) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 
     <application
@@ -49,10 +49,6 @@
             android:turnScreenOn="true"
             android:keepScreenOn="false">
             
-            <!-- Specifies an Android theme to apply to this Activity as soon as
-                 the Android process has started. This theme is visible to the user
-                 while the Flutter UI initializes. After that, this theme continues
-                 to determine the Window background behind the Flutter UI. -->
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
@@ -64,25 +60,19 @@
             </intent-filter>
         </activity>
         
-        <!-- Don't delete the meta-data below.
-             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <!-- NO AGREGAR SERVICIOS DE AUDIO_SERVICE AQUÍ -->
+        
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
     
-    <!-- Required to query activities that can process text, see:
-         https://developer.android.com/training/package-visibility and
-         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
-
-         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
         
-        <!-- Permitir abrir navegadores web (para botón "Ver artículo completo") -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
