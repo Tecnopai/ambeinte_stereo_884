@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'core/app.dart';
 
 /// Punto de entrada principal de la aplicación Ambiente Stereo
@@ -7,6 +9,9 @@ import 'core/app.dart';
 void main() async {
   // Asegurar que los bindings de Flutter estén inicializados
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializar Firebase
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Configurar orientación de pantalla
   await SystemChrome.setPreferredOrientations([

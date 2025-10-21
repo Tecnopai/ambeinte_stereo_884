@@ -2,7 +2,7 @@ name: ambeinte_stereo_884
 description: "Ambiente Stereo 884"
 publish_to: 'none'
 
-version: 2.0.5+9
+version: 2.0.6+10
 
 environment:
   sdk: ^3.8.1
@@ -17,7 +17,7 @@ dependencies:
   just_audio: ^0.10.5 
 
   # Controles en pantalla de bloqueo y notificaciones
-  # audio_service: ^0.18.15
+  audio_service: ^0.18.15
   rxdart: ^0.28.0 
 
   # HTTP

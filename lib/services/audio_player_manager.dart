@@ -179,8 +179,6 @@ class AudioPlayerManager {
             'album': 'Radio en Vivo',
             'title': radioName,
             'artist': 'En vivo',
-            // Opcional: agrega un logo/artwork si tienes una URL
-            // 'artUri': 'https://tudominio.com/logo.png',
           },
         ),
         preload: true,
@@ -283,7 +281,7 @@ class AudioPlayerManager {
     }
   }
 
-  /// ✅ NUEVO: Reconexión inmediata sin Timers (funciona en segundo plano)
+  /// ✅ Reconexión inmediata sin Timers (funciona en segundo plano)
   Future<void> _reconnectImmediately() async {
     if (_isDisposed || _userStoppedManually || _isRestarting) return;
 
@@ -338,7 +336,6 @@ class AudioPlayerManager {
       if (!_loadingController.isClosed) {
         _loadingController.add(_isLoading);
       }
-      // El siguiente cambio de estado intentará reconectar nuevamente
     }
   }
 
