@@ -68,7 +68,7 @@ class _NewsScreenState extends State<NewsScreen>
 
   void _onNewsScroll() {
     if (_newsScrollController.position.pixels >=
-        _newsScrollController.position.maxScrollExtent * 0.8 &&
+            _newsScrollController.position.maxScrollExtent * 0.8 &&
         !_isLoadingMoreNews &&
         _hasMoreNews) {
       _loadMoreNews();
@@ -321,10 +321,10 @@ class _NewsScreenState extends State<NewsScreen>
   }
 
   Widget _buildEmptyState(
-      ResponsiveHelper responsive,
-      IconData icon,
-      String message,
-      ) {
+    ResponsiveHelper responsive,
+    IconData icon,
+    String message,
+  ) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -348,11 +348,11 @@ class _NewsScreenState extends State<NewsScreen>
   }
 
   Widget _buildArticlesList(
-      ResponsiveHelper responsive,
-      List<Article> articles,
-      ScrollController scrollController,
-      bool isLoadingMore,
-      ) {
+    ResponsiveHelper responsive,
+    List<Article> articles,
+    ScrollController scrollController,
+    bool isLoadingMore,
+  ) {
     final padding = responsive.getValue(
       phone: 16.0,
       largePhone: 18.0,
@@ -384,7 +384,8 @@ class _NewsScreenState extends State<NewsScreen>
                 crossAxisCount: responsive.gridColumns,
                 crossAxisSpacing: padding,
                 mainAxisSpacing: padding,
-                childAspectRatio: 0.72, // ✅ Ajustado de 0.75 a 0.72 para dar más altura
+                childAspectRatio:
+                    0.72, // ✅ Ajustado de 0.75 a 0.72 para dar más altura
               ),
               itemCount: articles.length + (isLoadingMore ? 1 : 0),
               itemBuilder: (context, index) {
@@ -393,7 +394,11 @@ class _NewsScreenState extends State<NewsScreen>
                     child: CircularProgressIndicator(color: AppColors.primary),
                   );
                 }
-                return _buildArticleCard(articles[index], responsive, isGrid: true);
+                return _buildArticleCard(
+                  articles[index],
+                  responsive,
+                  isGrid: true,
+                );
               },
             ),
           ),
@@ -425,7 +430,11 @@ class _NewsScreenState extends State<NewsScreen>
           }
           return Padding(
             padding: EdgeInsets.only(bottom: padding),
-            child: _buildArticleCard(articles[index], responsive, isGrid: false),
+            child: _buildArticleCard(
+              articles[index],
+              responsive,
+              isGrid: false,
+            ),
           );
         },
       ),
@@ -495,9 +504,14 @@ class _NewsScreenState extends State<NewsScreen>
   }
 
   /// ✅ MÉTODO CORREGIDO - Evita overflow en tablets con Grid
-  Widget _buildArticleCard(Article article, ResponsiveHelper responsive, {required bool isGrid}) {
+  Widget _buildArticleCard(
+    Article article,
+    ResponsiveHelper responsive, {
+    required bool isGrid,
+  }) {
     // ✅ Detectar orientación
-    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     final borderRadius = responsive.getValue(
       phone: 12.0,
@@ -509,17 +523,17 @@ class _NewsScreenState extends State<NewsScreen>
     // ✅ Reducir padding en grid para ahorrar espacio
     final padding = isGrid
         ? responsive.getValue(
-      phone: 12.0,
-      largePhone: 12.0,
-      tablet: isLandscape ? 8.0 : 10.0,  // Aún menos padding en landscape
-      desktop: 12.0,
-    )
+            phone: 12.0,
+            largePhone: 12.0,
+            tablet: isLandscape ? 8.0 : 10.0, // Aún menos padding en landscape
+            desktop: 12.0,
+          )
         : responsive.getValue(
-      phone: 12.0,
-      largePhone: 14.0,
-      tablet: 16.0,
-      desktop: 18.0,
-    );
+            phone: 12.0,
+            largePhone: 14.0,
+            tablet: 16.0,
+            desktop: 18.0,
+          );
 
     return Card(
       color: AppColors.cardBackground,
@@ -532,7 +546,10 @@ class _NewsScreenState extends State<NewsScreen>
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ArticleDetailScreen(article: article),
+            builder: (context) => ArticleDetailScreen(
+              article: article,
+              audioManager: widget.audioManager,
+            ),
           ),
         ),
         child: Column(
@@ -540,61 +557,65 @@ class _NewsScreenState extends State<NewsScreen>
           children: [
             // ✅ Imagen con Expanded para usar espacio flexible
             Expanded(
-              flex: isGrid ? (isLandscape ? 7 : 6) : 0,  // Más imagen en landscape
+              flex: isGrid
+                  ? (isLandscape ? 7 : 6)
+                  : 0, // Más imagen en landscape
               child: article.imageUrl != null
                   ? Image.network(
-                article.imageUrl!,
-                height: isGrid ? null : responsive.getValue(
-                  phone: 180.0,
-                  largePhone: 200.0,
-                  tablet: 220.0,
-                  desktop: 240.0,
-                ),
-                width: double.infinity,
-                fit: BoxFit.cover,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Container(
-                    height: isGrid ? null : responsive.getValue(
-                      phone: 180.0,
-                      largePhone: 200.0,
-                      tablet: 220.0,
-                      desktop: 240.0,
-                    ),
-                    color: AppColors.primary.withValues(alpha: 0.1),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.primary,
-                        strokeWidth: 2,
+                      article.imageUrl!,
+                      height: isGrid
+                          ? null
+                          : responsive.getValue(
+                              phone: 180.0,
+                              largePhone: 200.0,
+                              tablet: 220.0,
+                              desktop: 240.0,
+                            ),
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          height: isGrid
+                              ? null
+                              : responsive.getValue(
+                                  phone: 180.0,
+                                  largePhone: 200.0,
+                                  tablet: 220.0,
+                                  desktop: 240.0,
+                                ),
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        height: isGrid
+                            ? null
+                            : responsive.getValue(phone: 180.0, tablet: 220.0),
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        child: Icon(
+                          Icons.image_not_supported,
+                          size: responsive.getValue(phone: 40.0, tablet: 48.0),
+                          color: AppColors.textSecondary.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    )
+                  : Container(
+                      height: isGrid
+                          ? null
+                          : responsive.getValue(phone: 180.0, tablet: 220.0),
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      child: Icon(
+                        Icons.article,
+                        size: responsive.getValue(phone: 50.0, tablet: 60.0),
+                        color: AppColors.primary.withValues(alpha: 0.3),
                       ),
                     ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) => Container(
-                  height: isGrid ? null : responsive.getValue(
-                    phone: 180.0,
-                    tablet: 220.0,
-                  ),
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  child: Icon(
-                    Icons.image_not_supported,
-                    size: responsive.getValue(phone: 40.0, tablet: 48.0),
-                    color: AppColors.textSecondary.withValues(alpha: 0.5),
-                  ),
-                ),
-              )
-                  : Container(
-                height: isGrid ? null : responsive.getValue(
-                  phone: 180.0,
-                  tablet: 220.0,
-                ),
-                color: AppColors.primary.withValues(alpha: 0.1),
-                child: Icon(
-                  Icons.article,
-                  size: responsive.getValue(phone: 50.0, tablet: 60.0),
-                  color: AppColors.primary.withValues(alpha: 0.3),
-                ),
-              ),
             ),
 
             // ✅ Contenido de texto con Expanded en grid
@@ -615,7 +636,7 @@ class _NewsScreenState extends State<NewsScreen>
                           style: TextStyle(
                             fontSize: responsive.getValue(
                               phone: 14.0,
-                              tablet: 13.0,  // Reducido para tablets
+                              tablet: 13.0, // Reducido para tablets
                               desktop: 14.0,
                             ),
                             fontWeight: FontWeight.bold,
@@ -638,7 +659,7 @@ class _NewsScreenState extends State<NewsScreen>
                             Icons.access_time,
                             size: responsive.getValue(
                               phone: 12.0,
-                              tablet: 11.0,  // Reducido para tablets
+                              tablet: 11.0, // Reducido para tablets
                               desktop: 12.0,
                             ),
                             color: AppColors.textSecondary,
@@ -650,7 +671,7 @@ class _NewsScreenState extends State<NewsScreen>
                               style: TextStyle(
                                 fontSize: responsive.getValue(
                                   phone: 11.0,
-                                  tablet: 10.0,  // Reducido para tablets
+                                  tablet: 10.0, // Reducido para tablets
                                   desktop: 11.0,
                                 ),
                                 color: AppColors.textSecondary,
@@ -665,7 +686,7 @@ class _NewsScreenState extends State<NewsScreen>
                 ),
               )
             else
-            // Contenido normal para ListView
+              // Contenido normal para ListView
               Padding(
                 padding: EdgeInsets.all(padding),
                 child: Column(
@@ -782,45 +803,45 @@ class _NewsScreenState extends State<NewsScreen>
                 borderRadius: BorderRadius.circular(borderRadius * 0.7),
                 child: category.imageUrl != null
                     ? Image.network(
-                  category.imageUrl!,
-                  width: imageSize,
-                  height: imageSize,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    width: imageSize,
-                    height: imageSize,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppColors.primary.withValues(alpha: 0.2),
-                          AppColors.primary.withValues(alpha: 0.05),
-                        ],
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.label,
-                      color: AppColors.primary,
-                      size: imageSize * 0.5,
-                    ),
-                  ),
-                )
+                        category.imageUrl!,
+                        width: imageSize,
+                        height: imageSize,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          width: imageSize,
+                          height: imageSize,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                AppColors.primary.withValues(alpha: 0.2),
+                                AppColors.primary.withValues(alpha: 0.05),
+                              ],
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.label,
+                            color: AppColors.primary,
+                            size: imageSize * 0.5,
+                          ),
+                        ),
+                      )
                     : Container(
-                  width: imageSize,
-                  height: imageSize,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.primary.withValues(alpha: 0.2),
-                        AppColors.primary.withValues(alpha: 0.05),
-                      ],
-                    ),
-                  ),
-                  child: Icon(
-                    Icons.label,
-                    color: AppColors.primary,
-                    size: imageSize * 0.5,
-                  ),
-                ),
+                        width: imageSize,
+                        height: imageSize,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              AppColors.primary.withValues(alpha: 0.2),
+                              AppColors.primary.withValues(alpha: 0.05),
+                            ],
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.label,
+                          color: AppColors.primary,
+                          size: imageSize * 0.5,
+                        ),
+                      ),
               ),
               SizedBox(width: responsive.spacing(16)),
               Expanded(
@@ -919,12 +940,30 @@ class _NewsScreenState extends State<NewsScreen>
                   borderRadius: BorderRadius.circular(borderRadius * 0.7),
                   child: hit.imageUrl != null
                       ? Image.network(
-                    hit.imageUrl!,
-                    width: imageSize,
-                    height: imageSize,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                        Container(
+                          hit.imageUrl!,
+                          width: imageSize,
+                          height: imageSize,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                width: imageSize,
+                                height: imageSize,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      positionColor.withValues(alpha: 0.3),
+                                      positionColor.withValues(alpha: 0.1),
+                                    ],
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.album,
+                                  color: positionColor,
+                                  size: imageSize * 0.5,
+                                ),
+                              ),
+                        )
+                      : Container(
                           width: imageSize,
                           height: imageSize,
                           decoration: BoxDecoration(
@@ -941,24 +980,6 @@ class _NewsScreenState extends State<NewsScreen>
                             size: imageSize * 0.5,
                           ),
                         ),
-                  )
-                      : Container(
-                    width: imageSize,
-                    height: imageSize,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          positionColor.withValues(alpha: 0.3),
-                          positionColor.withValues(alpha: 0.1),
-                        ],
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.album,
-                      color: positionColor,
-                      size: imageSize * 0.5,
-                    ),
-                  ),
                 ),
                 Positioned(
                   top: 0,
@@ -1112,7 +1133,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
 
   void _onScroll() {
     if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent * 0.8 &&
+            _scrollController.position.maxScrollExtent * 0.8 &&
         !_isLoadingMore &&
         _hasMore) {
       _loadMoreArticles();
@@ -1330,7 +1351,10 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ArticleDetailScreen(article: article),
+            builder: (context) => ArticleDetailScreen(
+              article: article,
+              audioManager: widget.audioManager,
+            ),
           ),
         ),
         child: Column(

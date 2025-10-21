@@ -21,8 +21,11 @@ class Article {
   /// Lista de IDs de categorías asociadas al artículo
   final List<int> categories;
 
-  /// URL de la imagen destacada del artículo (opcional)
+  /// URL de la imagen destacada del artículo
   final String? imageUrl;
+
+  /// URL del archivo de audio del artículo
+  final String? audioUrl;
 
   /// Constructor de la clase Article
   Article({
@@ -34,13 +37,14 @@ class Article {
     required this.date,
     this.categories = const [],
     this.imageUrl,
+    this.audioUrl,
   });
 
   /// Crea una instancia de Article desde un JSON
   ///
   /// Parsea los datos de la API REST de WordPress,
   /// limpia el HTML de los campos de texto y extrae
-  /// la URL de la imagen destacada si está disponible
+  /// la URL de la imagen destacada y el audio si están disponibles
   factory Article.fromJson(Map<String, dynamic> json) {
     return Article(
       id: json['id'] as int,
@@ -55,7 +59,192 @@ class Article {
               .toList() ??
           [],
       imageUrl: _extractImageUrl(json),
+      audioUrl: _extractAudioUrl(json),
     );
+  }
+
+  /// Extrae la URL del archivo de audio del artículo
+  ///
+  /// Busca el audio en diferentes fuentes en orden de prioridad:
+  /// 1. Campo personalizado 'audio_url' o 'audio'
+  /// 2. ACF (Advanced Custom Fields) si está disponible
+  /// 3. Meta fields del post
+  /// 4. Archivos adjuntos de tipo audio
+  /// 5. Dentro del contenido HTML (tags <audio>, <source>, URLs directas)
+  /// 6. Shortcodes de WordPress [audio]
+  /// 7. Enclosures (usado por podcasts)
+  ///
+  /// Retorna la URL del audio si se encuentra, null en caso contrario
+  static String? _extractAudioUrl(Map<String, dynamic> json) {
+    try {
+      // 1. Campo personalizado directo
+      if (json['audio_url'] != null) {
+        return json['audio_url'] as String?;
+      }
+
+      if (json['audio'] != null) {
+        return json['audio'] as String?;
+      }
+
+      // 2. ACF (Advanced Custom Fields)
+      if (json['acf'] != null) {
+        final acf = json['acf'];
+
+        // ACF puede ser un Map o una List vacía
+        if (acf is Map<String, dynamic>) {
+          if (acf['audio_url'] != null) {
+            return acf['audio_url'] as String?;
+          }
+          if (acf['audio'] != null) {
+            final audio = acf['audio'];
+            // Puede ser un string o un objeto
+            if (audio is String) {
+              return audio;
+            } else if (audio is Map<String, dynamic> && audio['url'] != null) {
+              return audio['url'] as String?;
+            }
+          }
+        }
+      }
+
+      // 3. Meta fields
+      if (json['meta'] != null) {
+        final meta = json['meta'];
+
+        if (meta is Map<String, dynamic>) {
+          if (meta['audio_url'] != null) {
+            return meta['audio_url'] as String?;
+          }
+        }
+      }
+
+      // 4. Archivos adjuntos embebidos de tipo audio
+      if (json['_embedded'] != null) {
+        final embedded = json['_embedded'] as Map<String, dynamic>;
+
+        // Buscar en wp:attachment
+        if (embedded['wp:attachment'] != null) {
+          final attachments = embedded['wp:attachment'] as List<dynamic>;
+          for (var attachment in attachments) {
+            if (attachment is Map<String, dynamic>) {
+              final mimeType = attachment['mime_type'] as String?;
+              if (mimeType != null && mimeType.startsWith('audio/')) {
+                return attachment['source_url'] as String?;
+              }
+            }
+          }
+        }
+      }
+
+      // 5. Enclosures (usado por podcasts y RSS)
+      if (json['enclosure'] != null) {
+        final enclosure = json['enclosure'];
+        if (enclosure is String && enclosure.isNotEmpty) {
+          return enclosure;
+        } else if (enclosure is List && enclosure.isNotEmpty) {
+          final firstEnclosure = enclosure[0];
+          if (firstEnclosure is String) {
+            return firstEnclosure;
+          }
+        }
+      }
+
+      // 6. Buscar en el contenido HTML
+      if (json['content'] != null && json['content']['rendered'] != null) {
+        final content = json['content']['rendered'] as String;
+
+        // Buscar tag <audio> con src
+        final audioTagRegex = RegExp(
+          r'<audio[^>]+src=["'
+          "'"
+          r']([^"'
+          "'"
+          r']+)["'
+          "'"
+          r']',
+          caseSensitive: false,
+        );
+        final audioTagMatch = audioTagRegex.firstMatch(content);
+        if (audioTagMatch != null && audioTagMatch.group(1) != null) {
+          return audioTagMatch.group(1)!;
+        }
+
+        // Buscar tag <source> dentro de <audio> con comillas dobles
+        RegExp sourceTagRegex = RegExp(
+          r'<source[^>]+src="([^"]+\.(?:mp3|wav|ogg|m4a|aac))"',
+          caseSensitive: false,
+        );
+        Match? sourceTagMatch = sourceTagRegex.firstMatch(content);
+
+        // Si no encuentra con comillas dobles, buscar con comillas simples
+        if (sourceTagMatch == null) {
+          sourceTagRegex = RegExp(
+            r"<source[^>]+src='([^']+\.(?:mp3|wav|ogg|m4a|aac))'",
+            caseSensitive: false,
+          );
+          sourceTagMatch = sourceTagRegex.firstMatch(content);
+        }
+
+        if (sourceTagMatch != null && sourceTagMatch.group(1) != null) {
+          return sourceTagMatch.group(1)!;
+        }
+
+        // Buscar URLs directas de audio en el contenido
+        final directUrlRegex = RegExp(
+          r'https?://[^\s<>"]+\.(?:mp3|wav|ogg|m4a|aac)',
+          caseSensitive: false,
+        );
+        final directUrlMatch = directUrlRegex.firstMatch(content);
+        if (directUrlMatch != null) {
+          return directUrlMatch.group(0)!;
+        }
+
+        // Buscar shortcode de WordPress [audio src="..."]
+        RegExp shortcodeRegex = RegExp(
+          r'\[audio[^\]]*src="([^"]+)"[^\]]*\]',
+          caseSensitive: false,
+        );
+        Match? shortcodeMatch = shortcodeRegex.firstMatch(content);
+
+        // Si no encuentra con comillas dobles, buscar con comillas simples
+        if (shortcodeMatch == null) {
+          shortcodeRegex = RegExp(
+            r"\[audio[^\]]*src='([^']+)'[^\]]*\]",
+            caseSensitive: false,
+          );
+          shortcodeMatch = shortcodeRegex.firstMatch(content);
+        }
+
+        if (shortcodeMatch != null && shortcodeMatch.group(1) != null) {
+          return shortcodeMatch.group(1)!;
+        }
+
+        // Buscar player de Podlove
+        RegExp podloveRegex = RegExp(
+          r'data-episode-src="([^"]+)"',
+          caseSensitive: false,
+        );
+        Match? podloveMatch = podloveRegex.firstMatch(content);
+
+        // Si no encuentra con comillas dobles, buscar con comillas simples
+        if (podloveMatch == null) {
+          podloveRegex = RegExp(
+            r"data-episode-src='([^']+)'",
+            caseSensitive: false,
+          );
+          podloveMatch = podloveRegex.firstMatch(content);
+        }
+
+        if (podloveMatch != null && podloveMatch.group(1) != null) {
+          return podloveMatch.group(1)!;
+        }
+      }
+
+      // No se encontró audio en ninguna fuente
+      return null;
+    } catch (e) {
+      return null;
+    }
   }
 
   /// Extrae la URL de la imagen destacada del artículo
@@ -167,6 +356,7 @@ class Article {
       'date': date.toIso8601String(),
       'categories': categories,
       'imageUrl': imageUrl,
+      'audioUrl': audioUrl,
     };
   }
 }
