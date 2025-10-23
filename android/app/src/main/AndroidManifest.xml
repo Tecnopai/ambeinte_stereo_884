@@ -53,6 +53,14 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+
+            <meta-data
+                android:name="google_analytics_automatic_screen_reporting_enabled"
+                android:value="true" />
+    
+            <meta-data
+                android:name="google_analytics_default_allow_analytics_storage"
+                android:value="true" />
             
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'theme/app_theme.dart';
 import '../services/audio_player_manager.dart';
 import '../screens/splash_screen.dart';
@@ -22,6 +23,12 @@ class _AmbientStereoAppState extends State<AmbientStereoApp> {
   /// instancia del reproductor de audio
   late final AudioPlayerManager _audioManager;
 
+  // Analytics
+  static FirebaseAnalytics analytics = FirebaseAnalytics.instance;
+  static FirebaseAnalyticsObserver observer = FirebaseAnalyticsObserver(
+    analytics: analytics,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +50,7 @@ class _AmbientStereoAppState extends State<AmbientStereoApp> {
       theme: AppTheme.darkTheme,
       debugShowCheckedModeBanner: false,
       // Pasar la instancia del audioManager al SplashScreen
+      navigatorObservers: [observer],
       home: SplashScreen(audioManager: _audioManager),
     );
   }

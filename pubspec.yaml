@@ -33,8 +33,9 @@ dependencies:
   webview_flutter: ^4.2.2
   
   # Firebase
-  firebase_core: ^4.1.1
   cloud_firestore: ^6.0.2
+  firebase_core: ^4.2.0
+  firebase_analytics: ^12.0.3
 
   # Icons
   cupertino_icons: ^1.0.8
@@ -47,6 +48,8 @@ dependencies:
 
   # Compartir contenido
   share_plus: ^7.2.1
+
+  logger: ^2.0.0
 
 dev_dependencies:
   flutter_test:
