@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import '../models/article.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
@@ -34,21 +35,26 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   bool _hasError = false;
   String? _errorMessage;
   bool _isStreamingPlaying = false;
+  final analytics = FirebaseAnalytics.instance;
 
   @override
   void initState() {
     super.initState();
 
-    // ===== DEBUG TEMPORAL =====
-    debugPrint('🔴 ArticleDetailScreen initState');
-    debugPrint('🔴 audioManager: ${widget.audioManager}');
-    debugPrint('🔴 audioManager != null: ${widget.audioManager != null}');
-    if (widget.audioManager != null) {
-      debugPrint(
-        '🔴 audioManager.isPlaying: ${widget.audioManager!.isPlaying}',
-      );
-    }
-    // ==========================
+    // analitica
+    analytics.logScreenView(
+      screenName: 'article_detail',
+      screenClass: 'ArticleDetailScreen',
+    );
+
+    // (registrar lectura)
+    analytics.logEvent(
+      name: 'article_view',
+      parameters: {
+        'article_id': widget.article.id,
+        'article_title': widget.article.title,
+      },
+    );
 
     _initializeAudio();
     _setupStreamingListener();

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:volume_controller/volume_controller.dart';
 import '../services/audio_player_manager.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
@@ -75,6 +76,13 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
         } else {
           _slideController.reverse();
         }
+        //Escuchar botones físicos
+        VolumeController.instance.addListener((volume) {
+          if (mounted) {
+            setState(() => _volume = volume);
+            widget.audioManager.setVolume(volume);
+          }
+        });
       }
     });
 

@@ -5,7 +5,7 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 class FirebaseConnectionCheckScreen extends StatelessWidget {
   const FirebaseConnectionCheckScreen({super.key});
 
-  // Función que envía un evento de prueba a Firebase Analytics
+  // Función que envía un evento de prueba a Firebase Analytics (Temporal)
   void _sendTestEvent() {
     try {
       // 1. Enviamos el evento de prueba

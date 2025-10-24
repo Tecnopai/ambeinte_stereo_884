@@ -257,7 +257,7 @@ class Article {
   /// Retorna la URL de la imagen si se encuentra, null en caso contrario
   static String? _extractImageUrl(Map<String, dynamic> json) {
     try {
-      // Opción 1: Obtener desde datos embebidos (_embed)
+      // Obtener desde datos embebidos (_embed)
       if (json['_embedded'] != null) {
         final embedded = json['_embedded'] as Map<String, dynamic>;
         if (embedded['wp:featuredmedia'] != null) {
@@ -286,7 +286,7 @@ class Article {
         }
       }
 
-      // Opción 2: URL directa de Jetpack (si está disponible)
+      // URL directa de Jetpack (si está disponible)
       if (json['jetpack_featured_media_url'] != null) {
         return json['jetpack_featured_media_url'] as String;
       }

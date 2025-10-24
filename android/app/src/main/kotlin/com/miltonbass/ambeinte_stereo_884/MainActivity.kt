@@ -1,6 +1,6 @@
 package com.miltonbass.ambeinte_stereo_884
 
-import com.ryanheise.audioservice.AudioServiceActivity
+import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import android.os.Bundle
@@ -11,7 +11,7 @@ import android.net.Uri
 import android.provider.Settings
 import android.os.Build
 
-class MainActivity: AudioServiceActivity() {
+class MainActivity: FlutterActivity() {
     private var wakeLock: PowerManager.WakeLock? = null
     private val CHANNEL = "com.miltonbass.ambeinte_stereo_884/wakelock"
 

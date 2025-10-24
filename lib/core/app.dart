@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'theme/app_theme.dart';
-import '../services/audio_player_manager.dart';
 import '../screens/splash_screen.dart';
 
 /// Widget raíz de la aplicación Ambiente Stereo
-///
-/// Gestiona la inicialización del AudioPlayerManager y configura
-/// el MaterialApp con el tema y la pantalla inicial
 class AmbientStereoApp extends StatefulWidget {
   const AmbientStereoApp({super.key});
 
@@ -15,14 +11,9 @@ class AmbientStereoApp extends StatefulWidget {
   State<AmbientStereoApp> createState() => _AmbientStereoAppState();
 }
 
-class _AmbientStereoAppState extends State<AmbientStereoApp> {
-  /// Instancia única del gestor de reproducción de audio
-  ///
-  /// Se inicializa en initState y se mantiene durante toda
-  /// la vida de la aplicación para garantizar una única
-  /// instancia del reproductor de audio
-  late final AudioPlayerManager _audioManager;
-
+// WidgetsBindingObserver para escuchar eventos de la app
+class _AmbientStereoAppState extends State<AmbientStereoApp>
+    with WidgetsBindingObserver {
   // Analytics
   static FirebaseAnalytics analytics = FirebaseAnalytics.instance;
   static FirebaseAnalyticsObserver observer = FirebaseAnalyticsObserver(
@@ -33,14 +24,26 @@ class _AmbientStereoAppState extends State<AmbientStereoApp> {
   void initState() {
     super.initState();
 
-    // Inicializar el AudioPlayerManager singleton
-    _audioManager = AudioPlayerManager();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Ahora sí, llamar a init() (que contiene la lógica de play())
-      _audioManager.init();
-    });
+    // Registra esta clase para que escuche el ciclo de vida de la app
+    WidgetsBinding.instance.addObserver(this);
 
-    //_audioManager.init();
+    // El singleton se inicializa automáticamente cuando cualquier pantalla lo necesite
+  }
+
+  // Limpia el observador cuando la app se cierre
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // Se ejecuta cada vez que la app cambia de estado
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Si la app vuelve a primer plano, enviamos un evento para mantener al usuario activo
+    if (state == AppLifecycleState.resumed) {
+      analytics.logEvent(name: 'app_resumed');
+    }
   }
 
   @override
@@ -49,9 +52,9 @@ class _AmbientStereoAppState extends State<AmbientStereoApp> {
       title: 'Ambiente Stereo 88.4 FM',
       theme: AppTheme.darkTheme,
       debugShowCheckedModeBanner: false,
-      // Pasar la instancia del audioManager al SplashScreen
+      // Observer de Firebase Analytics
       navigatorObservers: [observer],
-      home: SplashScreen(audioManager: _audioManager),
+      home: const SplashScreen(),
     );
   }
 }

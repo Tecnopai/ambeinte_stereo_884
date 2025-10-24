@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/audio_player_manager.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'radio_player_screen.dart';
 import 'news_screen.dart';
 import 'about_screen.dart';
@@ -8,10 +8,10 @@ import '../utils/responsive_helper.dart';
 enum NavigationType { bottom, rail }
 
 /// Pantalla principal mejorada con navegación adaptativa
+///  Usa AudioPlayerManager singleton
 class MainScreen extends StatefulWidget {
-  final AudioPlayerManager audioManager;
-
-  const MainScreen({super.key, required this.audioManager});
+  // audioManager ya no es requerido como parámetro
+  const MainScreen({super.key});
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -22,17 +22,17 @@ class _MainScreenState extends State<MainScreen> {
   final PageController _pageController = PageController();
   late List<Widget> _screens;
   late List<NavigationItem> _navigationItems;
+  final analytics = FirebaseAnalytics.instance;
 
   @override
   void initState() {
     super.initState();
+    // ananlitica
+    analytics.logScreenView(screenName: 'main', screenClass: 'MainScreen');
 
-    // Inicializar las pantallas usando el audioManager compartido
-    _screens = [
-      RadioPlayerScreen(audioManager: widget.audioManager),
-      NewsScreen(audioManager: widget.audioManager),
-      AboutScreen(audioManager: widget.audioManager),
-    ];
+    // Las pantallas ya no reciben audioManager como parámetro
+    // Cada una obtiene el singleton internamente
+    _screens = const [RadioPlayerScreen(), NewsScreen(), AboutScreen()];
 
     _navigationItems = [
       NavigationItem(

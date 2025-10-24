@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
 import 'package:flutter/gestures.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import '../services/audio_player_manager.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/live_indicator.dart';
@@ -14,9 +15,7 @@ import '../utils/responsive_helper.dart';
 /// Pantalla "Acerca de" que muestra información sobre la aplicación y la emisora
 /// Incluye logo, descripción, versión, enlaces web y soporte
 class AboutScreen extends StatefulWidget {
-  final AudioPlayerManager audioManager;
-
-  const AboutScreen({super.key, required this.audioManager});
+  const AboutScreen({super.key});
 
   @override
   State<AboutScreen> createState() => _AboutScreenState();
@@ -24,12 +23,18 @@ class AboutScreen extends StatefulWidget {
 
 class _AboutScreenState extends State<AboutScreen> {
   String _version = 'Cargando...';
+  late final AudioPlayerManager _audioManager;
   List<Widget> _aboutContent = [];
   bool _isLoadingContent = true;
+  final analytics = FirebaseAnalytics.instance;
 
   @override
   void initState() {
     super.initState();
+    // ananlitica
+    analytics.logScreenView(screenName: 'about', screenClass: 'AboutScreen');
+    // obtener singleton
+    _audioManager = AudioPlayerManager();
     _loadVersion();
     _loadAboutContent();
   }
@@ -279,8 +284,8 @@ class _AboutScreenState extends State<AboutScreen> {
     final responsive = ResponsiveHelper(context);
 
     return StreamBuilder<bool>(
-      stream: widget.audioManager.playingStream,
-      initialData: widget.audioManager.isPlaying,
+      stream: _audioManager.playingStream,
+      initialData: _audioManager.isPlaying,
       builder: (context, snapshot) {
         final isPlaying = snapshot.data ?? false;
 
@@ -330,7 +335,7 @@ class _AboutScreenState extends State<AboutScreen> {
                   bottom: 16,
                   left: 16,
                   right: 16,
-                  child: MiniPlayer(audioManager: widget.audioManager),
+                  child: MiniPlayer(audioManager: _audioManager),
                 ),
             ],
           ),

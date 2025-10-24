@@ -2,7 +2,7 @@ name: ambeinte_stereo_884
 description: "Ambiente Stereo 884"
 publish_to: 'none'
 
-version: 2.0.6+10
+version: 2.0.8+12
 
 environment:
   sdk: ^3.8.1
@@ -13,30 +13,30 @@ dependencies:
 
   # Audio
   volume_controller: ^3.4.0
-  audio_session: ^0.1.18
+  audio_session: ^0.2.2
   just_audio: ^0.10.5 
 
   # Controles en pantalla de bloqueo y notificaciones
-  audio_service: ^0.18.15
   rxdart: ^0.28.0 
 
   # HTTP
-  http: ^1.1.0
+  http: ^1.2.2
 
   # HTML Parsing
   html: ^0.15.4
   
   # URL Launcher
-  url_launcher: ^6.2.4
+  url_launcher: ^6.3.1
   
   # WebView
-  webview_flutter: ^4.2.2
+  webview_flutter: ^4.4.0
   
   # Firebase
-  cloud_firestore: ^6.0.2
+  cloud_firestore: ^6.0.3
   firebase_core: ^4.2.0
   firebase_analytics: ^12.0.3
-
+  firebase_remote_config: ^6.1.0
+  
   # Icons
   cupertino_icons: ^1.0.8
 

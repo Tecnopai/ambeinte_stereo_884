@@ -13,8 +13,7 @@ import '../utils/responsive_helper.dart';
 
 /// Pantalla principal de noticias mejorada con Radio Hits
 class NewsScreen extends StatefulWidget {
-  final AudioPlayerManager audioManager;
-  const NewsScreen({super.key, required this.audioManager});
+  const NewsScreen({super.key});
 
   @override
   State<NewsScreen> createState() => _NewsScreenState();
@@ -24,6 +23,7 @@ class _NewsScreenState extends State<NewsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final NewsService _newsService = NewsService();
+  late final AudioPlayerManager _audioManager;
   final RadioHitsService _radioHitsService = RadioHitsService();
 
   List<Article> _articles = [];
@@ -44,6 +44,7 @@ class _NewsScreenState extends State<NewsScreen>
   @override
   void initState() {
     super.initState();
+    _audioManager = AudioPlayerManager();
     _tabController = TabController(length: 3, vsync: this);
     _loadArticles();
     _loadCategories();
@@ -60,10 +61,10 @@ class _NewsScreenState extends State<NewsScreen>
   }
 
   void _setupAudioListener() {
-    widget.audioManager.playingStream.listen((isPlaying) {
+    _audioManager.playingStream.listen((isPlaying) {
       if (mounted) setState(() => _isPlaying = isPlaying);
     });
-    _isPlaying = widget.audioManager.isPlaying;
+    _isPlaying = _audioManager.isPlaying;
   }
 
   void _onNewsScroll() {
@@ -212,7 +213,7 @@ class _NewsScreenState extends State<NewsScreen>
               bottom: 16,
               left: 16,
               right: 16,
-              child: MiniPlayer(audioManager: widget.audioManager),
+              child: MiniPlayer(audioManager: _audioManager),
             ),
         ],
       ),
@@ -503,13 +504,13 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
-  /// ✅ MÉTODO CORREGIDO - Evita overflow en tablets con Grid
+  /// Evita overflow en tablets con Grid
   Widget _buildArticleCard(
     Article article,
     ResponsiveHelper responsive, {
     required bool isGrid,
   }) {
-    // ✅ Detectar orientación
+    // Detectar orientación
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
@@ -520,7 +521,7 @@ class _NewsScreenState extends State<NewsScreen>
       desktop: 18.0,
     );
 
-    // ✅ Reducir padding en grid para ahorrar espacio
+    // Reducir padding en grid para ahorrar espacio
     final padding = isGrid
         ? responsive.getValue(
             phone: 12.0,
@@ -548,14 +549,14 @@ class _NewsScreenState extends State<NewsScreen>
           MaterialPageRoute(
             builder: (context) => ArticleDetailScreen(
               article: article,
-              audioManager: widget.audioManager,
+              audioManager: _audioManager,
             ),
           ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ✅ Imagen con Expanded para usar espacio flexible
+            //  Imagen con Expanded para usar espacio flexible
             Expanded(
               flex: isGrid
                   ? (isLandscape ? 7 : 6)
@@ -618,7 +619,7 @@ class _NewsScreenState extends State<NewsScreen>
                     ),
             ),
 
-            // ✅ Contenido de texto con Expanded en grid
+            // Contenido de texto con Expanded en grid
             if (isGrid)
               Expanded(
                 flex: 4,
@@ -791,7 +792,7 @@ class _NewsScreenState extends State<NewsScreen>
           MaterialPageRoute(
             builder: (context) => CategoryNewsScreen(
               category: category,
-              audioManager: widget.audioManager,
+              audioManager: _audioManager,
             ),
           ),
         ),
@@ -1102,6 +1103,7 @@ class CategoryNewsScreen extends StatefulWidget {
 class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
   final NewsService _newsService = NewsService();
   final ScrollController _scrollController = ScrollController();
+  final AudioPlayerManager _audioManager = AudioPlayerManager();
 
   List<Article> _articles = [];
   bool _isLoading = true;
@@ -1125,10 +1127,10 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
   }
 
   void _setupAudioListener() {
-    widget.audioManager.playingStream.listen((isPlaying) {
+    _audioManager.playingStream.listen((isPlaying) {
       if (mounted) setState(() => _isPlaying = isPlaying);
     });
-    _isPlaying = widget.audioManager.isPlaying;
+    _isPlaying = _audioManager.isPlaying;
   }
 
   void _onScroll() {
@@ -1224,7 +1226,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
               bottom: 16,
               left: 16,
               right: 16,
-              child: MiniPlayer(audioManager: widget.audioManager),
+              child: MiniPlayer(audioManager: _audioManager),
             ),
         ],
       ),
@@ -1353,7 +1355,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
           MaterialPageRoute(
             builder: (context) => ArticleDetailScreen(
               article: article,
-              audioManager: widget.audioManager,
+              audioManager: _audioManager,
             ),
           ),
         ),

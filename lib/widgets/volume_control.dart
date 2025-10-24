@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:volume_controller/volume_controller.dart';
 import '../core/theme/app_colors.dart';
 import '../services/audio_player_manager.dart';
 import '../utils/responsive_helper.dart';
@@ -25,10 +26,8 @@ class _VolumeControlState extends State<VolumeControl> {
   @override
   void initState() {
     super.initState();
-    // Inicializar con el volumen actual del manager
     _localVolume = widget.audioManager.volume;
 
-    // Escuchar cambios del stream de volumen
     widget.audioManager.volumeStream.listen((volume) {
       if (mounted) {
         setState(() {
@@ -36,6 +35,22 @@ class _VolumeControlState extends State<VolumeControl> {
         });
       }
     });
+
+    _syncWithSystemVolume();
+
+    // El listener recibe el volumen directamente
+    VolumeController.instance.addListener((volume) {
+      if (mounted) {
+        setState(() => _localVolume = volume);
+        widget.audioManager.setVolume(volume);
+      }
+    });
+  }
+
+  Future<void> _syncWithSystemVolume() async {
+    final systemVolume = await VolumeController.instance.getVolume();
+    setState(() => _localVolume = systemVolume);
+    widget.audioManager.setVolume(systemVolume);
   }
 
   /// Retorna el icono apropiado según el nivel de volumen

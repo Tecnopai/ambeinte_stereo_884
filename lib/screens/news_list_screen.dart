@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import '../models/article.dart';
 import '../models/category.dart';
 import '../services/news_service.dart';
@@ -19,6 +20,7 @@ class NewsListScreen extends StatefulWidget {
 class _NewsListScreenState extends State<NewsListScreen> {
   final NewsService _newsService = NewsService();
   final ScrollController _scrollController = ScrollController();
+  final analytics = FirebaseAnalytics.instance; // ✅ AGREGADO
 
   List<Article> _articles = [];
   bool _isLoading = true;
@@ -30,6 +32,13 @@ class _NewsListScreenState extends State<NewsListScreen> {
   @override
   void initState() {
     super.initState();
+
+    // Registrar vista de pantalla
+    analytics.logScreenView(
+      screenName: 'news_list',
+      screenClass: 'NewsListScreen',
+    );
+
     _loadArticles();
     _scrollController.addListener(_onScroll);
   }
@@ -377,6 +386,15 @@ class _NewsListScreenState extends State<NewsListScreen> {
       ),
       child: InkWell(
         onTap: () {
+          // Registrar evento antes de navegar
+          analytics.logEvent(
+            name: 'article_open',
+            parameters: {
+              'article_id': article.id,
+              'article_title': article.title,
+            },
+          );
+
           Navigator.push(
             context,
             MaterialPageRoute(

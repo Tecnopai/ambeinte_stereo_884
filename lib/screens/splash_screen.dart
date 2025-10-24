@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
-import '../services/audio_player_manager.dart';
 import '../utils/responsive_helper.dart';
 import 'main_screen.dart';
 
@@ -8,10 +7,7 @@ import 'main_screen.dart';
 /// Muestra el logo, nombre de la emisora y un indicador de carga
 /// Se presenta al iniciar la aplicación antes de navegar a la pantalla principal
 class SplashScreen extends StatefulWidget {
-  // Instancia del gestor de audio compartida con toda la aplicación
-  final AudioPlayerManager audioManager;
-
-  const SplashScreen({super.key, required this.audioManager});
+  const SplashScreen({super.key});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -100,7 +96,7 @@ class _SplashScreenState extends State<SplashScreen>
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) =>
-              MainScreen(audioManager: widget.audioManager),
+              const MainScreen(),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },

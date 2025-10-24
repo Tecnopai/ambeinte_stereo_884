@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_analytics/firebase_analytics.dart'; // ✅ AGREGADO
 import '../services/audio_player_manager.dart';
 import '../widgets/animated_disc.dart';
 import '../widgets/volume_control.dart';
@@ -10,9 +11,8 @@ import '../utils/responsive_helper.dart';
 /// Muestra controles de reproducción, animaciones visuales y estado de conexión
 /// Incluye disco animado, ondas de sonido y control de volumen
 class RadioPlayerScreen extends StatefulWidget {
-  final AudioPlayerManager audioManager;
-
-  const RadioPlayerScreen({super.key, required this.audioManager});
+  // usa el singleton
+  const RadioPlayerScreen({super.key});
 
   @override
   State<RadioPlayerScreen> createState() => _RadioPlayerScreenState();
@@ -20,6 +20,10 @@ class RadioPlayerScreen extends StatefulWidget {
 
 class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     with TickerProviderStateMixin {
+  // Obtener instancia singleton del AudioPlayerManager
+  late final AudioPlayerManager _audioManager;
+  final analytics = FirebaseAnalytics.instance;
+
   // Estado de reproducción actual
   bool _isPlaying = true;
 
@@ -32,6 +36,15 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   @override
   void initState() {
     super.initState();
+
+    // Registrar vista de pantalla
+    analytics.logScreenView(
+      screenName: 'radio_player',
+      screenClass: 'RadioPlayerScreen',
+    );
+
+    // Obtener singleton en initState
+    _audioManager = AudioPlayerManager();
     _setupListeners();
     _initializeStates();
   }
@@ -39,7 +52,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   /// Configura los listeners para los diferentes streams del audio manager
   void _setupListeners() {
     // Listener de reproducción
-    widget.audioManager.playingStream.listen((isPlaying) {
+    _audioManager.playingStream.listen((isPlaying) {
       if (mounted) {
         setState(() {
           _isPlaying = isPlaying;
@@ -48,7 +61,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     });
 
     // Listener de carga
-    widget.audioManager.loadingStream.listen((isLoading) {
+    _audioManager.loadingStream.listen((isLoading) {
       if (mounted) {
         setState(() {
           _isLoading = isLoading;
@@ -57,54 +70,62 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     });
 
     // Listener de errores y reconexiones
-    widget.audioManager.errorStream.listen((error) {
+    _audioManager.errorStream.listen((error) {
       if (mounted) {
         setState(() {
           _errorMessage = error;
         });
 
         // Mostrar SnackBar con el estado de error o reconexión
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                if (error.contains('Reconectado'))
-                  const Icon(Icons.check_circle, color: Colors.white)
-                else
-                  const Icon(Icons.info, color: Colors.white),
-                const SizedBox(width: 8),
-                Expanded(child: Text(error)),
-              ],
+        if (error.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  if (error.contains('Reconectado'))
+                    const Icon(Icons.check_circle, color: Colors.white)
+                  else
+                    const Icon(Icons.info, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(error)),
+                ],
+              ),
+              backgroundColor: error.contains('Reconectado')
+                  ? AppColors.success
+                  : AppColors.warning,
+              duration: const Duration(seconds: 3),
             ),
-            backgroundColor: error.contains('Reconectado')
-                ? AppColors.success
-                : AppColors.warning,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+          );
 
-        // Limpiar mensaje después de 3 segundos
-        Future.delayed(const Duration(seconds: 3), () {
-          if (mounted) {
-            setState(() {
-              _errorMessage = null;
-            });
-          }
-        });
+          // Limpiar mensaje después de 3 segundos
+          Future.delayed(const Duration(seconds: 3), () {
+            if (mounted) {
+              setState(() {
+                _errorMessage = null;
+              });
+            }
+          });
+        }
       }
     });
   }
 
   /// Inicializa los estados desde el audio manager
   void _initializeStates() {
-    _isPlaying = widget.audioManager.isPlaying;
-    _isLoading = widget.audioManager.isLoading;
+    _isPlaying = _audioManager.isPlaying;
+    _isLoading = _audioManager.isLoading;
   }
 
   /// Alterna entre reproducir y pausar la radio
   Future<void> _togglePlayback() async {
     try {
-      await widget.audioManager.togglePlayback();
+      await _audioManager.togglePlayback();
+
+      // Registrar evento de play/pause
+      await analytics.logEvent(
+        name: _audioManager.isPlaying ? 'audio_play' : 'audio_pause',
+        parameters: {'station': 'Ambiente Stereo 88.4'},
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -202,7 +223,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
         centerTitle: true,
         // Indicador de reconexión en el AppBar
         actions: [
-          if (_errorMessage != null)
+          if (_errorMessage != null && _errorMessage!.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Center(child: _buildReconnectingIndicator(responsive)),
@@ -280,7 +301,8 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                 SizedBox(height: sectionSpacing + 10),
 
                 // Control de volumen
-                VolumeControl(audioManager: widget.audioManager),
+                // Pasar _audioManager (local) en lugar de widget.audioManager
+                VolumeControl(audioManager: _audioManager),
 
                 SizedBox(height: sectionSpacing),
               ],

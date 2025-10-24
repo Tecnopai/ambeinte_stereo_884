@@ -4,42 +4,44 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'firebase_options.dart';
 import 'core/app.dart';
-
 import 'package:logger/logger.dart';
 
 final logger = Logger();
 
-/// Punto de entrada principal de la aplicación Ambiente Stereo
-/// Configura las orientaciones permitidas y el estilo de la barra de estado
 void main() async {
-  // Asegurar que los bindings de Flutter estén inicializados
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Inicializar Firebase
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    // Configurar orientaciones
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
 
-  // Habilitar Firebase Analytics
-  final analytics = FirebaseAnalytics.instance;
-  await analytics.setAnalyticsCollectionEnabled(true);
-  await analytics.logAppOpen();
+    // Configurar barra de estado
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarBrightness: Brightness.dark,
+        statusBarIconBrightness: Brightness.light,
+      ),
+    );
 
-  // Configurar orientación de pantalla
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
+    // Firebase + Analytics (UNA SOLA VEZ)
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
 
-  // Configurar estilo de la barra de estado del sistema
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarBrightness: Brightness.dark,
-      statusBarIconBrightness: Brightness.light,
-    ),
-  );
+    final analytics = FirebaseAnalytics.instance;
+    await analytics.setAnalyticsCollectionEnabled(true);
+    await analytics.logAppOpen();
 
-  // Iniciar la aplicación
+    logger.i('[Main] ✅ Inicialización completa (Firebase + Analytics)');
+  } catch (e) {
+    logger.e('[Main] ❌ Error: $e');
+  }
+
   runApp(const AmbientStereoApp());
 }
