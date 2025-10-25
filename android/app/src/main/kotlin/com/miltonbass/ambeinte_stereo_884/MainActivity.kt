@@ -18,17 +18,18 @@ class MainActivity: FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // ✅ Adquirir wake lock para mantener CPU activa durante streaming
+        // Adquirir wake lock para mantener CPU activa durante streaming
         acquireWakeLock()
         
-        // ✅ Solicitar ignorar optimizaciones de batería
+        // Solicitar ignorar optimizaciones de batería
         requestIgnoreBatteryOptimizations()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        // ✅ CRÍTICO: super DEBE ser lo primero para que audio_service funcione
         super.configureFlutterEngine(flutterEngine)
         
-        // Canal para controlar wake lock desde Flutter (opcional)
+        // Canal para controlar wake lock desde Flutter
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "acquireWakeLock" -> {
@@ -46,10 +47,6 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-    /**
-     * Adquiere un PARTIAL_WAKE_LOCK para mantener la CPU activa
-     * durante la reproducción de streaming en segundo plano
-     */
     private fun acquireWakeLock() {
         if (wakeLock == null || wakeLock?.isHeld == false) {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -57,14 +54,10 @@ class MainActivity: FlutterActivity() {
                 PowerManager.PARTIAL_WAKE_LOCK,
                 "AmbienteStereo::StreamingWakeLock"
             )
-            // ✅ Acquire indefinidamente (se libera manualmente)
             wakeLock?.acquire()
         }
     }
 
-    /**
-     * Libera el wake lock
-     */
     private fun releaseWakeLock() {
         wakeLock?.let {
             if (it.isHeld) {
@@ -74,10 +67,6 @@ class MainActivity: FlutterActivity() {
         wakeLock = null
     }
 
-    /**
-     * Solicita al usuario que ignore las optimizaciones de batería
-     * Esto evita que Android mate la app en Doze Mode
-     */
     private fun requestIgnoreBatteryOptimizations() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -91,7 +80,6 @@ class MainActivity: FlutterActivity() {
                     }
                     startActivity(intent)
                 } catch (e: Exception) {
-                    // Si falla, no es crítico
                     e.printStackTrace()
                 }
             }
@@ -99,20 +87,17 @@ class MainActivity: FlutterActivity() {
     }
 
     override fun onDestroy() {
-        // Liberar wake lock solo cuando se destruye completamente la app
         releaseWakeLock()
         super.onDestroy()
     }
 
     override fun onPause() {
         super.onPause()
-        // ✅ IMPORTANTE: NO liberar el wake lock aquí
-        // Queremos que el audio siga en segundo plano
+        // NO liberar el wake lock aquí - queremos audio en segundo plano
     }
 
     override fun onResume() {
         super.onResume()
-        // Asegurar que el wake lock sigue activo al volver
         acquireWakeLock()
     }
 }

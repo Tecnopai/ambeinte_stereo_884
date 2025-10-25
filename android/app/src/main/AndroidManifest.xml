@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     
     <!-- ========== PERMISOS REQUERIDOS ========== -->
     
@@ -11,22 +12,22 @@
     <!-- Verificar estado del WiFi -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     
-    <!-- ✅ CRÍTICO: Mantener la CPU activa durante reproducción (evita que se duerma) -->
+    <!-- Mantener la CPU activa durante reproducción (evita que se duerma) -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     
-    <!-- ✅ CRÍTICO: Reproducción en background (cuando app está minimizada) -->
+    <!-- Reproducción en background (cuando app está minimizada) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     
-    <!-- ✅ CRÍTICO: Tipo específico de servicio en foreground para Android 14+ -->
+    <!-- Tipo específico de servicio en foreground para Android 14+ -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <!-- Permisos para botones de volumen -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     
-    <!-- ✅ Para evitar que Doze Mode mate la app -->
+    <!-- Para evitar que Doze Mode mate la app -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     
-    <!-- ✅ Para Android 12+ alarmas exactas (reconexión automática) -->
+    <!-- Para Android 12+ alarmas exactas (reconexión automática) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 
     <application
@@ -69,23 +70,14 @@
             
         </activity>
         
-        <!-- ✅ SERVICIOS DE AUDIO_SERVICE -->
+        <!-- SERVICIO DE RADIO_PLAYER (notificaciones automáticas) -->
         <service
-            android:name="com.ryanheise.audioservice.AudioService"
+            android:name="com.cheebeez.radio_player.RadioPlayerService"
+            android:enabled="true"
+            android:exported="true"
             android:foregroundServiceType="mediaPlayback"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.media.browse.MediaBrowserService" />
-            </intent-filter>
+            tools:replace="android:exported">
         </service>
-
-        <receiver 
-            android:name="com.ryanheise.audioservice.MediaButtonReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_BUTTON" />
-            </intent-filter>
-        </receiver>
         
         <meta-data
             android:name="flutterEmbedding"

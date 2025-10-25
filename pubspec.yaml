@@ -2,7 +2,7 @@ name: ambeinte_stereo_884
 description: "Ambiente Stereo 884"
 publish_to: 'none'
 
-version: 2.0.8+12
+version: 2.0.10+14
 
 environment:
   sdk: ^3.8.1
@@ -12,6 +12,7 @@ dependencies:
     sdk: flutter
 
   # Audio
+  radio_player: ^2.0.0
   volume_controller: ^3.4.0
   audio_session: ^0.2.2
   just_audio: ^0.10.5 

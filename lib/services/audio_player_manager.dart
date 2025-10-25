@@ -1,40 +1,31 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:radio_player/radio_player.dart';
 import 'package:rxdart/rxdart.dart';
-import 'package:audio_session/audio_session.dart';
 
-/// Gestor centralizado del reproductor de audio
+/// Gestor centralizado del reproductor de audio usando radio_player
 /// Implementa el patrón Singleton para mantener una única instancia
 /// Maneja el streaming de radio, control de volumen y estado de reproducción
+/// ✅ Incluye notificaciones automáticas (sin configuración adicional)
 class AudioPlayerManager {
   // ========== SINGLETON PATTERN ==========
   static AudioPlayerManager? _instance;
 
-  /// Factory constructor que retorna siempre la misma instancia
   factory AudioPlayerManager() {
     _instance ??= AudioPlayerManager._internal();
     return _instance!;
   }
 
-  /// Constructor privado para el singleton
   AudioPlayerManager._internal() {
     _log('[AudioPlayerManager] Creando instancia singleton');
     _initAsync();
   }
 
   // ========== CONSTANTES ==========
-  /// URL del stream de radio
   static const String _streamUrl = 'https://radio06.cehis.net:9036/stream';
-
-  /// Intervalo de reconexión en caso de fallo
   static const Duration _reconnectDelay = Duration(seconds: 3);
-
-  /// Número máximo de intentos de reconexión
   static const int _maxReconnectAttempts = 5;
-
-  /// Configuración de auto-inicio
   static const bool _autoPlay = true;
 
   // ========== WAKE LOCK ==========
@@ -42,14 +33,8 @@ class AudioPlayerManager {
     'com.miltonbass.ambeinte_stereo_884/wakelock',
   );
 
-  // ========== PLAYER Y ESTADO ==========
-  /// Reproductor de audio principal
-  AudioPlayer? _player;
-
-  /// Indica si el gestor está inicializado
+  // ========== ESTADO ==========
   bool _isInitialized = false;
-
-  /// Bandera para evitar múltiples inicializaciones simultáneas
   bool _isInitializing = false;
 
   // ========== STREAMS DE ESTADO ==========
@@ -69,6 +54,10 @@ class AudioPlayerManager {
   Timer? _reconnectTimer;
   bool _isReconnecting = false;
 
+  // Subscription para los streams del player
+  StreamSubscription? _playbackStateSubscription;
+  StreamSubscription? _metadataSubscription;
+
   // ========== GETTERS PÚBLICOS ==========
   Stream<bool> get playingStream => _playingController.stream;
   Stream<bool> get loadingStream => _loadingController.stream;
@@ -81,61 +70,46 @@ class AudioPlayerManager {
   // ========== INICIALIZACIÓN ==========
   Future<void> _initAsync() async {
     if (_isInitialized || _isInitializing) {
-      _log(
-        '[AudioPlayerManager] Ya está inicializado o inicializando, ignorando',
-      );
+      _log('[AudioPlayerManager] Ya está inicializado, ignorando');
       return;
     }
 
     _isInitializing = true;
-    _log('[AudioPlayerManager] Iniciando inicialización asíncrona...');
+    _log('[AudioPlayerManager] Iniciando inicialización...');
 
     try {
-      // Limpiar player anterior si existe
-      if (_player != null) {
-        _log('[AudioPlayerManager] Limpiando player anterior...');
-        await _player!.dispose();
-        _player = null;
-      }
-
-      // Crear el reproductor
-      _player = AudioPlayer();
-      _log('[AudioPlayerManager] 🎵 AudioPlayer creado');
-
-      // Configurar la sesión de audio para reproducción en segundo plano
-      final session = await AudioSession.instance;
-      await session.configure(const AudioSessionConfiguration.music());
-      _log(
-        '[AudioPlayerManager] ✅ AudioSession configurado para segundo plano',
-      );
-
       // Activar WakeLock mediante MainActivity
       try {
         await _wakeLockChannel.invokeMethod('acquireWakeLock');
         _log('[AudioPlayerManager] ✅ WakeLock activado');
       } catch (e) {
         _log('[AudioPlayerManager] ⚠️ Error activando WakeLock: $e');
-        // Continuar sin WakeLock
       }
 
-      // Configurar el audio source
-      await _player!.setAudioSource(AudioSource.uri(Uri.parse(_streamUrl)));
-      _log('[AudioPlayerManager] ✅ Player configurado con URL: $_streamUrl');
+      // ✅ Configurar estación (radio_player usa métodos estáticos)
+      await RadioPlayer.setStation(
+        title: 'Ambiente Stereo 88.4 FM',
+        url: _streamUrl,
+        logoAssetPath: 'assets/images/icon.png', // Logo local
+        // O usa una URL remota:
+        // logoNetworkUrl: 'https://ambientestereo884.com/logo.png',
+      );
+      _log('[AudioPlayerManager] ✅ Estación configurada con notificaciones');
 
       // Configurar listeners de estado
       _setupPlayerListeners();
 
-      // Marcar como inicializado
       _isInitialized = true;
       _isInitializing = false;
 
-      // Emitir estado inicial
       _playingController.add(false);
       _loadingController.add(false);
 
-      _log('[AudioPlayerManager] ✅ Inicialización completa');
+      _log(
+        '[AudioPlayerManager] ✅ Inicialización completa con notificaciones automáticas',
+      );
 
-      // Auto-iniciar reproducción si está habilitado
+      // Auto-iniciar reproducción
       if (_autoPlay) {
         _log('[AudioPlayerManager] 🎵 Auto-iniciando reproducción...');
         Future.delayed(const Duration(milliseconds: 500), () {
@@ -145,28 +119,53 @@ class AudioPlayerManager {
     } catch (e) {
       _isInitializing = false;
       _isInitialized = false;
-
       _log('[AudioPlayerManager] ❌ Error en inicialización: $e');
-
-      String errorMessage = 'Error al inicializar';
-      if (e.toString().contains('404')) {
-        errorMessage = 'Stream no disponible (404). Verifica la URL.';
-      } else if (e.toString().contains('timeout')) {
-        errorMessage = 'Timeout al conectar. Verifica tu conexión.';
-      } else if (e.toString().contains('Source error')) {
-        errorMessage = 'Error en el stream. Verifica la URL.';
-      }
-
-      _errorController.add(errorMessage);
+      _errorController.add('Error al inicializar: $e');
       _loadingController.add(false);
-
-      if (_player != null) {
-        try {
-          await _player!.dispose();
-        } catch (_) {}
-        _player = null;
-      }
     }
+  }
+
+  void _setupPlayerListeners() {
+    // Listener de estado de reproducción
+    _playbackStateSubscription = RadioPlayer.playbackStateStream.listen((
+      state,
+    ) {
+      _log('[AudioPlayerManager] 📊 Estado: $state');
+
+      switch (state) {
+        case PlaybackState.playing:
+          _playingController.add(true);
+          _loadingController.add(false);
+          _reconnectAttempts = 0;
+          _isReconnecting = false;
+          break;
+        case PlaybackState.paused:
+          _playingController.add(false);
+          _loadingController.add(false);
+          break;
+        case PlaybackState.buffering:
+          _loadingController.add(true);
+          break;
+        case PlaybackState.unknown:
+          // Estado desconocido - posible error
+          _log('[AudioPlayerManager] ⚠️ Estado desconocido');
+          if (_playingController.value) {
+            // Solo intentar reconectar si estábamos reproduciendo
+            _handleReconnection();
+          }
+          break;
+      }
+    });
+
+    // Listener de metadata (opcional - para mostrar "Ahora Suena")
+    _metadataSubscription = RadioPlayer.metadataStream.listen((metadata) {
+      if (metadata.artist != null || metadata.title != null) {
+        _log(
+          '[AudioPlayerManager] 🎵 Metadata: ${metadata.artist} - ${metadata.title}',
+        );
+        // Aquí puedes emitir la metadata si la necesitas en la UI
+      }
+    });
   }
 
   Future<void> _ensureInitialized() async {
@@ -182,40 +181,6 @@ class AudioPlayerManager {
       _log('[AudioPlayerManager] ⚠️ No inicializado, reintentando...');
       await _initAsync();
     }
-  }
-
-  void _setupPlayerListeners() {
-    if (_player == null) return;
-
-    // Listener del estado de reproducción
-    _player!.playingStream.listen((playing) {
-      _log(
-        '[AudioPlayerManager] 📊 Estado: playing=$playing, ${_player!.processingState}',
-      );
-      _playingController.add(playing);
-      _loadingController.add(false);
-    });
-
-    // Listener del estado de procesamiento
-    _player!.processingStateStream.listen((state) {
-      _log('[AudioPlayerManager] 🔄 ProcessingState: $state');
-
-      if (state == ProcessingState.idle && _player!.playing) {
-        _log('[AudioPlayerManager] 🔄 Stream desconectado, reconectando...');
-        _handleReconnection();
-      }
-    });
-
-    // Listener de errores
-    _player!.playbackEventStream.listen(
-      (event) {},
-      onError: (Object e, StackTrace st) {
-        _log('[AudioPlayerManager] ❌ Error en playback: $e');
-        if (_player != null && _player!.playing) {
-          _handleReconnection();
-        }
-      },
-    );
   }
 
   // ========== TOGGLE PLAYBACK ==========
@@ -245,7 +210,7 @@ class AudioPlayerManager {
     try {
       await _ensureInitialized();
 
-      if (!_isInitialized || _player == null) {
+      if (!_isInitialized) {
         _errorController.add('Reproductor no disponible');
         _loadingController.add(false);
         return;
@@ -255,19 +220,14 @@ class AudioPlayerManager {
       _errorController.add('');
 
       _log('[AudioPlayerManager] ▶️ Iniciando reproducción...');
-      await _player!.play();
+      await RadioPlayer.play(); // ✅ Método estático
 
       _reconnectAttempts = 0;
       _isReconnecting = false;
     } catch (e) {
       _log('[AudioPlayerManager] ❌ Error al reproducir: $e');
       _loadingController.add(false);
-
-      String errorMessage = 'Error al conectar';
-      if (e.toString().contains('404')) {
-        errorMessage = 'Stream no disponible. Verifica la URL.';
-      }
-      _errorController.add(errorMessage);
+      _errorController.add('Error al conectar');
       rethrow;
     }
   }
@@ -276,10 +236,8 @@ class AudioPlayerManager {
     try {
       await _ensureInitialized();
 
-      if (_player == null) return;
-
       _log('[AudioPlayerManager] ⏸️ Pausando reproducción...');
-      await _player!.pause();
+      await RadioPlayer.pause(); // ✅ Método estático
       _loadingController.add(false);
 
       _reconnectTimer?.cancel();
@@ -295,11 +253,11 @@ class AudioPlayerManager {
     try {
       await _ensureInitialized();
 
-      if (_player == null) return;
-
       final clampedVolume = volume.clamp(0.0, 1.0);
-      await _player!.setVolume(clampedVolume);
+      // Nota: radio_player no tiene control de volumen integrado
+      // Usa volume_controller que ya tienes en pubspec.yaml
       _volumeController.add(clampedVolume);
+      _log('[AudioPlayerManager] 🔊 Volumen: $clampedVolume');
     } catch (e) {
       _log('[AudioPlayerManager] ❌ Error al cambiar volumen: $e');
     }
@@ -319,11 +277,6 @@ class AudioPlayerManager {
       return;
     }
 
-    if (_player == null) {
-      _log('[AudioPlayerManager] ❌ Player no disponible para reconexión');
-      return;
-    }
-
     _isReconnecting = true;
     _reconnectAttempts++;
     _loadingController.add(true);
@@ -336,13 +289,12 @@ class AudioPlayerManager {
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(_reconnectDelay, () async {
       try {
-        if (_player != null) {
-          await _player!.stop();
-          await _player!.play();
-          _isReconnecting = false;
-          _errorController.add('Reconectado exitosamente');
-          _log('[AudioPlayerManager] ✅ Reconexión exitosa');
-        }
+        await RadioPlayer.pause();
+        await Future.delayed(const Duration(milliseconds: 500));
+        await RadioPlayer.play();
+        _isReconnecting = false;
+        _errorController.add('Reconectado exitosamente');
+        _log('[AudioPlayerManager] ✅ Reconexión exitosa');
       } catch (e) {
         _log('[AudioPlayerManager] ❌ Error en reconexión: $e');
         _isReconnecting = false;
@@ -356,13 +308,15 @@ class AudioPlayerManager {
     _log('[AudioPlayerManager] 🧹 Liberando recursos...');
 
     _reconnectTimer?.cancel();
+    await _playbackStateSubscription?.cancel();
+    await _metadataSubscription?.cancel();
 
     await _playingController.close();
     await _loadingController.close();
     await _errorController.close();
     await _volumeController.close();
 
-    // ✅ Liberar WakeLock
+    // Liberar WakeLock
     try {
       await _wakeLockChannel.invokeMethod('releaseWakeLock');
       _log('[AudioPlayerManager] ✅ WakeLock liberado');
@@ -370,9 +324,11 @@ class AudioPlayerManager {
       _log('[AudioPlayerManager] ⚠️ Error liberando WakeLock: $e');
     }
 
-    if (_player != null) {
-      await _player!.dispose();
-      _player = null;
+    // Reset del player
+    try {
+      await RadioPlayer.reset();
+    } catch (e) {
+      _log('[AudioPlayerManager] ⚠️ Error al resetear player: $e');
     }
 
     _log('[AudioPlayerManager] ✅ Recursos liberados');
