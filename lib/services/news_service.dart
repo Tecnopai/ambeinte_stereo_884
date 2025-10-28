@@ -5,32 +5,36 @@ import '../models/category.dart';
 import '../core/constants/app_constants.dart';
 
 /// Servicio para obtener noticias desde la API REST de WordPress
-/// Maneja la comunicación con el servidor y el filtrado de contenido
+/// Maneja la comunicación con el servidor y el filtrado de contenido.
 class NewsService {
   // URL base de la API de WordPress
   static const String _baseUrl =
       'https://ambientestereo.fm/sitio/wp-json/wp/v2';
 
-  // Número de artículos por página
+  // Número de artículos por página para paginación y listas
   static const int _itemsPerPage = 20;
 
-  // Timeout para las peticiones HTTP
+  // Timeout para las peticiones HTTP, para evitar esperas indefinidas
   static const Duration _timeout = Duration(seconds: 15);
 
-  /// Filtra artículos para mostrar solo los de categorías permitidas
-  /// Verifica que el artículo tenga al menos una categoría permitida
+  /// Filtra artículos para mostrar solo los de categorías permitidas.
+  /// Verifica que el artículo tenga al menos una categoría incluida en
+  /// [AppConstants.allowedCategoryIds].
   List<Article> _filterByAllowedCategories(List<Article> articles) {
     return articles.where((article) {
+      // Si el artículo no tiene categorías asociadas, es descartado.
       if (article.categories.isEmpty) return false;
+
+      // Retorna true si alguna de las categorías del artículo está en la lista permitida.
       return article.categories.any(
         (categoryId) => AppConstants.allowedCategoryIds.contains(categoryId),
       );
     }).toList();
   }
 
-  /// Obtiene todas las categorías disponibles desde WordPress
-  /// Incluye el parámetro _embed para obtener imágenes asociadas
-  /// Filtra categorías vacías y no permitidas
+  /// Obtiene todas las categorías disponibles desde WordPress.
+  /// Incluye el parámetro [_embed] para obtener imágenes asociadas y otros datos.
+  /// Filtra categorías con contador cero (vacías) y las no permitidas.
   Future<List<Category>> getCategories() async {
     try {
       final uri = Uri.parse(
@@ -42,7 +46,9 @@ class NewsService {
         final List<dynamic> data = json.decode(response.body);
         return data
             .map((item) => Category.fromJson(item as Map<String, dynamic>))
+            // 1. Filtrar categorías que no tienen artículos publicados (count > 0)
             .where((category) => category.count > 0)
+            // 2. Filtrar categorías que no están en la lista de IDs permitidos
             .where(
               (category) =>
                   AppConstants.allowedCategoryIds.contains(category.id),
@@ -56,17 +62,16 @@ class NewsService {
     }
   }
 
-  /// Obtiene artículos filtrados por ID de categoría
-  /// Soporta paginación mediante el parámetro page
+  /// Obtiene artículos filtrados por ID de categoría, con soporte para paginación.
   ///
-  /// [categoryId] - ID de la categoría de WordPress
-  /// [page] - Número de página para la paginación (por defecto 1)
+  /// [categoryId] - ID de la categoría de WordPress para filtrar.
+  /// [page] - Número de página para la paginación (por defecto 1).
   Future<List<Article>> getArticlesByCategory(
     int categoryId, {
     int page = 1,
   }) async {
     try {
-      // Verificar que la categoría esté permitida
+      // Verificación de seguridad: si la categoría no está permitida, se ignora la petición.
       if (!AppConstants.allowedCategoryIds.contains(categoryId)) {
         return [];
       }
@@ -82,9 +87,11 @@ class NewsService {
             .map((item) => Article.fromJson(item as Map<String, dynamic>))
             .toList();
 
+        // Aplicar el filtro de categorías permitidas post-carga
         return _filterByAllowedCategories(articles);
       } else if (response.statusCode == 400) {
-        // Página fuera de rango o sin resultados
+        // El código 400 (Bad Request) a menudo se da cuando se pide una página
+        // que está fuera del rango, indicando el final de la lista.
         return [];
       } else {
         throw Exception('Error al cargar artículos: ${response.statusCode}');
@@ -94,10 +101,10 @@ class NewsService {
     }
   }
 
-  /// Obtiene la lista de artículos desde la API
-  /// Incluye el parámetro _embed para obtener imágenes destacadas
+  /// Obtiene la lista de todos los artículos recientes (todas las categorías permitidas).
+  /// Soporta paginación.
   ///
-  /// [page] - Número de página para la paginación (por defecto 1)
+  /// [page] - Número de página para la paginación (por defecto 1).
   Future<List<Article>> getArticles({int page = 1}) async {
     try {
       final uri = Uri.parse(
@@ -111,9 +118,10 @@ class NewsService {
             .map((item) => Article.fromJson(item as Map<String, dynamic>))
             .toList();
 
+        // Aplicar el filtro de categorías permitidas
         return _filterByAllowedCategories(articles);
       } else if (response.statusCode == 400) {
-        // Página fuera de rango o sin resultados
+        // Página fuera de rango o sin resultados.
         return [];
       } else {
         throw Exception('Error al cargar artículos: ${response.statusCode}');
@@ -123,10 +131,10 @@ class NewsService {
     }
   }
 
-  /// Obtiene un artículo específico por su ID
-  /// Verifica que el artículo pertenezca a una categoría permitida
+  /// Obtiene un artículo específico por su ID.
+  /// Verifica que el artículo pertenezca a una categoría permitida.
   ///
-  /// [id] - ID del artículo en WordPress
+  /// [id] - ID del artículo en WordPress.
   Future<Article> getArticleById(int id) async {
     try {
       final uri = Uri.parse('$_baseUrl/posts/$id?_embed');
@@ -154,13 +162,13 @@ class NewsService {
     }
   }
 
-  /// Busca artículos por término de búsqueda
-  /// Si el término está vacío, retorna todos los artículos
+  /// Busca artículos por término de búsqueda.
+  /// Si el término está vacío, retorna todos los artículos recientes.
   ///
-  /// [searchTerm] - Término a buscar en títulos y contenido
+  /// [searchTerm] - Término a buscar en títulos y contenido.
   Future<List<Article>> searchArticles(String searchTerm) async {
     try {
-      // Si no hay término de búsqueda, retornar todos los artículos
+      // Si no hay término de búsqueda, retornar la lista de artículos recientes.
       if (searchTerm.trim().isEmpty) {
         return getArticles();
       }
@@ -177,6 +185,7 @@ class NewsService {
             .map((item) => Article.fromJson(item as Map<String, dynamic>))
             .toList();
 
+        // Aplicar el filtro de categorías permitidas a los resultados de búsqueda.
         return _filterByAllowedCategories(articles);
       } else {
         throw Exception('Error en la búsqueda: ${response.statusCode}');

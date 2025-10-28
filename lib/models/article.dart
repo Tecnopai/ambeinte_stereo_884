@@ -1,33 +1,40 @@
-/// Modelo que representa un artículo de WordPress
+/// Modelo de datos para un artículo o publicación de WordPress.
+/// {@template article_model}
+/// Modelo de datos que representa un artículo o publicación obtenido
+/// de la API REST de WordPress.
+///
+/// Contiene lógica para deserializar JSON, limpiar HTML y extraer
+/// información de medios (imagen destacada y URL de audio) de múltiples fuentes.
+/// {@endtemplate}
 class Article {
-  /// Identificador único del artículo
+  /// Identificador único del artículo en WordPress.
   final int id;
 
-  /// Título del artículo
+  /// Título del artículo, con el HTML ya eliminado.
   final String title;
 
-  /// Contenido completo del artículo
+  /// Contenido completo del artículo, con el HTML ya eliminado.
   final String content;
 
-  /// Extracto o resumen del artículo
+  /// Extracto o resumen del artículo, con el HTML ya eliminado.
   final String excerpt;
 
-  /// URL permanente del artículo
+  /// URL permanente (permalink) del artículo.
   final String link;
 
-  /// Fecha de publicación del artículo
+  /// Fecha y hora de publicación del artículo (UTC).
   final DateTime date;
 
-  /// Lista de IDs de categorías asociadas al artículo
+  /// Lista de IDs de categorías asociadas al artículo.
   final List<int> categories;
 
-  /// URL de la imagen destacada del artículo
+  /// URL de la imagen destacada (featured image) del artículo. Puede ser `null`.
   final String? imageUrl;
 
-  /// URL del archivo de audio del artículo
+  /// URL del archivo de audio embebido o asociado al artículo. Puede ser `null`.
   final String? audioUrl;
 
-  /// Constructor de la clase Article
+  /// {@macro article_model}
   Article({
     required this.id,
     required this.title,
@@ -40,14 +47,19 @@ class Article {
     this.audioUrl,
   });
 
-  /// Crea una instancia de Article desde un JSON
+  /// {@template article_from_json}
+  /// Crea una instancia de [Article] desde un [Map] JSON.
   ///
-  /// Parsea los datos de la API REST de WordPress,
-  /// limpia el HTML de los campos de texto y extrae
-  /// la URL de la imagen destacada y el audio si están disponibles
+  /// Parsea los datos de la API REST de WordPress. Se utiliza [_parseHtmlString]
+  /// para limpiar los campos de texto y se llama a los extractores de medios.
+  ///
+  /// @param json El mapa JSON proveniente de la API de WordPress.
+  /// @return Una nueva instancia de [Article].
+  /// {@endtemplate}
   factory Article.fromJson(Map<String, dynamic> json) {
     return Article(
       id: json['id'] as int,
+      // Los títulos vienen en un objeto 'rendered' y deben limpiarse de HTML.
       title: _parseHtmlString(json['title']['rendered'] as String),
       content: _parseHtmlString(json['content']['rendered'] as String),
       excerpt: _parseHtmlString(json['excerpt']['rendered'] as String),
@@ -55,26 +67,30 @@ class Article {
       date: DateTime.parse(json['date'] as String),
       categories:
           (json['categories'] as List<dynamic>?)
+              // Mapea la lista de dynamic a List<int>
               ?.map((e) => e as int)
               .toList() ??
           [],
+      // Extracción robusta de las URLs de medios.
       imageUrl: _extractImageUrl(json),
       audioUrl: _extractAudioUrl(json),
     );
   }
 
-  /// Extrae la URL del archivo de audio del artículo
+  /// {@template extract_audio_url}
+  /// Extrae la URL del archivo de audio del artículo a partir del JSON.
   ///
-  /// Busca el audio en diferentes fuentes en orden de prioridad:
-  /// 1. Campo personalizado 'audio_url' o 'audio'
-  /// 2. ACF (Advanced Custom Fields) si está disponible
-  /// 3. Meta fields del post
-  /// 4. Archivos adjuntos de tipo audio
-  /// 5. Dentro del contenido HTML (tags <audio>, <source>, URLs directas)
-  /// 6. Shortcodes de WordPress [audio]
-  /// 7. Enclosures (usado por podcasts)
+  /// Sigue un orden de prioridad riguroso para asegurar la fuente más confiable:
+  /// 1. Campos personalizados directos ('audio_url', 'audio').
+  /// 2. Campos personalizados de ACF (Advanced Custom Fields).
+  /// 3. Campos Meta del post.
+  /// 4. Archivos adjuntos embebidos de tipo audio (`_embedded`).
+  /// 5. Enclosures (utilizado frecuentemente por plugins de podcasting).
+  /// 6. Búsqueda en el contenido HTML (`<audio>`, `<source>`, shortcodes, Podlove).
   ///
-  /// Retorna la URL del audio si se encuentra, null en caso contrario
+  /// @param json El mapa JSON completo de la publicación de WordPress.
+  /// @return La URL del audio si se encuentra, `null` en caso contrario.
+  /// {@endtemplate}
   static String? _extractAudioUrl(Map<String, dynamic> json) {
     try {
       // 1. Campo personalizado directo
@@ -90,14 +106,13 @@ class Article {
       if (json['acf'] != null) {
         final acf = json['acf'];
 
-        // ACF puede ser un Map o una List vacía
         if (acf is Map<String, dynamic>) {
           if (acf['audio_url'] != null) {
             return acf['audio_url'] as String?;
           }
           if (acf['audio'] != null) {
             final audio = acf['audio'];
-            // Puede ser un string o un objeto
+            // Puede ser un string (URL) o un objeto complejo (archivo adjunto de ACF).
             if (audio is String) {
               return audio;
             } else if (audio is Map<String, dynamic> && audio['url'] != null) {
@@ -122,12 +137,13 @@ class Article {
       if (json['_embedded'] != null) {
         final embedded = json['_embedded'] as Map<String, dynamic>;
 
-        // Buscar en wp:attachment
+        // Buscar en wp:attachment (medios adjuntos al post)
         if (embedded['wp:attachment'] != null) {
           final attachments = embedded['wp:attachment'] as List<dynamic>;
           for (var attachment in attachments) {
             if (attachment is Map<String, dynamic>) {
               final mimeType = attachment['mime_type'] as String?;
+              // Si el adjunto es de tipo audio, usar su URL.
               if (mimeType != null && mimeType.startsWith('audio/')) {
                 return attachment['source_url'] as String?;
               }
@@ -136,7 +152,7 @@ class Article {
         }
       }
 
-      // 5. Enclosures (usado por podcasts y RSS)
+      // 5. Enclosures (Usado por RSS/Podcasts)
       if (json['enclosure'] != null) {
         final enclosure = json['enclosure'];
         if (enclosure is String && enclosure.isNotEmpty) {
@@ -149,11 +165,11 @@ class Article {
         }
       }
 
-      // 6. Buscar en el contenido HTML
+      // 6. Buscar en el contenido HTML renderizado
       if (json['content'] != null && json['content']['rendered'] != null) {
         final content = json['content']['rendered'] as String;
 
-        // Buscar tag <audio> con src
+        // Buscar tag <audio> con atributo src
         final audioTagRegex = RegExp(
           r'<audio[^>]+src=["'
           "'"
@@ -169,14 +185,14 @@ class Article {
           return audioTagMatch.group(1)!;
         }
 
-        // Buscar tag <source> dentro de <audio> con comillas dobles
+        // Buscar tag <source> dentro de <audio>
         RegExp sourceTagRegex = RegExp(
           r'<source[^>]+src="([^"]+\.(?:mp3|wav|ogg|m4a|aac))"',
           caseSensitive: false,
         );
         Match? sourceTagMatch = sourceTagRegex.firstMatch(content);
 
-        // Si no encuentra con comillas dobles, buscar con comillas simples
+        // Intento con comillas simples si falla el doble
         if (sourceTagMatch == null) {
           sourceTagRegex = RegExp(
             r"<source[^>]+src='([^']+\.(?:mp3|wav|ogg|m4a|aac))'",
@@ -206,7 +222,7 @@ class Article {
         );
         Match? shortcodeMatch = shortcodeRegex.firstMatch(content);
 
-        // Si no encuentra con comillas dobles, buscar con comillas simples
+        // Intento con comillas simples si falla el doble
         if (shortcodeMatch == null) {
           shortcodeRegex = RegExp(
             r"\[audio[^\]]*src='([^']+)'[^\]]*\]",
@@ -219,14 +235,14 @@ class Article {
           return shortcodeMatch.group(1)!;
         }
 
-        // Buscar player de Podlove
+        // Buscar player de Podlove (u otro reproductor con data-episode-src)
         RegExp podloveRegex = RegExp(
           r'data-episode-src="([^"]+)"',
           caseSensitive: false,
         );
         Match? podloveMatch = podloveRegex.firstMatch(content);
 
-        // Si no encuentra con comillas dobles, buscar con comillas simples
+        // Intento con comillas simples si falla el doble
         if (podloveMatch == null) {
           podloveRegex = RegExp(
             r"data-episode-src='([^']+)'",
@@ -240,24 +256,28 @@ class Article {
         }
       }
 
-      // No se encontró audio en ninguna fuente
+      // Si no se encontró audio en ninguna fuente
       return null;
     } catch (e) {
+      // Retorna null si ocurre algún error durante la extracción
       return null;
     }
   }
 
-  /// Extrae la URL de la imagen destacada del artículo
+  /// {@template extract_image_url}
+  /// Extrae la URL de la imagen destacada (featured media) del artículo.
   ///
-  /// Intenta obtener la imagen de diferentes fuentes:
-  /// 1. Desde _embedded.wp:featuredmedia (cuando se usa ?_embed en la API)
-  ///    - Prioriza tamaños: medium_large > medium > full
-  /// 2. Desde jetpack_featured_media_url (si está disponible)
+  /// Prioriza fuentes de datos embebidas para obtener la mejor calidad:
+  /// 1. Desde `_embedded.wp:featuredmedia` (Requiere el parámetro `?_embed` en la solicitud API).
+  ///    - Prioriza tamaños intermedios: `medium_large` > `medium` > URL original.
+  /// 2. Desde `jetpack_featured_media_url` (Proporcionado por Jetpack).
   ///
-  /// Retorna la URL de la imagen si se encuentra, null en caso contrario
+  /// @param json El mapa JSON completo de la publicación de WordPress.
+  /// @return La URL de la imagen si se encuentra, `null` en caso contrario.
+  /// {@endtemplate}
   static String? _extractImageUrl(Map<String, dynamic> json) {
     try {
-      // Obtener desde datos embebidos (_embed)
+      // 1. Obtener desde datos embebidos (_embed)
       if (json['_embedded'] != null) {
         final embedded = json['_embedded'] as Map<String, dynamic>;
         if (embedded['wp:featuredmedia'] != null) {
@@ -271,7 +291,7 @@ class Article {
               if (details['sizes'] != null) {
                 final sizes = details['sizes'] as Map<String, dynamic>;
 
-                // Priorizar tamaños: medium_large > medium > full
+                // Priorizar tamaños para un mejor rendimiento: medium_large > medium
                 if (sizes['medium_large'] != null) {
                   return sizes['medium_large']['source_url'] as String?;
                 } else if (sizes['medium'] != null) {
@@ -286,7 +306,7 @@ class Article {
         }
       }
 
-      // URL directa de Jetpack (si está disponible)
+      // 2. URL directa de Jetpack (si está disponible)
       if (json['jetpack_featured_media_url'] != null) {
         return json['jetpack_featured_media_url'] as String;
       }
@@ -298,22 +318,25 @@ class Article {
     }
   }
 
-  /// Elimina etiquetas HTML y decodifica entidades HTML
+  /// {@template parse_html_string}
+  /// Elimina etiquetas HTML y decodifica entidades HTML.
   ///
   /// Limpia el texto HTML recibido de WordPress eliminando todas
   /// las etiquetas y convirtiendo las entidades HTML comunes a sus
-  /// caracteres equivalentes
+  /// caracteres equivalentes para ser mostradas como texto plano.
   ///
-  /// Ejemplo: "&amp;nbsp;texto" → " texto"
+  /// @param htmlString La cadena de texto con formato HTML.
+  /// @return La cadena de texto limpia.
+  /// {@endtemplate}
   static String _parseHtmlString(String htmlString) {
     return htmlString
         .replaceAll(RegExp(r'<[^>]*>'), '') // Elimina todas las etiquetas HTML
         .replaceAll('&nbsp;', ' ') // Espacio no separable
         .replaceAll('&amp;', '&') // Ampersand
         .replaceAll('&quot;', '"') // Comillas dobles
-        .replaceAll('&#8217;', "'") // Apóstrofe
-        .replaceAll('&#8220;', '"') // Comilla izquierda
-        .replaceAll('&#8221;', '"') // Comilla derecha
+        .replaceAll('&#8217;', "'") // Apóstrofe derecho (curvado)
+        .replaceAll('&#8220;', '"') // Comilla izquierda (curvada)
+        .replaceAll('&#8221;', '"') // Comilla derecha (curvada)
         .replaceAll('&#8230;', '...') // Puntos suspensivos
         .replaceAll('&#8211;', '-') // Guion corto
         .replaceAll('&lt;', '<') // Menor que
@@ -322,9 +345,9 @@ class Article {
         .trim();
   }
 
-  /// Retorna la fecha formateada en español
+  /// Retorna la fecha de publicación formateada en español.
   ///
-  /// Formato: "14 oct 2025 • 15:30"
+  /// Formato: "Día Mes Año • HH:MM" (ej: "14 oct 2025 • 15:30").
   String get formattedDate {
     final months = [
       'ene',
@@ -340,15 +363,19 @@ class Article {
       'nov',
       'dic',
     ];
+    // Asegura que los minutos tengan dos dígitos, rellenando con '0' si es necesario.
     return '${date.day} ${months[date.month - 1]} ${date.year} • ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 
-  /// Convierte la instancia de Article a un Map JSON
+  /// Convierte la instancia de [Article] a un [Map] JSON.
   ///
-  /// Útil para serialización y almacenamiento local
+  /// Útil para la serialización de datos (ej. almacenamiento local o caché).
+  ///
+  /// @return Un mapa que representa el objeto para su serialización.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      // Se mantiene el formato anidado para consistencia, aunque los valores ya están limpios.
       'title': {'rendered': title},
       'content': {'rendered': content},
       'excerpt': {'rendered': excerpt},

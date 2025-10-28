@@ -4,6 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+// import 'package:logger/logger.dart'; // Se asume importado en main.dart
+
 import '../models/article.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
@@ -11,12 +13,22 @@ import '../services/audio_player_manager.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/live_indicator.dart';
 
-/// Pantalla mejorada de detalle de artículo con reproductor de audio
-/// Completamente responsive para todos los dispositivos incluyendo automotive
+// final logger = Logger(); // Se asume inicializado globalmente si se necesita
+
+/// Pantalla de detalle de un artículo de WordPress.
+///
+/// Muestra el contenido completo del artículo, la imagen destacada
+/// e incluye un reproductor de audio dedicado si el artículo tiene un archivo de audio asociado.
+/// Proporciona un diseño completamente responsivo, incluyendo un layout específico para
+/// entornos automotrices (Android Auto).
 class ArticleDetailScreen extends StatefulWidget {
+  /// El objeto Article con el contenido a mostrar.
   final Article article;
+
+  /// Manager global de reproducción de la radio en vivo (opcional, para MiniPlayer).
   final AudioPlayerManager? audioManager;
 
+  /// Constructor de ArticleDetailScreen.
   const ArticleDetailScreen({
     super.key,
     required this.article,
@@ -27,27 +39,44 @@ class ArticleDetailScreen extends StatefulWidget {
   State<ArticleDetailScreen> createState() => _ArticleDetailScreenState();
 }
 
+/// Estado y lógica de ArticleDetailScreen.
 class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
+  /// Instancia de JustAudio para reproducir el audio del artículo.
   AudioPlayer? _audioPlayer;
+
+  /// Indica si el reproductor de audio del artículo ha sido inicializado correctamente.
   bool _isInitialized = false;
+
+  /// Duración total del audio del artículo.
   Duration _duration = Duration.zero;
+
+  /// Posición actual de reproducción del audio.
   Duration _position = Duration.zero;
+
+  /// Bandera que indica si ocurrió un error al cargar o reproducir el audio.
   bool _hasError = false;
+
+  /// Mensaje de error detallado (para debug).
   String? _errorMessage;
+
+  /// Bandera que indica si el streaming de la radio en vivo está activo.
   bool _isStreamingPlaying = false;
+
+  /// Instancia de Firebase Analytics para el seguimiento.
   final analytics = FirebaseAnalytics.instance;
 
+  /// {inheritdoc}
   @override
   void initState() {
     super.initState();
 
-    // analitica
+    // 1. Analítica: Registro de la vista de la pantalla.
     analytics.logScreenView(
       screenName: 'article_detail',
       screenClass: 'ArticleDetailScreen',
     );
 
-    // (registrar lectura)
+    // 2. Analítica: Registro de lectura de artículo.
     analytics.logEvent(
       name: 'article_view',
       parameters: {
@@ -60,6 +89,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     _setupStreamingListener();
   }
 
+  /// Configura el listener para saber si el streaming de la radio en vivo está reproduciendo.
   void _setupStreamingListener() {
     widget.audioManager?.playingStream.listen((isPlaying) {
       if (mounted) {
@@ -69,8 +99,9 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     _isStreamingPlaying = widget.audioManager?.isPlaying ?? false;
   }
 
+  /// Inicializa la instancia de JustAudio y carga el archivo de audio del artículo.
   Future<void> _initializeAudio() async {
-    // Solo inicializar si hay URL de audio
+    // Si no hay URL de audio, no se inicializa el reproductor.
     if (widget.article.audioUrl == null || widget.article.audioUrl!.isEmpty) {
       return;
     }
@@ -78,7 +109,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     try {
       _audioPlayer = AudioPlayer();
 
-      // Escuchar cambios de duración
+      // Configuración de listeners para duración y posición
       _audioPlayer!.durationStream.listen((duration) {
         if (mounted) {
           setState(() {
@@ -87,7 +118,6 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         }
       });
 
-      // Escuchar cambios de posición
       _audioPlayer!.positionStream.listen((position) {
         if (mounted) {
           setState(() {
@@ -96,7 +126,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         }
       });
 
-      // Cargar audio
+      // Cargar audio desde la URL
       await _audioPlayer!.setUrl(widget.article.audioUrl!);
 
       if (mounted) {
@@ -107,7 +137,9 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         });
       }
     } catch (e) {
-      debugPrint('❌ Error cargando audio: $e');
+      // 🔴 CÓDIGO DE DEPURACIÓN A REVISAR 🔴
+      // debugPrint('❌ Error cargando audio: $e'); // Comentado para producción
+      // Si se necesita registrar el error en producción, usar logger.e
       if (mounted) {
         setState(() {
           _hasError = true;
@@ -117,12 +149,15 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     }
   }
 
+  /// {inheritdoc}
   @override
   void dispose() {
+    // Es crucial liberar los recursos del reproductor de audio al salir.
     _audioPlayer?.dispose();
     super.dispose();
   }
 
+  /// Formatea un objeto Duration a una cadena de tiempo (MM:SS o HH:MM:SS).
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
     final hours = twoDigits(duration.inHours);
@@ -135,24 +170,27 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     return '$minutes:$seconds';
   }
 
+  /// Determina y construye el layout apropiado (Automotriz o Estándar).
+  /// {inheritdoc}
   @override
   Widget build(BuildContext context) {
     final responsive = ResponsiveHelper(context);
 
-    // Layout especial para automotive
+    // Layout especial para automotive (pantallas de coche)
     if (responsive.isAutomotive) {
       return _buildAutomotiveLayout(context, responsive);
     }
 
-    // Layout estándar para móvil/tablet
+    // Layout estándar para móvil/tablet/desktop
     return _buildStandardLayout(context, responsive);
   }
 
-  /// Layout optimizado para radios de vehículos
+  /// Layout optimizado para radios de vehículos (tamaño de fuente grande, botones grandes).
   Widget _buildAutomotiveLayout(
     BuildContext context,
     ResponsiveHelper responsive,
   ) {
+    // Lógica de UI para Automotive...
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -166,11 +204,11 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
             if (_isStreamingPlaying) const LiveIndicator(),
           ],
         ),
-        iconTheme: IconThemeData(color: Colors.white, size: 32),
+        iconTheme: const IconThemeData(color: Colors.white, size: 32),
       ),
       body: SafeArea(
         child: Padding(
-          padding: EdgeInsets.all(20),
+          padding: const EdgeInsets.all(20),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -201,7 +239,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                   ),
                 ),
 
-              if (widget.article.imageUrl != null) SizedBox(width: 24),
+              if (widget.article.imageUrl != null) const SizedBox(width: 24),
 
               // Panel derecho - Contenido
               Expanded(
@@ -224,7 +262,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                                 height: 1.3,
                               ),
                             ),
-                            SizedBox(height: 16),
+                            const SizedBox(height: 16),
 
                             // Fecha
                             Row(
@@ -234,7 +272,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                                   size: 20,
                                   color: Colors.grey[400],
                                 ),
-                                SizedBox(width: 8),
+                                const SizedBox(width: 8),
                                 Text(
                                   widget.article.formattedDate,
                                   style: TextStyle(
@@ -244,14 +282,14 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                                 ),
                               ],
                             ),
-                            SizedBox(height: 20),
+                            const SizedBox(height: 20),
 
                             // Reproductor de audio para automotive
                             if (_isInitialized && !_hasError)
                               _buildAutomotiveAudioPlayer(responsive),
 
                             if (_isInitialized && !_hasError)
-                              SizedBox(height: 20),
+                              const SizedBox(height: 20),
 
                             // Contenido resumido
                             Text(
@@ -269,14 +307,14 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                       ),
                     ),
 
-                    SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
                     // Botón grande para ver completo
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: () => _launchUrl(widget.article.link),
-                        icon: Icon(Icons.open_in_browser, size: 28),
+                        icon: const Icon(Icons.open_in_browser, size: 28),
                         label: Text(
                           'VER COMPLETO',
                           style: TextStyle(
@@ -287,8 +325,8 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
                           foregroundColor: Colors.white,
-                          minimumSize: Size(double.infinity, 70),
-                          padding: EdgeInsets.symmetric(vertical: 20),
+                          minimumSize: const Size(double.infinity, 70),
+                          padding: const EdgeInsets.symmetric(vertical: 20),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -305,10 +343,10 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     );
   }
 
-  /// Reproductor de audio optimizado para automotive
+  /// Reproductor de audio optimizado para entornos automotrices (controles grandes).
   Widget _buildAutomotiveAudioPlayer(ResponsiveHelper responsive) {
     return Container(
-      padding: EdgeInsets.all(20),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.grey[900],
         borderRadius: BorderRadius.circular(12),
@@ -316,11 +354,11 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
       ),
       child: Column(
         children: [
-          // Header
+          // Encabezado
           Row(
             children: [
-              Icon(Icons.headphones, color: Colors.green, size: 28),
-              SizedBox(width: 12),
+              const Icon(Icons.headphones, color: Colors.green, size: 28),
+              const SizedBox(width: 12),
               Text(
                 'Audio del artículo',
                 style: TextStyle(
@@ -331,9 +369,9 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
               ),
             ],
           ),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
 
-          // Barra de progreso
+          // Barra de progreso y tiempos
           Column(
             children: [
               SliderTheme(
@@ -341,8 +379,12 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                   activeTrackColor: Colors.green,
                   inactiveTrackColor: Colors.grey[700],
                   thumbColor: Colors.green,
-                  thumbShape: RoundSliderThumbShape(enabledThumbRadius: 8),
-                  overlayShape: RoundSliderOverlayShape(overlayRadius: 16),
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 8,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 16,
+                  ),
                 ),
                 child: Slider(
                   value: _position.inSeconds.toDouble(),
@@ -355,17 +397,17 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                 ),
               ),
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
                       _formatDuration(_position),
-                      style: TextStyle(color: Colors.grey[400], fontSize: 16),
+                      style: const TextStyle(color: Colors.grey, fontSize: 16),
                     ),
                     Text(
                       _formatDuration(_duration),
-                      style: TextStyle(color: Colors.grey[400], fontSize: 16),
+                      style: const TextStyle(color: Colors.grey, fontSize: 16),
                     ),
                   ],
                 ),
@@ -373,24 +415,26 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
             ],
           ),
 
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
-          // Controles grandes para automotive
+          // Controles grandes
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Retroceder 10 segundos
               IconButton(
-                icon: Icon(Icons.replay_10, color: Colors.white),
+                icon: const Icon(Icons.replay_10, color: Colors.white),
                 iconSize: 48,
                 onPressed: () {
-                  final newPosition = _position - Duration(seconds: 10);
+                  final newPosition = _position - const Duration(seconds: 10);
                   _audioPlayer?.seek(
                     newPosition < Duration.zero ? Duration.zero : newPosition,
                   );
                 },
               ),
-              SizedBox(width: 20),
+              const SizedBox(width: 20),
 
+              // Botón Play/Pause (manejo de estado)
               StreamBuilder<PlayerState>(
                 stream: _audioPlayer?.playerStateStream,
                 builder: (context, snapshot) {
@@ -398,19 +442,21 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                   final playing = playerState?.playing ?? false;
                   final processingState = playerState?.processingState;
 
+                  // Mostrar indicador de carga/buffering
                   if (processingState == ProcessingState.loading ||
                       processingState == ProcessingState.buffering) {
                     return Container(
                       width: 64,
                       height: 64,
-                      padding: EdgeInsets.all(16),
-                      child: CircularProgressIndicator(
+                      padding: const EdgeInsets.all(16),
+                      child: const CircularProgressIndicator(
                         color: Colors.green,
                         strokeWidth: 3,
                       ),
                     );
                   }
 
+                  // Botón de control
                   return IconButton(
                     icon: Icon(
                       playing ? Icons.pause_circle : Icons.play_circle,
@@ -428,12 +474,14 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                 },
               ),
 
-              SizedBox(width: 20),
+              const SizedBox(width: 20),
+
+              // Adelantar 10 segundos
               IconButton(
-                icon: Icon(Icons.forward_10, color: Colors.white),
+                icon: const Icon(Icons.forward_10, color: Colors.white),
                 iconSize: 48,
                 onPressed: () {
-                  final newPosition = _position + Duration(seconds: 10);
+                  final newPosition = _position + const Duration(seconds: 10);
                   _audioPlayer?.seek(
                     newPosition > _duration ? _duration : newPosition,
                   );
@@ -446,11 +494,12 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     );
   }
 
-  /// Layout estándar para móvil y tablet
+  /// Layout estándar para dispositivos móviles y tablets.
   Widget _buildStandardLayout(
     BuildContext context,
     ResponsiveHelper responsive,
   ) {
+    // Definición de medidas responsivas
     final padding = responsive.getValue(
       smallPhone: 16.0,
       phone: 20.0,
@@ -514,12 +563,14 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         children: [
           Center(
             child: ConstrainedBox(
+              // Limita el ancho en pantallas grandes (desktop/tablet)
               constraints: BoxConstraints(maxWidth: responsive.maxContentWidth),
               child: SingleChildScrollView(
                 padding: EdgeInsets.only(
                   top: padding,
                   left: padding,
                   right: padding,
+                  // Ajusta el padding inferior si el MiniPlayer está visible
                   bottom: _isStreamingPlaying
                       ? responsive.getValue(
                           phone: 100.0,
@@ -562,17 +613,21 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                     SizedBox(height: responsive.spacing(24)),
 
                     // Reproductor de audio estándar
-                    if (_isInitialized && !_hasError)
+                    if (widget.article.audioUrl != null &&
+                        _isInitialized &&
+                        !_hasError)
                       _buildAudioPlayer(responsive, borderRadius),
 
-                    if (_isInitialized && !_hasError)
+                    if (widget.article.audioUrl != null &&
+                        _isInitialized &&
+                        !_hasError)
                       SizedBox(height: responsive.spacing(24)),
 
                     // Mensaje de error de audio
-                    if (_hasError && widget.article.audioUrl != null)
+                    if (widget.article.audioUrl != null && _hasError)
                       _buildAudioError(responsive, borderRadius),
 
-                    if (_hasError && widget.article.audioUrl != null)
+                    if (widget.article.audioUrl != null && _hasError)
                       SizedBox(height: responsive.spacing(24)),
 
                     // Contenido
@@ -580,7 +635,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
 
                     SizedBox(height: responsive.spacing(32)),
 
-                    // Botones de acción
+                    // Botones de acción (Fila para desktop/tablet, columna para móvil)
                     if (responsive.isDesktop || responsive.isLargeTablet)
                       _buildButtonsRow(responsive, borderRadius)
                     else
@@ -593,7 +648,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
             ),
           ),
 
-          // MiniPlayer del streaming - siempre presente, se anima automáticamente
+          // MiniPlayer del streaming - se muestra si hay un manager de audio.
           if (widget.audioManager != null)
             Positioned(
               bottom: 16,
@@ -601,9 +656,6 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
               right: 16,
               child: Builder(
                 builder: (context) {
-                  debugPrint(
-                    '🟢 Construyendo MiniPlayer en ArticleDetailScreen',
-                  );
                   return MiniPlayer(audioManager: widget.audioManager!);
                 },
               ),
@@ -613,8 +665,9 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     );
   }
 
-  /// Reproductor de audio estándar para móvil/tablet
+  /// Reproductor de audio estándar para móvil/tablet.
   Widget _buildAudioPlayer(ResponsiveHelper responsive, double borderRadius) {
+    // ... (El código de construcción del reproductor)
     return Container(
       padding: EdgeInsets.all(
         responsive.getValue(phone: 16.0, tablet: 20.0, desktop: 24.0),
@@ -640,7 +693,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
           Row(
             children: [
               Container(
-                padding: EdgeInsets.all(12),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
@@ -655,7 +708,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                   ),
                 ),
               ),
-              SizedBox(width: 16),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -668,7 +721,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
                       'Escucha el contenido completo',
                       style: TextStyle(
@@ -682,7 +735,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
             ],
           ),
 
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
 
           // Barra de progreso
           Column(
@@ -718,7 +771,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                 ),
               ),
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -744,7 +797,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
             ],
           ),
 
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // Controles de reproducción
           Row(
@@ -752,7 +805,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
             children: [
               // Retroceder 10s
               IconButton(
-                icon: Icon(Icons.replay_10),
+                icon: const Icon(Icons.replay_10),
                 iconSize: responsive.getValue(
                   phone: 28.0,
                   tablet: 32.0,
@@ -760,7 +813,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                 ),
                 color: AppColors.textPrimary,
                 onPressed: () {
-                  final newPosition = _position - Duration(seconds: 10);
+                  final newPosition = _position - const Duration(seconds: 10);
                   _audioPlayer?.seek(
                     newPosition < Duration.zero ? Duration.zero : newPosition,
                   );
@@ -796,8 +849,8 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                         tablet: 56.0,
                         desktop: 64.0,
                       ),
-                      padding: EdgeInsets.all(12),
-                      child: CircularProgressIndicator(
+                      padding: const EdgeInsets.all(12),
+                      child: const CircularProgressIndicator(
                         color: AppColors.primary,
                         strokeWidth: 3,
                       ),
@@ -848,7 +901,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
 
               // Adelantar 10s
               IconButton(
-                icon: Icon(Icons.forward_10),
+                icon: const Icon(Icons.forward_10),
                 iconSize: responsive.getValue(
                   phone: 28.0,
                   tablet: 32.0,
@@ -856,7 +909,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                 ),
                 color: AppColors.textPrimary,
                 onPressed: () {
-                  final newPosition = _position + Duration(seconds: 10);
+                  final newPosition = _position + const Duration(seconds: 10);
                   _audioPlayer?.seek(
                     newPosition > _duration ? _duration : newPosition,
                   );
@@ -869,7 +922,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     );
   }
 
-  /// Widget de error de audio
+  /// Widget que muestra un mensaje si el audio del artículo no pudo cargarse.
   Widget _buildAudioError(ResponsiveHelper responsive, double borderRadius) {
     return Container(
       padding: EdgeInsets.all(
@@ -897,7 +950,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                   desktop: 32.0,
                 ),
               ),
-              SizedBox(width: 16),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -910,7 +963,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                         color: Colors.red,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
                       'No se pudo reproducir el archivo de audio',
                       style: TextStyle(
@@ -923,15 +976,17 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
               ),
             ],
           ),
+          // Muestra el mensaje de error (solo visible si _errorMessage tiene contenido)
           if (_errorMessage != null) ...[
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Container(
-              padding: EdgeInsets.all(8),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Colors.red.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: SelectableText(
+                // Se mantiene el error para posible diagnóstico en un entorno de pruebas/desarrollo
                 _errorMessage!,
                 style: TextStyle(
                   fontSize: 11,
@@ -946,7 +1001,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     );
   }
 
-  /// Construye la imagen del artículo con estados de carga y error
+  /// Construye la imagen del artículo con estados de carga y error.
   Widget _buildImage(
     BuildContext context,
     ResponsiveHelper responsive,
@@ -999,7 +1054,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                   ),
                   color: AppColors.textSecondary.withValues(alpha: 0.5),
                 ),
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
                 Text(
                   'Imagen no disponible',
                   style: TextStyle(
@@ -1015,12 +1070,12 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     );
   }
 
-  /// Fila con fecha y hora
+  /// Fila con el ícono y la fecha de publicación del artículo.
   Widget _buildDateRow(ResponsiveHelper responsive, double iconSize) {
     return Row(
       children: [
         Icon(Icons.access_time, size: iconSize, color: AppColors.textSecondary),
-        SizedBox(width: 8),
+        const SizedBox(width: 8),
         Flexible(
           child: Text(
             widget.article.formattedDate,
@@ -1034,7 +1089,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     );
   }
 
-  /// Tarjeta con el contenido del artículo
+  /// Tarjeta principal que contiene el texto del artículo.
   Widget _buildContentCard(ResponsiveHelper responsive, double borderRadius) {
     final cardPadding = responsive.getValue(
       phone: 18.0,
@@ -1074,7 +1129,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     );
   }
 
-  /// Botones en columna (móvil)
+  /// Construye los botones de acción en formato de columna (para móvil/tamaño pequeño).
   Widget _buildButtonsColumn(ResponsiveHelper responsive, double borderRadius) {
     return Column(
       children: [
@@ -1099,7 +1154,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     );
   }
 
-  /// Botones en fila (tablet/desktop)
+  /// Construye los botones de acción en formato de fila (para tablet/desktop).
   Widget _buildButtonsRow(ResponsiveHelper responsive, double borderRadius) {
     return Row(
       children: [
@@ -1114,7 +1169,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
             () => _launchUrl(widget.article.link),
           ),
         ),
-        SizedBox(width: 16),
+        const SizedBox(width: 16),
         Expanded(
           child: _buildActionButton(
             responsive,
@@ -1129,7 +1184,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     );
   }
 
-  /// Botón de acción reutilizable
+  /// Widget de botón de acción reutilizable con estilo consistente.
   Widget _buildActionButton(
     ResponsiveHelper responsive,
     double borderRadius,
@@ -1178,7 +1233,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     );
   }
 
-  /// Abre URL en navegador externo
+  /// Abre URL en navegador externo usando `url_launcher`.
   Future<void> _launchUrl(String url) async {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
@@ -1186,32 +1241,32 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     }
   }
 
-  /// Comparte el artículo
+  /// Comparte el título y el enlace del artículo usando `share_plus`.
   void _shareArticle(BuildContext context) {
     final shareText = '${widget.article.title}\n\n${widget.article.link}';
     Share.share(shareText, subject: widget.article.title);
   }
 
-  /// Copia el enlace al portapapeles
+  /// Copia el enlace del artículo al portapapeles y muestra un SnackBar de confirmación.
   void _copyLink(BuildContext context) {
     Clipboard.setData(ClipboardData(text: widget.article.link));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.white),
-            SizedBox(width: 12),
+            const Icon(Icons.check_circle, color: Colors.white),
+            const SizedBox(width: 12),
             Expanded(
               child: Text(
                 'Enlace copiado al portapapeles',
-                style: TextStyle(fontSize: 14),
+                style: const TextStyle(fontSize: 14),
               ),
             ),
           ],
         ),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 2),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );

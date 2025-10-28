@@ -12,26 +12,42 @@ import '../widgets/live_indicator.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
 
-/// Pantalla "Acerca de" que muestra información sobre la aplicación y la emisora
-/// Incluye logo, descripción, versión, enlaces web y soporte
+/// Pantalla "Acerca de" que muestra información sobre la aplicación y la emisora.
+///
+/// Incluye logo, descripción, versión, enlaces web y soporte,
+/// extrayendo dinámicamente el contenido de la página 'Sobre Nosotros'
+/// mediante web scraping.
 class AboutScreen extends StatefulWidget {
+  /// Constructor de AboutScreen.
   const AboutScreen({super.key});
 
   @override
   State<AboutScreen> createState() => _AboutScreenState();
 }
 
+/// Estado y lógica de la pantalla 'Acerca de'.
 class _AboutScreenState extends State<AboutScreen> {
+  /// Versión actual de la aplicación. Se inicializa como 'Cargando...'.
   String _version = 'Cargando...';
+
+  /// Instancia del administrador de la reproducción de audio (Singleton).
   late final AudioPlayerManager _audioManager;
+
+  /// Lista de widgets generados dinámicamente a partir del HTML extraído.
   List<Widget> _aboutContent = [];
+
+  /// Indicador de estado para la carga del contenido web.
   bool _isLoadingContent = true;
+
+  /// Instancia de Firebase Analytics para el seguimiento.
   final analytics = FirebaseAnalytics.instance;
 
+  /// {inheritdoc}
   @override
   void initState() {
     super.initState();
     // ananlitica
+    // Se registra la vista de pantalla para Firebase Analytics.
     analytics.logScreenView(screenName: 'about', screenClass: 'AboutScreen');
     // obtener singleton
     _audioManager = AudioPlayerManager();
@@ -39,19 +55,25 @@ class _AboutScreenState extends State<AboutScreen> {
     _loadAboutContent();
   }
 
+  /// Carga la versión de la aplicación desde el sistema.
   Future<void> _loadVersion() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
+      if (!mounted) return;
       setState(() {
         _version = packageInfo.version;
       });
     } catch (e) {
+      // Fallback si no se puede obtener la versión (ej. entorno de pruebas)
+      if (!mounted) return;
       setState(() {
         _version = '2.0.0';
       });
     }
   }
 
+  /// Realiza web scraping para cargar el contenido de la página "Sobre Nosotros"
+  /// y lo convierte a widgets de Flutter.
   Future<void> _loadAboutContent() async {
     try {
       final response = await http
@@ -60,6 +82,7 @@ class _AboutScreenState extends State<AboutScreen> {
 
       if (response.statusCode == 200) {
         final document = html_parser.parse(response.body);
+        // Busca el contenedor principal del contenido (compatible con varios temas WP)
         var contentElement =
             document.querySelector('.entry-content') ??
             document.querySelector('article') ??
@@ -68,15 +91,15 @@ class _AboutScreenState extends State<AboutScreen> {
         List<Widget> widgets = [];
 
         if (contentElement != null) {
+          // Eliminar el título de la página si está duplicado en el contenido
           contentElement.querySelector('h1.entry-title')?.remove();
           final children = contentElement.children;
 
-          // Verificar que el widget sigue montado antes de usar context
           if (!mounted) return;
 
           final responsive = ResponsiveHelper(context);
 
-          // Tamaños de fuente accesibles
+          // Tamaños de fuente responsivos
           final headerSize = responsive.h3; // 14-20px
           final bodySize = responsive.bodyText; // 14-18px
 
@@ -90,6 +113,7 @@ class _AboutScreenState extends State<AboutScreen> {
                 tagName == 'h2' || tagName == 'h3' || tagName == 'h4';
 
             if (isHeader) {
+              // Añadir espacio vertical antes de un nuevo encabezado
               if (widgets.isNotEmpty) {
                 widgets.add(SizedBox(height: responsive.spacing(20)));
               }
@@ -105,13 +129,13 @@ class _AboutScreenState extends State<AboutScreen> {
                   ),
                 ),
               );
-
               widgets.add(SizedBox(height: responsive.spacing(8)));
             } else if (tagName == 'p') {
               final strong = element.querySelector('strong');
 
               if (strong != null) {
                 final strongText = strong.text.trim();
+                // Heurística para identificar un subtítulo en mayúsculas dentro de un <p>
                 final isAllCaps =
                     strongText == strongText.toUpperCase() &&
                     strongText.length > 3 &&
@@ -133,9 +157,9 @@ class _AboutScreenState extends State<AboutScreen> {
                       ),
                     ),
                   );
-
                   widgets.add(SizedBox(height: responsive.spacing(8)));
 
+                  // Procesar el texto restante del párrafo
                   strong.remove();
                   final remainingText = element.text.trim();
 
@@ -158,15 +182,14 @@ class _AboutScreenState extends State<AboutScreen> {
                           textAlign: TextAlign.left,
                         ),
                       );
-
                       widgets.add(SizedBox(height: responsive.spacing(10)));
                     }
                   }
-
                   continue;
                 }
               }
 
+              // Procesamiento normal del párrafo
               List<InlineSpan> spans = [];
               _processParagraph(element, spans);
 
@@ -185,7 +208,6 @@ class _AboutScreenState extends State<AboutScreen> {
                     textAlign: TextAlign.left,
                   ),
                 );
-
                 widgets.add(SizedBox(height: responsive.spacing(10)));
               }
             }
@@ -196,19 +218,21 @@ class _AboutScreenState extends State<AboutScreen> {
           widgets = [const Text('No se pudo cargar el contenido.')];
         }
 
-        if (!mounted) return; // Verificar antes de setState
+        if (!mounted) return;
         setState(() {
           _aboutContent = widgets;
           _isLoadingContent = false;
         });
       } else {
+        // En caso de error HTTP, se lanza una excepción que es capturada por el catch.
         throw Exception('Error ${response.statusCode}');
       }
     } catch (e) {
-      if (!mounted) return; // Verificar antes de usar context
+      // Manejo de errores: Si falla la conexión o el scraping, se usa un texto de fallback.
+      if (!mounted) return;
       final responsive = ResponsiveHelper(context);
 
-      if (!mounted) return; // Verificar antes de setState
+      if (!mounted) return;
       setState(() {
         _aboutContent = [
           Text(
@@ -225,6 +249,11 @@ class _AboutScreenState extends State<AboutScreen> {
     }
   }
 
+  /// Procesa los nodos dentro de un párrafo o elemento de bloque HTML,
+  /// convirtiéndolos en RichText spans, manejando enlaces y formato básico.
+  ///
+  /// [paragraph] - El elemento HTML de donde se extraen los nodos.
+  /// [spans] - La lista de TextSpan a la que se añaden los resultados.
   void _processParagraph(dom.Element paragraph, List<InlineSpan> spans) {
     for (var node in paragraph.nodes) {
       if (node.nodeType == dom.Node.TEXT_NODE) {
@@ -269,6 +298,7 @@ class _AboutScreenState extends State<AboutScreen> {
             ),
           );
         } else {
+          // Recurrente para elementos anidados que no son manejados explícitamente
           if (element.nodes.isNotEmpty) {
             _processParagraph(element, spans);
           } else {
@@ -279,6 +309,18 @@ class _AboutScreenState extends State<AboutScreen> {
     }
   }
 
+  /// Lanza una URL externa utilizando [url_launcher].
+  ///
+  /// Abre la URL en el navegador externo del sistema para evitar problemas de compatibilidad.
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      // Usar externalApplication es preferible para abrir enlaces web.
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  /// {inheritdoc}
   @override
   Widget build(BuildContext context) {
     final responsive = ResponsiveHelper(context);
@@ -294,6 +336,7 @@ class _AboutScreenState extends State<AboutScreen> {
             title: Row(
               children: [
                 const Text('Nosotros'),
+                // Muestra un indicador de 'LIVE' si la radio está reproduciendo.
                 if (isPlaying) const LiveIndicator(),
               ],
             ),
@@ -321,6 +364,7 @@ class _AboutScreenState extends State<AboutScreen> {
                       'La Iglesia Cristiana PAI',
                     ),
                     SizedBox(height: responsive.spacing(14)),
+                    // Botones de navegación externos
                     _buildWebsiteButton(responsive),
                     SizedBox(height: responsive.spacing(14)),
                     _buildWebsiteButton2(responsive),
@@ -330,6 +374,7 @@ class _AboutScreenState extends State<AboutScreen> {
                   ],
                 ),
               ),
+              // Muestra el MiniPlayer en la parte inferior si la radio está activa.
               if (isPlaying)
                 Positioned(
                   bottom: 16,
@@ -344,6 +389,9 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Calcula el padding responsivo para el SingleChildScrollView.
+  ///
+  /// Ajusta el padding inferior para dejar espacio al MiniPlayer si está activo.
   EdgeInsets _getPadding(ResponsiveHelper responsive, bool isPlaying) {
     final horizontalPadding = responsive.getValue(
       smallPhone: 20.0,
@@ -363,6 +411,7 @@ class _AboutScreenState extends State<AboutScreen> {
       automotive: 28.0,
     );
 
+    // Si está reproduciendo, aumenta el padding inferior para el MiniPlayer.
     final bottomPadding = isPlaying
         ? responsive.getValue(
             smallPhone: 90.0,
@@ -389,6 +438,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Construye el logo de la aplicación con efectos de brillo.
   Widget _buildLogo(ResponsiveHelper responsive) {
     final logoSize = responsive.getValue(
       smallPhone: 100.0,
@@ -421,6 +471,7 @@ class _AboutScreenState extends State<AboutScreen> {
           width: iconSize,
           height: iconSize,
           fit: BoxFit.cover,
+          // Muestra un ícono de radio en caso de que la imagen asset falle.
           errorBuilder: (context, error, stackTrace) {
             return Icon(
               Icons.radio,
@@ -433,6 +484,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Construye el título principal de la emisora.
   Widget _buildTitle(ResponsiveHelper responsive) {
     return Text(
       'Ambiente Stereo 88.4 FM',
@@ -445,6 +497,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Construye el subtítulo/slogan de la emisora.
   Widget _buildSubtitle(ResponsiveHelper responsive) {
     return Text(
       'La radio que si quieres',
@@ -456,6 +509,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Construye la tarjeta principal que contiene la descripción obtenida por web scraping.
   Widget _buildDescriptionCard(ResponsiveHelper responsive) {
     final padding = responsive.getValue(
       smallPhone: 16.0,
@@ -488,6 +542,7 @@ class _AboutScreenState extends State<AboutScreen> {
           ),
         ],
       ),
+      // Muestra un indicador de carga o el contenido procesado.
       child: _isLoadingContent
           ? const Center(child: CircularProgressIndicator())
           : Column(
@@ -497,6 +552,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Construye una tarjeta informativa genérica con un título y valor.
   Widget _buildInfoCard(
     ResponsiveHelper responsive,
     String title,
@@ -585,6 +641,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Construye el botón para el sitio web de Ambiente Stereo.
   Widget _buildWebsiteButton(ResponsiveHelper responsive) {
     return _buildButton(
       responsive,
@@ -594,6 +651,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Construye el botón para el sitio web de la Iglesia Cristiana PAI.
   Widget _buildWebsiteButton2(ResponsiveHelper responsive) {
     return _buildButton(
       responsive,
@@ -603,7 +661,9 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
+  /// Construye el botón para enviar un correo de soporte.
   Widget _buildWebsiteButton1(ResponsiveHelper responsive) {
+    /// Helper para codificar parámetros de URL.
     String? encodeQueryParameters(Map<String, String> params) {
       return params.entries
           .map(
@@ -629,6 +689,7 @@ class _AboutScreenState extends State<AboutScreen> {
     });
   }
 
+  /// Construye un botón elevado con un ícono y un estilo responsivo.
   Widget _buildButton(
     ResponsiveHelper responsive,
     String label,
@@ -690,12 +751,5 @@ class _AboutScreenState extends State<AboutScreen> {
         shadowColor: AppColors.primary.withValues(alpha: 0.3),
       ),
     );
-  }
-
-  Future<void> _launchUrl(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
   }
 }

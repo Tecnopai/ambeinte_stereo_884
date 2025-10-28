@@ -1,34 +1,42 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     
-    <!-- ========== PERMISOS REQUERIDOS ========== -->
+    <!-- ================================================================== -->
+    <!-- PERMISOS REQUERIDOS POR LA APLICACIÓN -->
+    <!-- ================================================================== -->
     
-    <!-- Permiso básico de internet -->
+    <!-- Permiso básico de internet para el streaming y las peticiones HTTP. -->
     <uses-permission android:name="android.permission.INTERNET" />
     
-    <!-- Verificar estado de la red para detectar reconexiones -->
+    <!-- Verificar estado de la red para detectar desconexiones y gestionar reconexiones. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     
-    <!-- Verificar estado del WiFi -->
+    <!-- Verificar estado del WiFi (puede ser útil para decisiones de streaming). -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     
-    <!-- Mantener la CPU activa durante reproducción (evita que se duerma) -->
+    <!-- Mantener la CPU activa durante reproducción (evita que el sistema duerma la aplicación
+         y corte el audio). Es el permiso nativo para el Wake Lock de MainActivity.kt. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     
-    <!-- Reproducción en background (cuando app está minimizada) -->
+    <!-- Reproducción en background (cuando la app está minimizada), requerido por just_audio/radio_player. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     
-    <!-- Tipo específico de servicio en foreground para Android 14+ -->
+    <!-- Tipo específico de servicio en foreground para Android 14 (API 34) y superiores. 
+         Es obligatorio declarar el tipo si se usa FOREGROUND_SERVICE. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
-    <!-- Permisos para botones de volumen -->
+    <!-- Permisos para controlar el volumen del sistema, utilizado por el paquete volume_controller. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     
-    <!-- Para evitar que Doze Mode mate la app -->
+    <!-- Para evitar que el modo Doze (ahorro de batería) detenga la app en segundo plano. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     
-    <!-- Para Android 12+ alarmas exactas (reconexión automática) -->
+    <!-- Para Android 12+ (API 31+): permite usar alarmas exactas, que pueden ser necesarias 
+         para programar temporizadores de apagado o reconexión precisa. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+
+
+            <!-- android:usesCleartextTraffic="true" Permite el tráfico HTTP no cifrado. Necesario si la URL del streaming no es HTTPS. --> 
 
     <application
         android:label="Ambientestereo884.fm"
@@ -37,6 +45,9 @@
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="true">
         
+        <!-- android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" Configuración para asegurar que Flutter maneje todos los cambios de configuración. -->
+        <!-- android:showWhenLocked="true" Configuración crítica para controles de medios en la pantalla de bloqueo y cuando el dispositivo está bloqueado. -->
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -45,7 +56,7 @@
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize"
+            android:windowSoftInputMode="adjustResize"            
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:keepScreenOn="false">
@@ -55,10 +66,12 @@
               android:resource="@style/NormalTheme"
               />
 
+            <!-- Configuración de Firebase Analytics para habilitar el reporte automático de pantallas. -->
             <meta-data
                 android:name="google_analytics_automatic_screen_reporting_enabled"
                 android:value="true" />
-    
+        
+            <!-- Configuración de Firebase Analytics para permitir el almacenamiento de datos analíticos. -->
             <meta-data
                 android:name="google_analytics_default_allow_analytics_storage"
                 android:value="true" />
@@ -70,11 +83,12 @@
             
         </activity>
         
-        <!-- SERVICIO DE RADIO_PLAYER (notificaciones automáticas) -->
+        <!-- SERVICIO DEL REPRODUCTOR (Gestiona la reproducción en segundo plano y la notificación de medios) -->
+        <!-- android:foregroundServiceType="mediaPlayback" Tipo de servicio en foreground: obligatorio para reproducción de medios. -->
         <service
             android:name="com.cheebeez.radio_player.RadioPlayerService"
             android:enabled="true"
-            android:exported="true"
+            android:exported="true"            
             android:foregroundServiceType="mediaPlayback"
             tools:replace="android:exported">
         </service>
@@ -84,16 +98,23 @@
             android:value="2" />
     </application>
     
+    <!-- ================================================================== -->
+    <!-- CONSULTAS (QUERIES) PARA INTERACCIÓN CON OTRAS APPS (Android 11+) -->
+    <!-- Requerido por el paquete url_launcher para abrir URLs. -->
+    <!-- ================================================================== -->
     <queries>
+        <!-- Permite que la app interactúe con aplicaciones que manejan texto (ej. copiar/pegar). -->
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
         
+        <!-- Permite que la app abra enlaces HTTPS en navegadores. -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
+        <!-- Permite que la app abra enlaces HTTP en navegadores. -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="http" />

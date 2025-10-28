@@ -10,37 +10,73 @@ import '../widgets/live_indicator.dart';
 import '../core/theme/app_colors.dart';
 import 'article_detail_screen.dart';
 import '../utils/responsive_helper.dart';
+// Se omite la importación de 'news_list_screen.dart' ya que CategoryNewsScreen está en este archivo.
 
 /// Pantalla principal de noticias mejorada con Radio Hits
+///
+/// Implementa la vista principal de la aplicación, organizada en pestañas,
+/// y gestiona el estado de reproducción de audio en vivo.
 class NewsScreen extends StatefulWidget {
+  /// Constructor de NewsScreen.
   const NewsScreen({super.key});
 
   @override
   State<NewsScreen> createState() => _NewsScreenState();
 }
 
+/// Estado y lógica de la pantalla principal de noticias y rankings.
 class _NewsScreenState extends State<NewsScreen>
     with SingleTickerProviderStateMixin {
+  /// Controlador para gestionar las pestañas (Todas, Categorías, Radio Hits).
   late TabController _tabController;
+
+  /// Servicio para la obtención de datos de noticias.
   final NewsService _newsService = NewsService();
+
+  /// Manager para controlar la reproducción de audio (Singleton).
   late final AudioPlayerManager _audioManager;
+
+  /// Servicio para la obtención de datos del ranking musical.
   final RadioHitsService _radioHitsService = RadioHitsService();
 
+  // --- Estado de la pestaña 'Todas' (Noticias) ---
+  /// Lista de artículos a mostrar.
   List<Article> _articles = [];
+
+  /// Indicador de si la carga inicial de noticias está en curso.
   bool _isLoadingNews = true;
+
+  /// Página actual de noticias cargada (para paginación/scroll infinito).
   int _newsPage = 1;
+
+  /// Indica si hay más artículos disponibles para cargar.
   bool _hasMoreNews = true;
+
+  /// Indicador de si la carga de la siguiente página está en curso.
   bool _isLoadingMoreNews = false;
+
+  /// Controlador para detectar eventos de scroll y disparar la carga infinita.
   final ScrollController _newsScrollController = ScrollController();
 
+  // --- Estado de la pestaña 'Categorías' ---
+  /// Lista de categorías disponibles.
   List<Category> _categories = [];
+
+  /// Indicador de si la carga inicial de categorías está en curso.
   bool _isLoadingCategories = true;
 
+  // --- Estado de la pestaña 'Radio Hits' ---
+  /// Lista de canciones del ranking.
   List<RadioHit> _radioHits = [];
+
+  /// Indicador de si la carga inicial de Radio Hits está en curso.
   bool _isLoadingRadioHits = true;
 
+  // --- Estado del Audio en Vivo ---
+  /// Indica si el audio en vivo se está reproduciendo actualmente.
   bool _isPlaying = false;
 
+  /// Inicializa el controlador de pestañas, el manager de audio y los listeners.
   @override
   void initState() {
     super.initState();
@@ -53,6 +89,7 @@ class _NewsScreenState extends State<NewsScreen>
     _newsScrollController.addListener(_onNewsScroll);
   }
 
+  /// Limpia los controladores para evitar fugas de memoria.
   @override
   void dispose() {
     _tabController.dispose();
@@ -60,6 +97,7 @@ class _NewsScreenState extends State<NewsScreen>
     super.dispose();
   }
 
+  /// Configura el listener para actualizar el estado del MiniPlayer.
   void _setupAudioListener() {
     _audioManager.playingStream.listen((isPlaying) {
       if (mounted) setState(() => _isPlaying = isPlaying);
@@ -67,7 +105,9 @@ class _NewsScreenState extends State<NewsScreen>
     _isPlaying = _audioManager.isPlaying;
   }
 
+  /// Maneja el evento de scroll para cargar más noticias cuando se acerca al final.
   void _onNewsScroll() {
+    // Carga si el usuario ha scrollado el 80% del contenido y hay más por cargar.
     if (_newsScrollController.position.pixels >=
             _newsScrollController.position.maxScrollExtent * 0.8 &&
         !_isLoadingMoreNews &&
@@ -76,6 +116,7 @@ class _NewsScreenState extends State<NewsScreen>
     }
   }
 
+  /// Carga la primera página de artículos de noticias.
   Future<void> _loadArticles() async {
     try {
       setState(() {
@@ -88,6 +129,7 @@ class _NewsScreenState extends State<NewsScreen>
         setState(() {
           _articles = articles;
           _isLoadingNews = false;
+          // Asume que si devuelve 20 artículos, puede haber otra página.
           _hasMoreNews = articles.length >= 20;
         });
       }
@@ -99,6 +141,7 @@ class _NewsScreenState extends State<NewsScreen>
     }
   }
 
+  /// Carga la siguiente página de artículos para el scroll infinito.
   Future<void> _loadMoreNews() async {
     if (_isLoadingMoreNews || !_hasMoreNews) return;
     setState(() => _isLoadingMoreNews = true);
@@ -113,6 +156,7 @@ class _NewsScreenState extends State<NewsScreen>
         });
       }
     } catch (e) {
+      // Revertir la paginación en caso de error
       if (mounted) {
         setState(() {
           _isLoadingMoreNews = false;
@@ -122,6 +166,7 @@ class _NewsScreenState extends State<NewsScreen>
     }
   }
 
+  /// Carga la lista de categorías.
   Future<void> _loadCategories() async {
     try {
       final categories = await _newsService.getCategories();
@@ -132,10 +177,12 @@ class _NewsScreenState extends State<NewsScreen>
         });
       }
     } catch (e) {
+      // Si falla, solo muestra el estado vacío o de carga terminada.
       if (mounted) setState(() => _isLoadingCategories = false);
     }
   }
 
+  /// Carga el ranking de Radio Hits.
   Future<void> _loadRadioHits() async {
     try {
       setState(() => _isLoadingRadioHits = true);
@@ -154,6 +201,7 @@ class _NewsScreenState extends State<NewsScreen>
     }
   }
 
+  /// Muestra una notificación de error en la parte inferior de la pantalla.
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -164,6 +212,7 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
+  /// Construye la interfaz principal con AppBar, TabBar y TabBarView.
   @override
   Widget build(BuildContext context) {
     final responsive = ResponsiveHelper(context);
@@ -173,6 +222,7 @@ class _NewsScreenState extends State<NewsScreen>
         title: Row(
           children: [
             Text('Noticias', style: TextStyle(fontSize: responsive.h2)),
+            // Muestra el indicador de "Live" si la radio está activa.
             if (_isPlaying) const LiveIndicator(),
           ],
         ),
@@ -200,6 +250,7 @@ class _NewsScreenState extends State<NewsScreen>
       ),
       body: Stack(
         children: [
+          // Vistas de las pestañas
           TabBarView(
             controller: _tabController,
             children: [
@@ -208,6 +259,7 @@ class _NewsScreenState extends State<NewsScreen>
               _buildRadioHitsTab(responsive),
             ],
           ),
+          // MiniPlayer flotante si la reproducción de audio está activa
           if (_isPlaying)
             Positioned(
               bottom: 16,
@@ -220,6 +272,7 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
+  /// Lógica para construir la pestaña de noticias 'Todas'.
   Widget _buildNewsTab(ResponsiveHelper responsive) {
     if (_isLoadingNews) {
       return _buildLoadingState(responsive, 'Cargando noticias...');
@@ -233,6 +286,7 @@ class _NewsScreenState extends State<NewsScreen>
       );
     }
 
+    // Retorna la lista de artículos con scroll infinito.
     return _buildArticlesList(
       responsive,
       _articles,
@@ -241,6 +295,7 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
+  /// Lógica para construir la pestaña 'Categorías'.
   Widget _buildCategoriesTab(ResponsiveHelper responsive) {
     if (_isLoadingCategories) {
       return _buildLoadingState(responsive, 'Cargando categorías...');
@@ -257,12 +312,14 @@ class _NewsScreenState extends State<NewsScreen>
     return _buildCategoriesList(responsive);
   }
 
+  /// Lógica para construir la pestaña 'Radio Hits'.
   Widget _buildRadioHitsTab(ResponsiveHelper responsive) {
     if (_isLoadingRadioHits) {
       return _buildLoadingState(responsive, 'Cargando Radio Hits...');
     }
 
     if (_radioHits.isEmpty) {
+      // Muestra un estado de error con opción de reintento.
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -281,7 +338,7 @@ class _NewsScreenState extends State<NewsScreen>
           ),
           SizedBox(height: responsive.spacing(16)),
           ElevatedButton.icon(
-            onPressed: _loadRadioHits,
+            onPressed: _loadRadioHits, // Llama a la función de recarga
             icon: const Icon(Icons.refresh),
             label: const Text('Reintentar'),
             style: ElevatedButton.styleFrom(
@@ -299,6 +356,7 @@ class _NewsScreenState extends State<NewsScreen>
     return _buildRadioHitsList(responsive);
   }
 
+  /// Widget genérico para el estado de carga (Loading).
   Widget _buildLoadingState(ResponsiveHelper responsive, String message) {
     return Center(
       child: Column(
@@ -321,6 +379,7 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
+  /// Widget genérico para el estado vacío (Empty State).
   Widget _buildEmptyState(
     ResponsiveHelper responsive,
     IconData icon,
@@ -348,6 +407,7 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
+  /// Construye la lista principal de artículos, alternando entre lista y grid.
   Widget _buildArticlesList(
     ResponsiveHelper responsive,
     List<Article> articles,
@@ -361,11 +421,12 @@ class _NewsScreenState extends State<NewsScreen>
       desktop: 32.0,
     );
 
+    // Ajuste de padding para dejar espacio al MiniPlayer en la parte inferior.
     final bottomPadding = _isPlaying
         ? responsive.getValue(phone: 100.0, tablet: 120.0, desktop: 140.0)
         : padding;
 
-    // Grid para tablets/desktop - CON AJUSTE PARA EVITAR OVERFLOW
+    // Si hay más de una columna (tablet/desktop), usa GridView.
     if (responsive.gridColumns > 1) {
       return RefreshIndicator(
         onRefresh: _loadArticles,
@@ -385,11 +446,12 @@ class _NewsScreenState extends State<NewsScreen>
                 crossAxisCount: responsive.gridColumns,
                 crossAxisSpacing: padding,
                 mainAxisSpacing: padding,
-                childAspectRatio:
-                    0.72, // ✅ Ajustado de 0.75 a 0.72 para dar más altura
+                // Proporción ajustada (altura/ancho) para prevenir overflow en el texto.
+                childAspectRatio: 0.72,
               ),
               itemCount: articles.length + (isLoadingMore ? 1 : 0),
               itemBuilder: (context, index) {
+                // Indicador de carga al final de la lista
                 if (index == articles.length) {
                   return Center(
                     child: CircularProgressIndicator(color: AppColors.primary),
@@ -407,7 +469,7 @@ class _NewsScreenState extends State<NewsScreen>
       );
     }
 
-    // Lista para móviles
+    // Por defecto (móvil), usa ListView.
     return RefreshIndicator(
       onRefresh: _loadArticles,
       color: AppColors.primary,
@@ -442,6 +504,7 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
+  /// Construye la lista de tarjetas de categorías.
   Widget _buildCategoriesList(ResponsiveHelper responsive) {
     final padding = responsive.getValue(
       phone: 16.0,
@@ -457,6 +520,7 @@ class _NewsScreenState extends State<NewsScreen>
     return RefreshIndicator(
       onRefresh: _loadCategories,
       color: AppColors.primary,
+      // Se utiliza ListView para mostrar una lista vertical de categorías.
       child: ListView.builder(
         padding: EdgeInsets.only(
           top: padding,
@@ -473,6 +537,7 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
+  /// Construye la lista de elementos del ranking Radio Hits.
   Widget _buildRadioHitsList(ResponsiveHelper responsive) {
     final padding = responsive.getValue(
       phone: 16.0,
@@ -504,13 +569,13 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
-  /// Evita overflow en tablets con Grid
+  /// Construye la tarjeta de visualización de un artículo, adaptándose a Grid/List.
   Widget _buildArticleCard(
     Article article,
     ResponsiveHelper responsive, {
     required bool isGrid,
   }) {
-    // Detectar orientación
+    // Detectar orientación para ajustes finos en Grid
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
@@ -521,12 +586,12 @@ class _NewsScreenState extends State<NewsScreen>
       desktop: 18.0,
     );
 
-    // Reducir padding en grid para ahorrar espacio
+    // Ajuste de padding: reducido en Grid para optimizar espacio.
     final padding = isGrid
         ? responsive.getValue(
             phone: 12.0,
             largePhone: 12.0,
-            tablet: isLandscape ? 8.0 : 10.0, // Aún menos padding en landscape
+            tablet: isLandscape ? 8.0 : 10.0,
             desktop: 12.0,
           )
         : responsive.getValue(
@@ -536,6 +601,14 @@ class _NewsScreenState extends State<NewsScreen>
             desktop: 18.0,
           );
 
+    // Altura de la imagen en modo lista (ListView). Ignorada en Grid (Expanded).
+    final imageHeight = responsive.getValue(
+      phone: 160.0,
+      largePhone: 180.0,
+      tablet: 200.0,
+      desktop: 220.0,
+    );
+
     return Card(
       color: AppColors.cardBackground,
       elevation: responsive.getValue(phone: 4.0, tablet: 6.0),
@@ -544,47 +617,35 @@ class _NewsScreenState extends State<NewsScreen>
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
+        // Navegación al detalle del artículo.
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => ArticleDetailScreen(
               article: article,
-              audioManager: _audioManager,
+              audioManager: _audioManager, // Inyecta el manager de audio
             ),
           ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            //  Imagen con Expanded para usar espacio flexible
+            // 1. Imagen - Usa Expanded para control de espacio en Grid.
             Expanded(
-              flex: isGrid
-                  ? (isLandscape ? 7 : 6)
-                  : 0, // Más imagen en landscape
+              // Mayor proporción de imagen en Grid
+              flex: isGrid ? (isLandscape ? 7 : 6) : 0,
               child: article.imageUrl != null
                   ? Image.network(
                       article.imageUrl!,
-                      height: isGrid
-                          ? null
-                          : responsive.getValue(
-                              phone: 180.0,
-                              largePhone: 200.0,
-                              tablet: 220.0,
-                              desktop: 240.0,
-                            ),
+                      // Usa altura fija solo en modo lista (no Grid)
+                      height: isGrid ? null : imageHeight,
                       width: double.infinity,
                       fit: BoxFit.cover,
+                      // Indicador de carga
                       loadingBuilder: (context, child, loadingProgress) {
                         if (loadingProgress == null) return child;
                         return Container(
-                          height: isGrid
-                              ? null
-                              : responsive.getValue(
-                                  phone: 180.0,
-                                  largePhone: 200.0,
-                                  tablet: 220.0,
-                                  desktop: 240.0,
-                                ),
+                          height: isGrid ? null : imageHeight,
                           color: AppColors.primary.withValues(alpha: 0.1),
                           child: Center(
                             child: CircularProgressIndicator(
@@ -594,10 +655,9 @@ class _NewsScreenState extends State<NewsScreen>
                           ),
                         );
                       },
+                      // Placeholder de error
                       errorBuilder: (context, error, stackTrace) => Container(
-                        height: isGrid
-                            ? null
-                            : responsive.getValue(phone: 180.0, tablet: 220.0),
+                        height: isGrid ? null : imageHeight,
                         color: AppColors.primary.withValues(alpha: 0.1),
                         child: Icon(
                           Icons.image_not_supported,
@@ -607,9 +667,8 @@ class _NewsScreenState extends State<NewsScreen>
                       ),
                     )
                   : Container(
-                      height: isGrid
-                          ? null
-                          : responsive.getValue(phone: 180.0, tablet: 220.0),
+                      // Placeholder si la URL es nula
+                      height: isGrid ? null : imageHeight,
                       color: AppColors.primary.withValues(alpha: 0.1),
                       child: Icon(
                         Icons.article,
@@ -619,8 +678,9 @@ class _NewsScreenState extends State<NewsScreen>
                     ),
             ),
 
-            // Contenido de texto con Expanded en grid
+            // 2. Contenido de texto
             if (isGrid)
+              // Layout para Grid (usa Expanded/Flexible para el texto)
               Expanded(
                 flex: 4,
                 child: Padding(
@@ -630,14 +690,14 @@ class _NewsScreenState extends State<NewsScreen>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Título
+                      // Título (Flexible para evitar overflow)
                       Flexible(
                         child: Text(
                           article.title,
                           style: TextStyle(
                             fontSize: responsive.getValue(
                               phone: 14.0,
-                              tablet: 13.0, // Reducido para tablets
+                              tablet: 13.0,
                               desktop: 14.0,
                             ),
                             fontWeight: FontWeight.bold,
@@ -649,10 +709,9 @@ class _NewsScreenState extends State<NewsScreen>
                         ),
                       ),
 
-                      // Espaciador
                       SizedBox(height: responsive.spacing(6)),
 
-                      // Fecha
+                      // Fecha de publicación
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -660,7 +719,7 @@ class _NewsScreenState extends State<NewsScreen>
                             Icons.access_time,
                             size: responsive.getValue(
                               phone: 12.0,
-                              tablet: 11.0, // Reducido para tablets
+                              tablet: 11.0,
                               desktop: 12.0,
                             ),
                             color: AppColors.textSecondary,
@@ -672,7 +731,7 @@ class _NewsScreenState extends State<NewsScreen>
                               style: TextStyle(
                                 fontSize: responsive.getValue(
                                   phone: 11.0,
-                                  tablet: 10.0, // Reducido para tablets
+                                  tablet: 10.0,
                                   desktop: 11.0,
                                 ),
                                 color: AppColors.textSecondary,
@@ -687,7 +746,7 @@ class _NewsScreenState extends State<NewsScreen>
                 ),
               )
             else
-              // Contenido normal para ListView
+              // Layout para Lista (usa Padding para el texto)
               Padding(
                 padding: EdgeInsets.all(padding),
                 child: Column(
@@ -757,6 +816,7 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
+  /// Construye la tarjeta de visualización de una categoría.
   Widget _buildCategoryCard(Category category, ResponsiveHelper responsive) {
     final borderRadius = responsive.getValue(
       phone: 12.0,
@@ -787,6 +847,7 @@ class _NewsScreenState extends State<NewsScreen>
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(borderRadius),
+        // Navegación a la pantalla de artículos filtrados por categoría.
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
@@ -800,6 +861,7 @@ class _NewsScreenState extends State<NewsScreen>
           padding: EdgeInsets.all(padding),
           child: Row(
             children: [
+              // Imagen/Icono de la categoría
               ClipRRect(
                 borderRadius: BorderRadius.circular(borderRadius * 0.7),
                 child: category.imageUrl != null
@@ -808,6 +870,7 @@ class _NewsScreenState extends State<NewsScreen>
                         width: imageSize,
                         height: imageSize,
                         fit: BoxFit.cover,
+                        // Fallback en caso de error de imagen
                         errorBuilder: (context, error, stackTrace) => Container(
                           width: imageSize,
                           height: imageSize,
@@ -827,6 +890,7 @@ class _NewsScreenState extends State<NewsScreen>
                         ),
                       )
                     : Container(
+                        // Fallback si no hay URL
                         width: imageSize,
                         height: imageSize,
                         decoration: BoxDecoration(
@@ -845,6 +909,7 @@ class _NewsScreenState extends State<NewsScreen>
                       ),
               ),
               SizedBox(width: responsive.spacing(16)),
+              // Nombre y contador de artículos
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -868,6 +933,7 @@ class _NewsScreenState extends State<NewsScreen>
                   ],
                 ),
               ),
+              // Flecha de navegación
               Icon(
                 Icons.arrow_forward_ios,
                 size: responsive.getValue(phone: 18.0, tablet: 20.0),
@@ -880,6 +946,7 @@ class _NewsScreenState extends State<NewsScreen>
     );
   }
 
+  /// Construye la tarjeta para un elemento del ranking Radio Hit.
   Widget _buildRadioHitCard(RadioHit hit, ResponsiveHelper responsive) {
     final borderRadius = responsive.getValue(
       phone: 12.0,
@@ -909,16 +976,17 @@ class _NewsScreenState extends State<NewsScreen>
       desktop: 28.0,
     );
 
+    // Determina el color y el icono según el puesto en el ranking.
     Color positionColor;
     IconData positionIcon;
     if (hit.position == 1) {
-      positionColor = const Color(0xFFFFD700);
+      positionColor = const Color(0xFFFFD700); // Oro
       positionIcon = Icons.emoji_events;
     } else if (hit.position == 2) {
-      positionColor = const Color(0xFFC0C0C0);
+      positionColor = const Color(0xFFC0C0C0); // Plata
       positionIcon = Icons.emoji_events;
     } else if (hit.position == 3) {
-      positionColor = const Color(0xFFCD7F32);
+      positionColor = const Color(0xFFCD7F32); // Bronce
       positionIcon = Icons.emoji_events;
     } else {
       positionColor = AppColors.primary;
@@ -935,6 +1003,7 @@ class _NewsScreenState extends State<NewsScreen>
         padding: EdgeInsets.all(padding),
         child: Row(
           children: [
+            // Imagen del álbum con insignia de posición
             Stack(
               children: [
                 ClipRRect(
@@ -982,6 +1051,7 @@ class _NewsScreenState extends State<NewsScreen>
                           ),
                         ),
                 ),
+                // Badge de posición numérica
                 Positioned(
                   top: 0,
                   left: 0,
@@ -1022,6 +1092,7 @@ class _NewsScreenState extends State<NewsScreen>
               ],
             ),
             SizedBox(width: responsive.spacing(12)),
+            // Información de la canción/artista
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1067,6 +1138,7 @@ class _NewsScreenState extends State<NewsScreen>
                 ],
               ),
             ),
+            // Muestra el icono de medalla solo para los top 3
             if (hit.position <= 3)
               Icon(
                 positionIcon,
@@ -1085,9 +1157,18 @@ class _NewsScreenState extends State<NewsScreen>
   }
 }
 
-/// Pantalla de artículos por categoría (responsive)
+// -----------------------------------------------------------------------------
+// --- PANTALLA SECUNDARIA: CategoryNewsScreen (Artículos por Categoría) ---
+// -----------------------------------------------------------------------------
+
+/// Pantalla que muestra artículos filtrados por una categoría específica.
+///
+/// Implementa scroll infinito para cargar más artículos dentro de la categoría.
 class CategoryNewsScreen extends StatefulWidget {
+  /// Categoría cuyos artículos se mostrarán.
   final Category category;
+
+  /// Manager de audio inyectado para mantener el MiniPlayer.
   final AudioPlayerManager audioManager;
 
   const CategoryNewsScreen({
@@ -1102,16 +1183,32 @@ class CategoryNewsScreen extends StatefulWidget {
 
 class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
   final NewsService _newsService = NewsService();
+
+  /// Controlador para el scroll infinito.
   final ScrollController _scrollController = ScrollController();
+
+  /// Manager de audio (se accede como singleton dentro de la clase)
   final AudioPlayerManager _audioManager = AudioPlayerManager();
 
+  /// Lista de artículos de la categoría.
   List<Article> _articles = [];
+
+  /// Estado de carga inicial.
   bool _isLoading = true;
+
+  /// Estado de carga de más artículos por scroll.
   bool _isLoadingMore = false;
+
+  /// Estado de reproducción de audio.
   bool _isPlaying = false;
+
+  /// Página actual de la paginación.
   int _currentPage = 1;
+
+  /// Indica si hay más artículos en el servidor.
   bool _hasMore = true;
 
+  /// Inicializa la carga de datos y los listeners.
   @override
   void initState() {
     super.initState();
@@ -1120,12 +1217,14 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     _scrollController.addListener(_onScroll);
   }
 
+  /// Limpia el controlador de scroll al salir de la pantalla.
   @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
   }
 
+  /// Configura el listener para el estado de reproducción del MiniPlayer.
   void _setupAudioListener() {
     _audioManager.playingStream.listen((isPlaying) {
       if (mounted) setState(() => _isPlaying = isPlaying);
@@ -1133,6 +1232,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     _isPlaying = _audioManager.isPlaying;
   }
 
+  /// Detecta el scroll para cargar más artículos (similar a NewsScreen).
   void _onScroll() {
     if (_scrollController.position.pixels >=
             _scrollController.position.maxScrollExtent * 0.8 &&
@@ -1142,6 +1242,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     }
   }
 
+  /// Carga la primera página de artículos filtrados por la categoría.
   Future<void> _loadArticles() async {
     try {
       setState(() {
@@ -1172,6 +1273,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     }
   }
 
+  /// Carga más artículos para el scroll infinito.
   Future<void> _loadMoreArticles() async {
     if (_isLoadingMore || !_hasMore) return;
     setState(() => _isLoadingMore = true);
@@ -1198,6 +1300,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     }
   }
 
+  /// Construye la interfaz de la pantalla de categoría.
   @override
   Widget build(BuildContext context) {
     final responsive = ResponsiveHelper(context);
@@ -1213,6 +1316,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            // Indicador de radio en vivo
             if (_isPlaying) const LiveIndicator(),
           ],
         ),
@@ -1221,6 +1325,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
       body: Stack(
         children: [
           _buildContent(responsive),
+          // MiniPlayer flotante
           if (_isPlaying)
             Positioned(
               bottom: 16,
@@ -1233,8 +1338,10 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     );
   }
 
+  /// Construye el contenido principal (Carga, Vacío o Lista de artículos).
   Widget _buildContent(ResponsiveHelper responsive) {
     if (_isLoading) {
+      // Estado de carga
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1257,6 +1364,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     }
 
     if (_articles.isEmpty) {
+      // Estado vacío
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1286,10 +1394,12 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
       desktop: 32.0,
     );
 
+    // Ajuste de padding inferior para el MiniPlayer
     final bottomPadding = _isPlaying
         ? responsive.getValue(phone: 100.0, tablet: 120.0, desktop: 140.0)
         : padding;
 
+    // Lista de artículos con indicador de recarga (pull-to-refresh).
     return RefreshIndicator(
       onRefresh: _loadArticles,
       color: AppColors.primary,
@@ -1303,6 +1413,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
         ),
         itemCount: _articles.length + (_isLoadingMore ? 1 : 0),
         itemBuilder: (context, index) {
+          // Indicador de carga al final de la lista.
           if (index == _articles.length) {
             return Center(
               child: Padding(
@@ -1313,6 +1424,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
           }
           return Padding(
             padding: EdgeInsets.only(bottom: padding),
+            // Construye la tarjeta del artículo (solo modo lista).
             child: _buildArticleCard(_articles[index], responsive),
           );
         },
@@ -1320,6 +1432,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
     );
   }
 
+  /// Construye la tarjeta de visualización de un artículo (en modo lista para esta pantalla).
   Widget _buildArticleCard(Article article, ResponsiveHelper responsive) {
     final borderRadius = responsive.getValue(
       phone: 12.0,
@@ -1362,6 +1475,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Imagen del artículo con placeholders y builders
             if (article.imageUrl != null)
               Image.network(
                 article.imageUrl!,
@@ -1392,6 +1506,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
                 ),
               )
             else
+              // Fallback si no hay imagen
               Container(
                 height: imageHeight,
                 color: AppColors.primary.withValues(alpha: 0.1),
@@ -1406,6 +1521,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Título del artículo
                   Text(
                     article.title,
                     style: TextStyle(
@@ -1418,6 +1534,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   SizedBox(height: responsive.spacing(12)),
+                  // Extracto/resumen del artículo
                   Text(
                     article.excerpt,
                     style: TextStyle(
@@ -1429,6 +1546,7 @@ class _CategoryNewsScreenState extends State<CategoryNewsScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   SizedBox(height: responsive.spacing(12)),
+                  // Fila de metadatos (fecha y flecha de navegación)
                   Row(
                     children: [
                       Icon(

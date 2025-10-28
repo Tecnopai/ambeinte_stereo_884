@@ -1,79 +1,84 @@
 name: ambeinte_stereo_884
-description: "Ambiente Stereo 884"
-publish_to: 'none'
+description: "Ambiente Stereo 88.4 FM."
+publish_to: 'none' # Previene que el paquete se publique en pub.dev.
 
-version: 2.0.10+14
+# Versión de la aplicación: major.minor.patch+build_number
+version: 2.0.11+15
 
 environment:
+  # Rango de Dart SDK compatible.
   sdk: ^3.8.1
 
 dependencies:
+  # Dependencia principal del Framework Flutter.
   flutter:
     sdk: flutter
 
-  # Audio
-  radio_player: ^2.0.0
-  volume_controller: ^3.4.0
-  audio_session: ^0.2.2
-  just_audio: ^0.10.5 
+  # --------------------------------------------------------------------------
+  # MÓDULOS DE REPRODUCCIÓN DE AUDIO (Radio Streaming)
+  # --------------------------------------------------------------------------
+  radio_player: ^2.0.0            # Componente principal para el streaming de radio.
+  just_audio: ^0.10.5             # Reproductor de audio de alto rendimiento.
+  audio_session: ^0.2.2           # Manejo de la sesión de audio (interrupciones, control de foco).
+  volume_controller: ^3.4.0        # Control programático del volumen del dispositivo.
+  rxdart: ^0.28.0                 # Implementación de ReactiveX para control de estado en notificaciones/lockscreen.
 
-  # Controles en pantalla de bloqueo y notificaciones
-  rxdart: ^0.28.0 
+  # --------------------------------------------------------------------------
+  # DEPENDENCIAS DE RED Y PARSEO DE DATOS
+  # --------------------------------------------------------------------------
+  http: ^1.2.2                    # Cliente HTTP para realizar peticiones (e.g., obtener la URL del streaming).
+  html: ^0.15.4                   # Parsea documentos HTML para extraer información (e.g., noticias, programación).
+  cached_network_image: ^3.3.1    # Gestión eficiente del caché de imágenes de red (mejora el rendimiento).
 
-  # HTTP
-  http: ^1.2.2
+  # --------------------------------------------------------------------------
+  # DEPENDENCIAS DE FIREBASE
+  # --------------------------------------------------------------------------
+  firebase_core: ^4.2.0           # Inicialización y configuración de Firebase.
+  cloud_firestore: ^6.0.3         # Base de datos NoSQL en la nube.
+  firebase_analytics: ^12.0.3     # Medición del uso y comportamiento de los usuarios.
+  firebase_remote_config: ^6.1.0  # Configuración de la aplicación en tiempo real (sin actualizar la app).
 
-  # HTML Parsing
-  html: ^0.15.4
-  
-  # URL Launcher
-  url_launcher: ^6.3.1
-  
-  # WebView
-  webview_flutter: ^4.4.0
-  
-  # Firebase
-  cloud_firestore: ^6.0.3
-  firebase_core: ^4.2.0
-  firebase_analytics: ^12.0.3
-  firebase_remote_config: ^6.1.0
-  
-  # Icons
-  cupertino_icons: ^1.0.8
+  # --------------------------------------------------------------------------
+  # DEPENDENCIAS DE UTILIDAD E INTERFAZ
+  # --------------------------------------------------------------------------
+  url_launcher: ^6.3.1             # Abre URLs externas (ej. sitio web, redes sociales).
+  webview_flutter: ^4.4.0          # Muestra contenido web dentro de la aplicación.
+  share_plus: ^7.2.1               # Permite compartir contenido de la aplicación.
+  package_info_plus: ^9.0.0        # Obtiene la versión, nombre del paquete, etc., de forma automática.
+  logger: ^2.0.0                   # Herramienta profesional para el registro de logs (reemplazando 'print').
 
-  #image para mejor rendimiento de imagenes
-  cached_network_image: ^3.3.1
-
-  #Obtener la versión automáticamente
-  package_info_plus: ^9.0.0
-
-  # Compartir contenido
-  share_plus: ^7.2.1
-
-  logger: ^2.0.0
+  # Iconos (ya incluido con Material, esto es para iconos al estilo iOS)
+  cupertino_icons: ^1.0.8          
 
 dev_dependencies:
+  # --------------------------------------------------------------------------
+  # HERRAMIENTAS DE DESARROLLO Y TESTING
+  # --------------------------------------------------------------------------
   flutter_test:
     sdk: flutter
   
-  # Lints
-  flutter_lints: ^6.0.0
+  flutter_lints: ^6.0.0            # Conjunto de reglas para un código más limpio y sin errores.
   
-  # Launcher Icons
+  # Herramientas de Testeo
+  mockito: ^5.4.4                  # Framework para crear objetos simulados (mocks) en pruebas unitarias.
+  build_runner: ^2.4.8             # Herramienta para generar código automáticamente (ej. para mockito).
+
+  # Herramienta para generar automáticamente los íconos de la aplicación.
   flutter_launcher_icons: ^0.14.4
 
-  # Testing
-  mockito: ^5.4.4
-  build_runner: ^2.4.8
 
-
+# --------------------------------------------------------------------------
+# CONFIGURACIÓN ESPECÍFICA DE FLUTTER
+# --------------------------------------------------------------------------
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: "assets/images/icon.png"
 
 flutter:
+  # Indica que la aplicación usará el estilo Material Design.
   uses-material-design: true
 
+  # Rutas a los assets (recursos estáticos) de la aplicación.
   assets:
     - assets/images/

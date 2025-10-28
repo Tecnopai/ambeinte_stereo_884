@@ -24,8 +24,8 @@ class AudioPlayerManager {
 
   // ========== CONSTANTES ==========
   static const String _streamUrl = 'https://radio06.cehis.net:9036/stream';
-  static const Duration _reconnectDelay = Duration(seconds: 3);
-  static const int _maxReconnectAttempts = 5;
+  static const Duration _reconnectDelay = Duration(seconds: 5);
+  static const int _maxReconnectAttempts = 8;
   static const bool _autoPlay = true;
 
   // ========== WAKE LOCK ==========
@@ -48,6 +48,12 @@ class AudioPlayerManager {
       BehaviorSubject<String>.seeded('');
   final BehaviorSubject<double> _volumeController =
       BehaviorSubject<double>.seeded(1.0);
+  // ✅ AGREGADO: Stream para la metadada de la canción actual (Now Playing).
+  final BehaviorSubject<Map<String, String>> _metadataController =
+      BehaviorSubject<Map<String, String>>.seeded({
+        'artist': 'Desconocido',
+        'title': 'Cargando...',
+      });
 
   // ========== CONTROL DE RECONEXIÓN ==========
   int _reconnectAttempts = 0;
@@ -63,6 +69,9 @@ class AudioPlayerManager {
   Stream<bool> get loadingStream => _loadingController.stream;
   Stream<String> get errorStream => _errorController.stream;
   Stream<double> get volumeStream => _volumeController.stream;
+  // ✅ AGREGADO: Getter para la metadada.
+  Stream<Map<String, String>> get metadataStream => _metadataController.stream;
+
   bool get isPlaying => _playingController.value;
   bool get isLoading => _loadingController.value;
   double get volume => _volumeController.value;
@@ -163,7 +172,11 @@ class AudioPlayerManager {
         _log(
           '[AudioPlayerManager] 🎵 Metadata: ${metadata.artist} - ${metadata.title}',
         );
-        // Aquí puedes emitir la metadata si la necesitas en la UI
+        // ✅ Emitir la nueva metadata
+        _metadataController.add({
+          'artist': metadata.artist ?? 'Artista Desconocido',
+          'title': metadata.title ?? 'Canción Desconocida',
+        });
       }
     });
   }
@@ -315,6 +328,7 @@ class AudioPlayerManager {
     await _loadingController.close();
     await _errorController.close();
     await _volumeController.close();
+    await _metadataController.close(); // ✅ Cerrar nuevo stream
 
     // Liberar WakeLock
     try {

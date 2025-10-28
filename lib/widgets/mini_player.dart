@@ -4,10 +4,11 @@ import '../services/audio_player_manager.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
 
-/// Mini reproductor flotante que aparece en la parte inferior de la pantalla
-/// Muestra controles de reproducción, volumen y estado de la transmisión
-/// Se desliza hacia arriba cuando está reproduciendo
+/// Mini reproductor flotante que aparece en la parte inferior de la pantalla.
+/// Muestra controles de reproducción, volumen y estado de la transmisión.
+/// Se desliza hacia arriba cuando la radio está reproduciendo.
 class MiniPlayer extends StatefulWidget {
+  /// Instancia del gestor de audio para acceder a sus streams y métodos.
   final AudioPlayerManager audioManager;
 
   const MiniPlayer({super.key, required this.audioManager});
@@ -17,10 +18,12 @@ class MiniPlayer extends StatefulWidget {
 }
 
 class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
-  // Estados del reproductor
+  // Estados del reproductor (obtenidos del manager)
   bool _isPlaying = false;
   bool _isLoading = false;
   double _volume = 0.7;
+
+  // Estado local para mostrar/ocultar el slider de volumen expandido
   bool _showVolumeSlider = false;
 
   // Controladores de animación
@@ -37,9 +40,9 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     _initializeStates();
   }
 
-  /// Inicializa las animaciones de deslizamiento y pulso
+  /// Inicializa las animaciones de deslizamiento y pulso.
   void _initializeAnimations() {
-    // Animación de deslizamiento vertical
+    // Animación de deslizamiento vertical (para aparecer desde abajo)
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -50,18 +53,18 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
       end: Offset.zero, // Termina en posición normal
     ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
 
-    // Animación de pulso para el icono de radio
+    // Animación de pulso continuo para el icono de radio
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
-    )..repeat(reverse: true);
+    )..repeat(reverse: true); // Repite invirtiendo la dirección de la animación
 
     _pulseAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
   }
 
-  /// Configura los listeners para los streams del audio manager
+  /// Configura los listeners para los streams del audio manager y el control físico de volumen.
   void _setupListeners() {
     // Listener de reproducción
     widget.audioManager.playingStream.listen((isPlaying) {
@@ -70,17 +73,22 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
           _isPlaying = isPlaying;
         });
 
-        // Animar entrada/salida del mini player
+        // Lógica para animar la entrada/salida del mini player
         if (_isPlaying) {
           _slideController.forward();
         } else {
+          // El miniplayer permanece visible incluso si está en pausa, solo se desliza hacia afuera
+          // si ya no está reproduciendo. Aquí se revierte la animación.
           _slideController.reverse();
         }
-        //Escuchar botones físicos
+
+        // Escucha los botones de volumen físicos del dispositivo
         VolumeController.instance.addListener((volume) {
           if (mounted) {
             setState(() => _volume = volume);
-            widget.audioManager.setVolume(volume);
+            widget.audioManager.setVolume(
+              volume,
+            ); // Actualiza el estado del manager
           }
         });
       }
@@ -95,7 +103,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
       }
     });
 
-    // Listener de volumen
+    // Listener de volumen (por si el manager lo actualiza internamente)
     widget.audioManager.volumeStream.listen((volume) {
       if (mounted) {
         setState(() {
@@ -103,21 +111,24 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
         });
       }
     });
+
+    // NOTA: Si el AudioPlayerManager tuviera un stream de metadata, se añadiría aquí.
+    // widget.audioManager.metadataStream.listen((metadata) { ... });
   }
 
-  /// Inicializa los estados desde el audio manager
+  /// Inicializa los estados del widget con los valores actuales del AudioPlayerManager.
   void _initializeStates() {
     _isPlaying = widget.audioManager.isPlaying;
     _isLoading = widget.audioManager.isLoading;
     _volume = widget.audioManager.volume;
 
-    // Mostrar el mini player si está reproduciendo
+    // Mostrar el mini player inmediatamente si ya estaba reproduciendo al cargar la pantalla
     if (_isPlaying) {
       _slideController.forward();
     }
   }
 
-  /// Alterna entre reproducir y pausar
+  /// Alterna el estado de reproducción (Play/Pause).
   Future<void> _togglePlayback() async {
     try {
       await widget.audioManager.togglePlayback();
@@ -137,6 +148,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final responsive = ResponsiveHelper(context);
 
+    // Definición de tamaños responsivos para el contenedor principal
     final minHeight = responsive.getValue(
       smallPhone: 65.0,
       phone: 70.0,
@@ -164,6 +176,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
       automotive: 18.0,
     );
 
+    // Estilos de sombra responsivos
     final shadowBlur = responsive.getValue(
       smallPhone: 8.0,
       phone: 10.0,
@@ -181,10 +194,12 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
 
     return SlideTransition(
-      position: _slideAnimation,
+      position: _slideAnimation, // Aplica la animación de deslizamiento
       child: Container(
+        // Altura mínima y máxima para dar espacio al slider de volumen
         constraints: BoxConstraints(minHeight: minHeight, maxHeight: maxHeight),
         decoration: BoxDecoration(
+          // Gradiente semi-transparente para integrarse con el fondo y destacar
           gradient: LinearGradient(
             colors: [
               AppColors.surface.withValues(alpha: 0.95),
@@ -206,11 +221,13 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
         ),
         child: Material(
           color: Colors.transparent,
+          // IntrinsicHeight asegura que la columna ocupe solo el espacio necesario
           child: IntrinsicHeight(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 _buildMainControls(responsive),
+                // Muestra el slider de volumen solo si el estado local lo permite
                 if (_showVolumeSlider) _buildVolumeSlider(responsive),
               ],
             ),
@@ -220,8 +237,9 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
-  /// Construye la fila principal de controles
+  /// Construye la fila principal de controles (icono, info, volumen, play/pause).
   Widget _buildMainControls(ResponsiveHelper responsive) {
+    // Altura mínima de la fila para asegurar un buen target táctil
     final minHeight = responsive.getValue(
       smallPhone: 55.0,
       phone: 60.0,
@@ -266,9 +284,12 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
           children: [
             _buildRadioIcon(responsive),
             SizedBox(width: spacing1),
+            // Información de la radio ocupa el espacio restante
             _buildRadioInfo(responsive),
+            // Botón de volumen (cambia el estado _showVolumeSlider)
             _buildVolumeButton(responsive),
             SizedBox(width: spacing2),
+            // Botón Play/Pause/Loading
             _buildPlayButton(responsive),
           ],
         ),
@@ -276,7 +297,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
-  /// Construye el icono circular de la radio con efecto de pulso
+  /// Construye el icono circular de la radio con efecto de pulso cuando está reproduciendo.
   Widget _buildRadioIcon(ResponsiveHelper responsive) {
     final iconSize = responsive.getValue(
       smallPhone: 44.0,
@@ -290,6 +311,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     return AnimatedBuilder(
       animation: _pulseAnimation,
       builder: (context, child) {
+        // Aplica el escalado de pulso solo si está reproduciendo
         return Transform.scale(
           scale: _isPlaying ? _pulseAnimation.value : 1.0,
           child: Container(
@@ -300,6 +322,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
               color: Colors.white,
             ),
             child: ClipOval(
+              // Aplica un filtro de color suave al logo (opcional, para un efecto visual)
               child: ColorFiltered(
                 colorFilter: ColorFilter.mode(
                   AppColors.primary.withValues(alpha: 0.3),
@@ -326,7 +349,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
-  /// Construye la información de la radio (nombre y estado)
+  /// Construye la información de la radio (nombre y estado de conexión).
   Widget _buildRadioInfo(ResponsiveHelper responsive) {
     final titleSize = responsive.getValue(
       smallPhone: 14.0,
@@ -379,7 +402,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Nombre de la emisora
+          // Nombre de la emisora (usa FittedBox para evitar overflow)
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
@@ -395,26 +418,29 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
             ),
           ),
           SizedBox(height: spacing1),
-          // Estado de la transmisión
+          // Estado de la transmisión (En vivo / Desconectado)
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Indicador circular de estado
+                // Indicador circular de estado (rojo/gris)
                 Container(
                   width: indicatorSize,
                   height: indicatorSize,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: _isPlaying
-                        ? AppColors.liveIndicator
-                        : AppColors.textSecondary,
+                        ? AppColors
+                              .liveIndicator // Rojo si está reproduciendo
+                        : AppColors
+                              .textSecondary, // Gris si está pausado/desconectado
                   ),
                 ),
                 SizedBox(width: spacing2),
                 Text(
+                  // Muestra 'En vivo' si está reproduciendo, sino 'Desconectado'
                   _isPlaying ? 'En vivo' : 'Desconectado',
                   style: TextStyle(
                     color: AppColors.textMuted,
@@ -429,7 +455,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
-  /// Construye el botón de volumen con indicador de porcentaje
+  /// Construye el botón de volumen, que al tocar se alterna el estado `_showVolumeSlider`.
   Widget _buildVolumeButton(ResponsiveHelper responsive) {
     final borderRadius = responsive.getValue(
       smallPhone: 6.0,
@@ -484,6 +510,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
 
         return InkWell(
           onTap: () {
+            // Alterna la visibilidad del slider de volumen
             setState(() {
               _showVolumeSlider = !_showVolumeSlider;
             });
@@ -495,13 +522,15 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  _getVolumeIcon(currentVolume),
+                  _getVolumeIcon(
+                    currentVolume,
+                  ), // Ícono basado en el nivel de volumen
                   color: AppColors.textSecondary,
                   size: iconSize,
                 ),
                 SizedBox(width: spacing),
                 Text(
-                  '${(currentVolume * 100).round()}%',
+                  '${(currentVolume * 100).round()}%', // Muestra el porcentaje
                   style: TextStyle(
                     color: AppColors.textMuted,
                     fontSize: fontSize,
@@ -516,7 +545,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
-  /// Construye el botón circular de reproducción/pausa
+  /// Construye el botón circular de reproducción/pausa.
   Widget _buildPlayButton(ResponsiveHelper responsive) {
     final buttonSize = responsive.getValue(
       smallPhone: 40.0,
@@ -534,9 +563,10 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
         height: buttonSize,
         decoration: const BoxDecoration(
           shape: BoxShape.circle,
-          gradient: AppColors.buttonGradient,
+          gradient: AppColors.buttonGradient, // Gradiente estilizado
         ),
         child: _isLoading
+            // Indicador de carga si está conectando/buffering
             ? SizedBox(
                 width: buttonSize * 0.4,
                 height: buttonSize * 0.4,
@@ -545,6 +575,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
                   strokeWidth: 2,
                 ),
               )
+            // Icono de Play o Pause
             : Icon(
                 _isPlaying ? Icons.pause : Icons.play_arrow,
                 color: AppColors.textPrimary,
@@ -554,7 +585,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
-  /// Construye el slider de volumen expandible
+  /// Construye el slider de volumen expandible que se muestra al tocar el botón de volumen.
   Widget _buildVolumeSlider(ResponsiveHelper responsive) {
     final minHeight = responsive.getValue(
       smallPhone: 32.0,
@@ -690,6 +721,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
               SizedBox(
                 width: sliderWidth,
                 child: SliderTheme(
+                  // Estilización del Slider
                   data: SliderThemeData(
                     activeTrackColor: AppColors.primary,
                     inactiveTrackColor: const Color(0xFF374151),
@@ -703,10 +735,14 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
                   child: Slider(
                     value: currentVolume,
                     onChanged: (value) {
+                      // Actualiza el estado local y notifica al manager
                       setState(() {
                         _volume = value;
                       });
                       widget.audioManager.setVolume(value);
+                      // Nota: No es necesario usar VolumeController.setVolume aquí
+                      // porque VolumeController.instance.addListener ya actualiza
+                      // _volume cuando el usuario usa los botones físicos.
                     },
                     min: 0.0,
                     max: 1.0,
@@ -720,6 +756,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
                 size: iconSize,
               ),
               SizedBox(width: spacing2),
+              // Indicador de porcentaje de volumen
               SizedBox(
                 width: percentWidth,
                 child: Text(
@@ -739,7 +776,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     );
   }
 
-  /// Retorna el icono apropiado según el nivel de volumen
+  /// Retorna el icono apropiado según el nivel de volumen.
   IconData _getVolumeIcon(double volume) {
     if (volume == 0) return Icons.volume_off;
     if (volume < 0.5) return Icons.volume_down;
@@ -748,6 +785,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    // Es crucial liberar todos los controladores de animación
     _slideController.dispose();
     _pulseController.dispose();
     super.dispose();

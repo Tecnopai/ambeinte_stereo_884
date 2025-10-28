@@ -7,28 +7,52 @@ import '../core/theme/app_colors.dart';
 import 'article_detail_screen.dart';
 import '../utils/responsive_helper.dart';
 
-/// Pantalla mejorada de lista de artículos con responsive design
+/// Pantalla genérica para mostrar una lista de noticias, ya sea de todas las
+/// categorías (si [category] es nulo) o filtrada por una categoría específica.
+///
+/// Implementa scroll infinito (paginación) y manejo de estados de carga/error.
 class NewsListScreen extends StatefulWidget {
+  /// La categoría por la cual se debe filtrar la lista. Si es nulo,
+  /// muestra todos los artículos recientes.
   final Category? category;
 
+  /// Constructor de NewsListScreen.
   const NewsListScreen({super.key, this.category});
 
   @override
   State<NewsListScreen> createState() => _NewsListScreenState();
 }
 
+/// Estado y lógica para la lista de noticias, incluyendo paginación y manejo de UI.
 class _NewsListScreenState extends State<NewsListScreen> {
+  /// Servicio para la obtención de datos de noticias.
   final NewsService _newsService = NewsService();
-  final ScrollController _scrollController = ScrollController();
-  final analytics = FirebaseAnalytics.instance; // ✅ AGREGADO
 
+  /// Controlador para detectar el desplazamiento y disparar la carga infinita.
+  final ScrollController _scrollController = ScrollController();
+
+  /// Instancia de Firebase Analytics.
+  final analytics = FirebaseAnalytics.instance;
+
+  /// Lista de artículos actualmente mostrados.
   List<Article> _articles = [];
+
+  /// Indica si se está cargando la página inicial.
   bool _isLoading = true;
+
+  /// Indica si se está cargando la siguiente página (paginación).
   bool _isLoadingMore = false;
+
+  /// Mensaje de error a mostrar si la carga falla.
   String? _error;
+
+  /// Número de la página actual de la API.
   int _currentPage = 1;
+
+  /// Indica si hay más resultados disponibles para cargar.
   bool _hasMore = true;
 
+  /// {inheritdoc}
   @override
   void initState() {
     super.initState();
@@ -43,12 +67,15 @@ class _NewsListScreenState extends State<NewsListScreen> {
     _scrollController.addListener(_onScroll);
   }
 
+  /// {inheritdoc}
   @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
   }
 
+  /// Listener del scroll: Activa la carga de más noticias cuando
+  /// se alcanza el 80% del límite del scroll.
   void _onScroll() {
     if (_scrollController.position.pixels >=
             _scrollController.position.maxScrollExtent * 0.8 &&
@@ -58,6 +85,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
     }
   }
 
+  /// Carga la primera página de artículos, restableciendo el estado.
   Future<void> _loadArticles() async {
     try {
       setState(() {
@@ -67,6 +95,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
         _hasMore = true;
       });
 
+      // Lógica condicional para cargar todas o por categoría
       final articles = widget.category != null
           ? await _newsService.getArticlesByCategory(widget.category!.id)
           : await _newsService.getArticles();
@@ -75,6 +104,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
         setState(() {
           _articles = articles;
           _isLoading = false;
+          // Asume un tamaño de página de 20
           _hasMore = articles.length >= 20;
         });
       }
@@ -88,6 +118,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
     }
   }
 
+  /// Carga las siguientes páginas de artículos (función de scroll infinito).
   Future<void> _loadMoreArticles() async {
     if (_isLoadingMore || !_hasMore) return;
 
@@ -96,6 +127,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
     try {
       _currentPage++;
 
+      // Lógica condicional para cargar la siguiente página
       final newArticles = widget.category != null
           ? await _newsService.getArticlesByCategory(
               widget.category!.id,
@@ -107,10 +139,12 @@ class _NewsListScreenState extends State<NewsListScreen> {
         setState(() {
           _articles.addAll(newArticles);
           _isLoadingMore = false;
+          // Actualiza si hay más contenido para cargar
           _hasMore = newArticles.length >= 20;
         });
       }
     } catch (e) {
+      // Revertir el estado de paginación en caso de fallo
       if (mounted) {
         setState(() {
           _isLoadingMore = false;
@@ -120,6 +154,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
     }
   }
 
+  /// {inheritdoc}
   @override
   Widget build(BuildContext context) {
     final responsive = ResponsiveHelper(context);
@@ -136,6 +171,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
     );
   }
 
+  /// Decide qué widget mostrar basado en el estado actual de la carga.
   Widget _buildBody(ResponsiveHelper responsive) {
     if (_isLoading) {
       return _buildLoadingState(responsive);
@@ -152,6 +188,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
     return _buildArticlesList(responsive);
   }
 
+  /// Muestra un indicador de progreso centralizado.
   Widget _buildLoadingState(ResponsiveHelper responsive) {
     return Center(
       child: Column(
@@ -174,6 +211,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
     );
   }
 
+  /// Muestra un mensaje y un botón para reintentar la carga en caso de error.
   Widget _buildErrorState(ResponsiveHelper responsive) {
     final iconSize = responsive.getValue(
       phone: 64.0,
@@ -247,6 +285,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
     );
   }
 
+  /// Muestra un mensaje y un ícono si la lista de artículos está vacía.
   Widget _buildEmptyState(ResponsiveHelper responsive) {
     final iconSize = responsive.getValue(
       phone: 64.0,
@@ -277,6 +316,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
     );
   }
 
+  /// Construye la lista de artículos, alternando entre ListView y GridView.
   Widget _buildArticlesList(ResponsiveHelper responsive) {
     final padding = responsive.getValue(
       smallPhone: 12.0,
@@ -302,6 +342,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
                 crossAxisCount: responsive.gridColumns,
                 crossAxisSpacing: padding,
                 mainAxisSpacing: padding,
+                // Relación de aspecto ajustada para tarjetas más anchas en grid
                 childAspectRatio: responsive.getValue(
                   phone: 3.0,
                   tablet: 3.0,
@@ -356,6 +397,7 @@ class _NewsListScreenState extends State<NewsListScreen> {
     );
   }
 
+  /// Construye la tarjeta individual para mostrar la previsualización de un artículo.
   Widget _buildArticleCard(Article article, ResponsiveHelper responsive) {
     final borderRadius = responsive.getValue(
       phone: 12.0,
@@ -395,6 +437,8 @@ class _NewsListScreenState extends State<NewsListScreen> {
             },
           );
 
+          // Nota: Se asume que ArticleDetailScreen se puede construir sin
+          // el audioManager aquí, o que lo obtiene por un método alternativo.
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -405,52 +449,70 @@ class _NewsListScreenState extends State<NewsListScreen> {
         borderRadius: BorderRadius.circular(borderRadius),
         child: Padding(
           padding: EdgeInsets.all(padding),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
             children: [
-              // Título
-              Text(
-                article.title,
-                style: TextStyle(
-                  fontSize: responsive.h3,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                  height: 1.3,
+              // Contenido de la tarjeta (Título y Fecha)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Título
+                    Text(
+                      article.title,
+                      style: TextStyle(
+                        fontSize: responsive.h3,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                        height: 1.3,
+                      ),
+                      maxLines: responsive.getValue(
+                        phone: 3,
+                        tablet: 2,
+                        automotive: 2,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+
+                    SizedBox(height: responsive.spacing(12)),
+
+                    // Fecha y hora
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: responsive.getValue(
+                            phone: 14.0,
+                            largePhone: 15.0,
+                            tablet: 16.0,
+                            desktop: 18.0,
+                          ),
+                          color: AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            article.formattedDate,
+                            style: TextStyle(
+                              fontSize: responsive.caption,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                maxLines: responsive.getValue(
-                  phone: 3,
-                  tablet: 2,
-                  automotive: 2,
-                ),
-                overflow: TextOverflow.ellipsis,
               ),
 
-              SizedBox(height: responsive.spacing(12)),
+              SizedBox(width: responsive.spacing(12)),
 
-              // Fecha y flecha
-              Row(
+              // Flecha de navegación y miniatura (si existe)
+              // Usamos un layout de columna y un ícono para mantener la consistencia
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.access_time,
-                    size: responsive.getValue(
-                      phone: 14.0,
-                      largePhone: 15.0,
-                      tablet: 16.0,
-                      desktop: 18.0,
-                    ),
-                    color: AppColors.textSecondary,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      article.formattedDate,
-                      style: TextStyle(
-                        fontSize: responsive.caption,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
                   Icon(
                     Icons.arrow_forward_ios,
                     size: responsive.getValue(

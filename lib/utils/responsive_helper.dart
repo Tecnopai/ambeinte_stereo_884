@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
-/// Helper class global para responsive design
+/// Helper class global para responsive design.
 ///
 /// Proporciona detección de dispositivos, breakpoints y valores adaptativos
-/// para crear interfaces que se adaptan a cualquier tamaño de pantalla.
+/// para crear interfaces que se adaptan a cualquier tamaño de pantalla (móvil,
+/// tablet, desktop y sistemas de infoentretenimiento de vehículos - Automotive).
 ///
 /// Ejemplo de uso:
 /// ```dart
@@ -13,47 +14,49 @@ import 'package:flutter/material.dart';
 class ResponsiveHelper {
   final BuildContext context;
 
+  /// Crea una instancia de [ResponsiveHelper] utilizando el [BuildContext] para
+  /// acceder a [MediaQueryData].
   ResponsiveHelper(this.context);
 
   // ===== PROPIEDADES DE PANTALLA =====
 
-  /// Tamaño completo de la pantalla
+  /// Retorna el [Size] completo de la pantalla.
   Size get screenSize => MediaQuery.of(context).size;
 
-  /// Ancho de la pantalla
+  /// Retorna el ancho de la pantalla.
   double get width => screenSize.width;
 
-  /// Altura de la pantalla
+  /// Retorna la altura de la pantalla.
   double get height => screenSize.height;
 
-  /// Lado más corto de la pantalla
+  /// Retorna el lado más corto de la pantalla (útil para detección de tamaño independiente de la orientación).
   double get shortestSide => screenSize.shortestSide;
 
-  /// Lado más largo de la pantalla
+  /// Retorna el lado más largo de la pantalla.
   double get longestSide => screenSize.longestSide;
 
   // ===== ORIENTACIÓN =====
 
-  /// True si la pantalla está en landscape (horizontal)
+  /// True si la pantalla está en landscape (horizontal).
   bool get isLandscape => width > height;
 
-  /// True si la pantalla está en portrait (vertical)
+  /// True si la pantalla está en portrait (vertical).
   bool get isPortrait => height >= width;
 
   // ===== DETECCIÓN DE AUTOMOTIVE =====
 
-  /// Detecta si el dispositivo es un radio de vehículo
+  /// Detecta si el dispositivo es un radio de vehículo (Automotive).
   ///
-  /// Características:
-  /// - Orientación landscape
-  /// - Aspecto ratio >= 1.6 (muy ancho)
-  /// - Altura entre 400-900px (típico de radios)
+  /// Se considera Automotive si:
+  /// - Está en orientación landscape.
+  /// - El aspecto ratio es ancho (>= 1.6).
+  /// - La altura está dentro de un rango típico para pantallas de vehículos (400px - 900px).
   bool get isAutomotive {
     final aspectRatio = longestSide / shortestSide;
     return isLandscape && aspectRatio >= 1.6 && height >= 400 && height <= 900;
   }
 
-  /// Tipo específico de radio automotive
+  /// Tipo específico de radio automotive (DIN simple, doble, o grande).
   AutomotiveType get automotiveType {
     if (!isAutomotive) return AutomotiveType.none;
     if (width <= 900 && height <= 550) return AutomotiveType.singleDIN;
@@ -61,33 +64,33 @@ class ResponsiveHelper {
     return AutomotiveType.large;
   }
 
-  // ===== BREAKPOINTS =====
+  // ===== BREAKPOINTS (Basados en shortestSide cuando no es Automotive) =====
 
-  /// Teléfono pequeño (< 360px) - iPhone SE 1ra gen
+  /// Teléfono pequeño (< 360px).
   bool get isSmallPhone => !isAutomotive && shortestSide < 360;
 
-  /// Teléfono normal (360-449px) - iPhone 12, Pixel 5
+  /// Teléfono normal (360px <= shortestSide < 450px).
   bool get isPhone =>
       !isAutomotive && shortestSide >= 360 && shortestSide < 450;
 
-  /// Teléfono grande (450-599px) - STK LX3, Galaxy Note, iPhone Pro Max
+  /// Teléfono grande (450px <= shortestSide < 600px).
   bool get isLargePhone =>
       !isAutomotive && shortestSide >= 450 && shortestSide < 600;
 
-  /// Tablet pequeña (600-839px) - iPad Mini
+  /// Tablet pequeña (600px <= shortestSide < 840px).
   bool get isTablet =>
       !isAutomotive && shortestSide >= 600 && shortestSide < 840;
 
-  /// Tablet grande (840-1199px) - iPad Pro
+  /// Tablet grande (840px <= shortestSide < 1200px).
   bool get isLargeTablet =>
       !isAutomotive && shortestSide >= 840 && shortestSide < 1200;
 
-  /// Desktop (>= 1200px) - Monitores grandes
+  /// Desktop (shortestSide >= 1200px).
   bool get isDesktop => !isAutomotive && shortestSide >= 1200;
 
   // ===== TIPO DE DISPOSITIVO =====
 
-  /// Retorna el tipo de dispositivo actual
+  /// Retorna el tipo de dispositivo actual, útil para lógica condicional.
   DeviceType get deviceType {
     if (isAutomotive) {
       switch (automotiveType) {
@@ -110,12 +113,12 @@ class ResponsiveHelper {
     return DeviceType.desktop;
   }
 
-  // ===== MÉTODO getValue =====
+  // ===== MÉTODO getValue (CORE) =====
 
-  /// Retorna el valor apropiado según el tipo de dispositivo
+  /// Retorna el valor apropiado según el tipo de dispositivo.
   ///
-  /// El parámetro `phone` es requerido y se usa como fallback.
-  /// Los demás parámetros son opcionales y sobrescriben el valor de phone.
+  /// El parámetro [phone] es requerido y se usa como fallback.
+  /// Los demás parámetros son opcionales y sobrescriben el valor según el breakpoint.
   ///
   /// Ejemplo:
   /// ```dart
@@ -134,19 +137,22 @@ class ResponsiveHelper {
     T? desktop,
     T? automotive,
   }) {
+    // 1. Prioridad para Automotive
     if (isAutomotive && automotive != null) return automotive;
+    // 2. Prioridad para Desktop/Tablets (por tamaño)
     if (isDesktop && desktop != null) return desktop;
     if (isLargeTablet && largeTablet != null) return largeTablet;
     if (isTablet && tablet != null) return tablet;
+    // 3. Prioridad para Teléfonos (por tamaño)
     if (isLargePhone && largePhone != null) return largePhone;
     if (isSmallPhone && smallPhone != null) return smallPhone;
+    // 4. Fallback: Teléfono normal
     return phone;
   }
 
   // ===== TAMAÑOS DE FUENTE PREDEFINIDOS =====
 
-  /// Tamaño de texto del cuerpo (14-18px)
-  /// Tamaño mínimo accesible para lectura
+  /// Tamaño de texto del cuerpo (14-18px). Tamaño mínimo accesible para lectura.
   double get bodyText => getValue(
     smallPhone: 13.0,
     phone: 14.0,
@@ -156,8 +162,7 @@ class ResponsiveHelper {
     automotive: 18.0,
   );
 
-  /// Tamaño de texto pequeño/caption (11-16px)
-  /// Para metadatos, fechas, labels
+  /// Tamaño de texto pequeño/caption (11-16px). Para metadatos, fechas, labels.
   double get caption => getValue(
     smallPhone: 11.0,
     phone: 12.0,
@@ -167,8 +172,7 @@ class ResponsiveHelper {
     automotive: 16.0,
   );
 
-  /// Tamaño de encabezado grande H1 (22-40px)
-  /// Para títulos principales
+  /// Tamaño de encabezado grande H1 (22-40px). Para títulos principales.
   double get h1 => getValue(
     smallPhone: 20.0,
     phone: 22.0,
@@ -178,8 +182,7 @@ class ResponsiveHelper {
     automotive: 28.0,
   );
 
-  /// Tamaño de encabezado H2 (18-28px)
-  /// Para subtítulos importantes
+  /// Tamaño de encabezado H2 (18-28px). Para subtítulos importantes.
   double get h2 => getValue(
     smallPhone: 16.0,
     phone: 18.0,
@@ -189,8 +192,7 @@ class ResponsiveHelper {
     automotive: 22.0,
   );
 
-  /// Tamaño de encabezado H3 (15-24px)
-  /// Para secciones y subsecciones
+  /// Tamaño de encabezado H3 (15-24px). Para secciones y subsecciones.
   double get h3 => getValue(
     smallPhone: 14.0,
     phone: 16.0,
@@ -200,7 +202,7 @@ class ResponsiveHelper {
     automotive: 18.0,
   );
 
-  /// Tamaño de texto de botones (12-20px)
+  /// Tamaño de texto de botones (12-20px).
   double get buttonText => getValue(
     smallPhone: 12.0,
     phone: 14.0,
@@ -212,14 +214,14 @@ class ResponsiveHelper {
 
   // ===== ESPACIADOS =====
 
-  /// Calcula espaciado vertical/horizontal adaptativo
+  /// Calcula espaciado vertical/horizontal adaptativo.
   ///
-  /// Multiplica el valor base según el dispositivo:
+  /// Multiplica el valor [base] según el factor de escala del dispositivo:
   /// - Phone: 1.0x
   /// - Large Phone: 1.1x
   /// - Tablet: 1.2x
   /// - Desktop: 1.5x
-  /// - Automotive: 0.8x (más compacto)
+  /// - Automotive: 0.8x (más compacto en vehículos)
   ///
   /// Ejemplo:
   /// ```dart
@@ -235,12 +237,12 @@ class ResponsiveHelper {
 
   // ===== LAYOUT =====
 
-  /// Ancho máximo de contenido para evitar líneas muy largas
+  /// Ancho máximo de contenido para evitar líneas de texto excesivamente largas
+  /// en pantallas grandes, manteniendo el enfoque de lectura.
   ///
-  /// - Móviles: Sin límite (usa todo el ancho)
+  /// - Móviles: [double.infinity] (usa todo el ancho)
   /// - Tablets: 720-900px
-  /// - Desktop: 1100-1200px
-  /// - Automotive: Sin límite
+  /// - Desktop: 1100px
   double get maxContentWidth => getValue(
     phone: double.infinity,
     largePhone: double.infinity,
@@ -250,12 +252,11 @@ class ResponsiveHelper {
     automotive: double.infinity,
   );
 
-  /// Número de columnas para grid layouts
+  /// Número de columnas sugerido para [GridView] o layouts basados en filas.
   ///
   /// - Móviles: 1 columna (lista)
-  /// - Tablets: 2 columnas
+  /// - Tablets: 2-3 columnas
   /// - Desktop: 3 columnas
-  /// - Automotive: 2 columnas
   int get gridColumns => getValue(
     phone: 1,
     largePhone: 1,
@@ -265,7 +266,10 @@ class ResponsiveHelper {
     automotive: 2,
   );
 
-  /// Determina si debe usar NavigationRail en lugar de BottomNavigationBar
+  /// Determina si debe usar [NavigationRail] en lugar de [BottomNavigationBar].
+  ///
+  /// Se recomienda NavigationRail para pantallas no móviles, especialmente en landscape
+  /// y siempre en modo Automotive.
   bool get useNavigationRail {
     if (isAutomotive) return true;
     if ((isTablet || isLargeTablet || isDesktop) && isLandscape) return true;
@@ -275,24 +279,24 @@ class ResponsiveHelper {
 
 // ===== ENUMS =====
 
-/// Tipos de dispositivos soportados
+/// Tipos de dispositivos soportados, agrupados por rangos de [shortestSide].
 enum DeviceType {
-  /// Teléfono pequeño (< 360px)
+  /// Teléfono pequeño ([shortestSide] < 360px)
   smallPhone,
 
-  /// Teléfono normal (360-449px)
+  /// Teléfono normal (360px <= [shortestSide] < 450px)
   phone,
 
-  /// Teléfono grande (450-599px) - STK LX3, Note, Pro Max
+  /// Teléfono grande (450px <= [shortestSide] < 600px)
   largePhone,
 
-  /// Tablet pequeña (600-839px)
+  /// Tablet pequeña (600px <= [shortestSide] < 840px)
   tablet,
 
-  /// Tablet grande (840-1199px)
+  /// Tablet grande (840px <= [shortestSide] < 1200px)
   largeTablet,
 
-  /// Desktop (>= 1200px)
+  /// Desktop ([shortestSide] >= 1200px)
   desktop,
 
   /// Radio de vehículo DIN simple (~800x480)
@@ -305,7 +309,7 @@ enum DeviceType {
   automotiveLarge,
 }
 
-/// Tipos de radios automotive
+/// Tipos de radios automotive específicos, clasificados por tamaño.
 enum AutomotiveType {
   /// No es automotive
   none,
@@ -316,6 +320,6 @@ enum AutomotiveType {
   /// DIN doble (~1024x600) - Más común
   doubleDIN,
 
-  /// Pantalla grande (~1280x720+) - Tesla-style
+  /// Pantalla grande (~1280x720+)
   large,
 }

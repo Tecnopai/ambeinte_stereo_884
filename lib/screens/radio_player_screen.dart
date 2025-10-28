@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_analytics/firebase_analytics.dart'; // ✅ AGREGADO
+import 'package:firebase_analytics/firebase_analytics.dart';
 import '../services/audio_player_manager.dart';
 import '../widgets/animated_disc.dart';
 import '../widgets/volume_control.dart';
@@ -8,50 +8,58 @@ import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
 
 /// Pantalla principal del reproductor de radio
-/// Muestra controles de reproducción, animaciones visuales y estado de conexión
-/// Incluye disco animado, ondas de sonido y control de volumen
+/// Muestra controles de reproducción, animaciones visuales y estado de conexión.
+/// Incluye disco animado, ondas de sonido y control de volumen.
 class RadioPlayerScreen extends StatefulWidget {
-  // usa el singleton
+  /// Constructor de RadioPlayerScreen.
   const RadioPlayerScreen({super.key});
 
   @override
   State<RadioPlayerScreen> createState() => _RadioPlayerScreenState();
 }
 
+/// Estado y lógica principal para el reproductor de radio.
+/// Utiliza [TickerProviderStateMixin] para manejar animaciones (como SoundWaves o AnimatedDisc).
 class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     with TickerProviderStateMixin {
-  // Obtener instancia singleton del AudioPlayerManager
+  /// Obtiene la instancia singleton del [AudioPlayerManager] para controlar el audio.
   late final AudioPlayerManager _audioManager;
+
+  /// Instancia de [FirebaseAnalytics] para registrar eventos del usuario.
   final analytics = FirebaseAnalytics.instance;
 
-  // Estado de reproducción actual
+  // --- Variables de Estado ---
+
+  /// Estado de reproducción actual (true si está sonando).
   bool _isPlaying = true;
 
-  // Indica si está cargando/conectando
+  /// Indica si la radio está cargando o intentando reconectar.
   bool _isLoading = true;
 
-  // Mensaje de error o reconexión
+  /// Mensaje de error o estado de reconexión a mostrar en la interfaz.
   String? _errorMessage;
 
+  /// Inicializa el Audio Manager, configura los listeners y registra la vista.
   @override
   void initState() {
     super.initState();
 
-    // Registrar vista de pantalla
+    // Registrar vista de pantalla en Firebase Analytics.
     analytics.logScreenView(
       screenName: 'radio_player',
       screenClass: 'RadioPlayerScreen',
     );
 
-    // Obtener singleton en initState
+    // Obtener singleton en initState.
     _audioManager = AudioPlayerManager();
     _setupListeners();
     _initializeStates();
   }
 
   /// Configura los listeners para los diferentes streams del audio manager
+  /// para actualizar el estado local de la UI.
   void _setupListeners() {
-    // Listener de reproducción
+    // Listener de reproducción: Actualiza el estado local [_isPlaying].
     _audioManager.playingStream.listen((isPlaying) {
       if (mounted) {
         setState(() {
@@ -60,7 +68,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       }
     });
 
-    // Listener de carga
+    // Listener de carga: Actualiza el estado local [_isLoading].
     _audioManager.loadingStream.listen((isLoading) {
       if (mounted) {
         setState(() {
@@ -69,7 +77,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       }
     });
 
-    // Listener de errores y reconexiones
+    // Listener de errores y reconexiones: Muestra mensajes temporales.
     _audioManager.errorStream.listen((error) {
       if (mounted) {
         setState(() {
@@ -82,14 +90,17 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
             SnackBar(
               content: Row(
                 children: [
+                  // Icono de éxito si es un mensaje de reconexión exitosa
                   if (error.contains('Reconectado'))
                     const Icon(Icons.check_circle, color: Colors.white)
+                  // Icono de información para otros errores/avisos
                   else
                     const Icon(Icons.info, color: Colors.white),
                   const SizedBox(width: 8),
                   Expanded(child: Text(error)),
                 ],
               ),
+              // Color verde para reconexión exitosa, amarillo para advertencia/error
               backgroundColor: error.contains('Reconectado')
                   ? AppColors.success
                   : AppColors.warning,
@@ -97,7 +108,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
             ),
           );
 
-          // Limpiar mensaje después de 3 segundos
+          // Limpiar el mensaje de error de la interfaz después de un breve retraso.
           Future.delayed(const Duration(seconds: 3), () {
             if (mounted) {
               setState(() {
@@ -110,23 +121,24 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     });
   }
 
-  /// Inicializa los estados desde el audio manager
+  /// Inicializa los estados con los valores actuales del [AudioPlayerManager].
   void _initializeStates() {
     _isPlaying = _audioManager.isPlaying;
     _isLoading = _audioManager.isLoading;
   }
 
-  /// Alterna entre reproducir y pausar la radio
+  /// Alterna entre reproducir y pausar la radio.
   Future<void> _togglePlayback() async {
     try {
       await _audioManager.togglePlayback();
 
-      // Registrar evento de play/pause
+      // Registrar evento de play/pause en Firebase Analytics.
       await analytics.logEvent(
         name: _audioManager.isPlaying ? 'audio_play' : 'audio_pause',
         parameters: {'station': 'Ambiente Stereo 88.4'},
       );
     } catch (e) {
+      // Muestra un SnackBar si la conexión inicial falla.
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -138,11 +150,12 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     }
   }
 
+  /// Construye el widget principal de la pantalla.
   @override
   Widget build(BuildContext context) {
     final responsive = ResponsiveHelper(context);
 
-    // Tamaños responsivos
+    // Tamaños responsivos calculados para diferentes dispositivos
     final padding = responsive.getValue(
       smallPhone: 16.0,
       phone: 20.0,
@@ -221,9 +234,11 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
           ),
         ),
         centerTitle: true,
-        // Indicador de reconexión en el AppBar
+        // Muestra un indicador visual de reconexión si hay un mensaje de error activo.
         actions: [
-          if (_errorMessage != null && _errorMessage!.isNotEmpty)
+          if (_errorMessage != null &&
+              _errorMessage!.isNotEmpty &&
+              !_errorMessage!.contains('Reconectado'))
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Center(child: _buildReconnectingIndicator(responsive)),
@@ -233,10 +248,12 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       body: Container(
         width: double.infinity,
         height: double.infinity,
+        // Fondo con gradiente
         decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
         child: SingleChildScrollView(
           padding: EdgeInsets.all(padding),
           child: ConstrainedBox(
+            // Ajusta la altura mínima para centrar el contenido en pantallas grandes
             constraints: BoxConstraints(
               minHeight:
                   MediaQuery.of(context).size.height -
@@ -249,12 +266,12 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
               children: [
                 SizedBox(height: topSpacing),
 
-                // Logo/Disco animado que gira cuando está reproduciendo
+                // Disco animado: gira si [_isPlaying] es true.
                 AnimatedDisc(isPlaying: _isPlaying),
 
                 SizedBox(height: sectionSpacing),
 
-                // Título de la emisora
+                // Título principal de la emisora
                 Text(
                   'Ambiente Stereo 88.4 FM',
                   style: TextStyle(
@@ -268,12 +285,12 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
                 SizedBox(height: smallSpacing),
 
-                // Subtítulo con estado actual (Conectando/En vivo/Pausado)
+                // Texto de estado (Conectando, En vivo, Pausado)
                 _buildStatusText(responsive, subtitleFontSize),
 
                 SizedBox(height: sectionSpacing),
 
-                // Ondas de sonido animadas (solo cuando está reproduciendo)
+                // Ondas de sonido animadas: solo se muestran si no está cargando y está reproduciendo.
                 if (_isPlaying && !_isLoading)
                   Padding(
                     padding: EdgeInsets.symmetric(
@@ -290,7 +307,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
                 SizedBox(height: sectionSpacing),
 
-                // Botón principal de reproducción/pausa
+                // Botón principal de reproducción/pausa (con estado de carga)
                 _buildPlayButton(
                   responsive: responsive,
                   size: playButtonSize,
@@ -300,8 +317,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
                 SizedBox(height: sectionSpacing + 10),
 
-                // Control de volumen
-                // Pasar _audioManager (local) en lugar de widget.audioManager
+                // Control de volumen deslizable
                 VolumeControl(audioManager: _audioManager),
 
                 SizedBox(height: sectionSpacing),
@@ -313,8 +329,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     );
   }
 
-  /// Construye el widget de texto de estado
-  /// Muestra "Conectando...", "En vivo ahora" o "La radio que si quieres"
+  /// Construye el widget de texto de estado (Conectando / En vivo / Pausado).
   Widget _buildStatusText(ResponsiveHelper responsive, double fontSize) {
     String statusText;
     Color statusColor;
@@ -351,7 +366,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Indicador circular de estado (solo cuando está cargando o reproduciendo)
+        // Indicador circular de estado (punto animado)
         if (_isLoading || _isPlaying)
           Container(
             width: indicatorSize,
@@ -360,6 +375,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: statusColor,
+              // Añade una sombra de resplandor para destacar el estado
               boxShadow: [
                 BoxShadow(
                   color: statusColor.withValues(alpha: 0.5),
@@ -446,6 +462,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Indicador de progreso circular (girando)
           SizedBox(
             width: indicatorSize,
             height: indicatorSize,
@@ -468,14 +485,15 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     );
   }
 
-  /// Construye el botón circular de reproducción/pausa
-  /// Muestra un indicador de carga cuando está conectando
+  /// Construye el botón circular de reproducción/pausa.
+  /// Muestra un indicador de carga si [_isLoading] es true.
   Widget _buildPlayButton({
     required ResponsiveHelper responsive,
     required double size,
     required double iconSize,
     required double loadingSize,
   }) {
+    // Definición de tamaños responsivos para estilos visuales
     final shadowBlur = responsive.getValue(
       smallPhone: 12.0,
       phone: 15.0,
@@ -508,6 +526,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
+        // Gradiente de color para el botón
         gradient: AppColors.buttonGradient,
         boxShadow: [
           BoxShadow(
@@ -521,10 +540,10 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(size / 2),
-          onTap: _togglePlayback,
+          onTap: _togglePlayback, // Llama al método de reproducción/pausa
           child: Center(
             child: _isLoading
-                // Mostrar indicador de carga
+                // Si está cargando, muestra el indicador de progreso.
                 ? SizedBox(
                     width: loadingSize,
                     height: loadingSize,
@@ -533,7 +552,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                       strokeWidth: strokeWidth,
                     ),
                   )
-                // Mostrar icono de play o pausa
+                // Si no está cargando, muestra el icono de play o pause.
                 : Icon(
                     _isPlaying ? Icons.pause : Icons.play_arrow,
                     color: AppColors.textPrimary,

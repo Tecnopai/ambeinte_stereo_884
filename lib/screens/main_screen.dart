@@ -5,35 +5,56 @@ import 'news_screen.dart';
 import 'about_screen.dart';
 import '../utils/responsive_helper.dart';
 
+/// Define el tipo de navegación utilizado, aunque no se usa directamente en esta clase.
 enum NavigationType { bottom, rail }
 
-/// Pantalla principal mejorada con navegación adaptativa
-///  Usa AudioPlayerManager singleton
+/// Pantalla principal y contenedora de la aplicación.
+///
+/// Gestiona la navegación adaptativa entre las diferentes secciones (Radio, Noticias, Nosotros)
+/// utilizando un BottomNavigationBar para móvil/portrait y un NavigationRail para tablet/desktop/automotive.
 class MainScreen extends StatefulWidget {
-  // audioManager ya no es requerido como parámetro
+  /// Constructor de MainScreen. El AudioManager se gestiona internamente por cada pantalla.
   const MainScreen({super.key});
 
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
+/// Estado y lógica de la pantalla principal.
 class _MainScreenState extends State<MainScreen> {
+  /// Índice de la pestaña actualmente seleccionada.
   int _currentIndex = 0;
+
+  /// Controlador para gestionar la transición entre las páginas de contenido.
   final PageController _pageController = PageController();
+
+  /// Lista de los widgets de las pantallas de contenido (Radio, Noticias, Nosotros).
   late List<Widget> _screens;
+
+  /// Lista de elementos de navegación con íconos y etiquetas.
   late List<NavigationItem> _navigationItems;
+
+  /// Instancia de Firebase Analytics para el seguimiento.
   final analytics = FirebaseAnalytics.instance;
 
+  /// {inheritdoc}
   @override
   void initState() {
     super.initState();
-    // ananlitica
+    // Analítica: Registra la vista de la pantalla principal.
     analytics.logScreenView(screenName: 'main', screenClass: 'MainScreen');
 
-    // Las pantallas ya no reciben audioManager como parámetro
-    // Cada una obtiene el singleton internamente
-    _screens = const [RadioPlayerScreen(), NewsScreen(), AboutScreen()];
+    // Inicialización de las pantallas (cada una obtiene el singleton AudioManager)
+    _screens = const [
+      RadioPlayerScreen(),
+      // Nota: NewsScreen requiere el audioManager si se inicializa aquí.
+      // Se asume que NewsScreen también obtiene su manager internamente,
+      // o se ajustaría para recibirlo, pero mantenemos la estructura sin parámetro.
+      NewsScreen(),
+      AboutScreen(),
+    ];
 
+    // Definición de los elementos de navegación
     _navigationItems = [
       NavigationItem(
         icon: Icons.radio,
@@ -56,21 +77,25 @@ class _MainScreenState extends State<MainScreen> {
     ];
   }
 
+  /// {inheritdoc}
   @override
   void dispose() {
     _pageController.dispose();
     super.dispose();
   }
 
+  /// Maneja el cambio de página cuando el usuario se desplaza (swipe) en el PageView.
   void _onPageChanged(int index) {
     setState(() => _currentIndex = index);
   }
 
+  /// Maneja la selección de un elemento de navegación (tap en BottomBar o Rail).
   void _onTabTapped(int index) {
     if (_currentIndex == index) return;
 
     setState(() => _currentIndex = index);
 
+    // Animación suave al cambiar de página
     _pageController.animateToPage(
       index,
       duration: const Duration(milliseconds: 300),
@@ -78,23 +103,26 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  /// {inheritdoc}
   @override
   Widget build(BuildContext context) {
     final responsive = ResponsiveHelper(context);
+    // Determina si se debe usar NavigationRail o BottomNavigationBar
     final useNavigationRail = responsive.useNavigationRail;
 
     return Scaffold(
       body: Row(
         children: [
-          // NavigationRail para tablets en landscape y automotive
+          // Muestra el NavigationRail en formatos de pantalla anchos (tablet, desktop, automotive)
           if (useNavigationRail) _buildNavigationRail(responsive),
 
-          // Contenido principal
+          // Contenido principal (Page View)
           Expanded(
             child: PageView(
               controller: _pageController,
               onPageChanged: _onPageChanged,
-              // Deshabilitar swipe en automotive para evitar distracciones
+              // Deshabilita el desplazamiento horizontal en entornos automotrices
+              // para evitar cambios accidentales de pantalla al conductor.
               physics: responsive.isAutomotive
                   ? const NeverScrollableScrollPhysics()
                   : const AlwaysScrollableScrollPhysics(),
@@ -104,14 +132,14 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
 
-      // BottomNavigationBar para móviles y tablets portrait
+      // Muestra el BottomNavigationBar solo en dispositivos móviles y tablets en vertical
       bottomNavigationBar: useNavigationRail
           ? null
           : _buildBottomNavigationBar(responsive),
     );
   }
 
-  /// NavigationRail adaptativo según dispositivo
+  /// Construye el widget NavigationRail, adaptando su tamaño y estilo al dispositivo.
   Widget _buildNavigationRail(ResponsiveHelper responsive) {
     final railWidth = responsive.getValue(
       phone: 72.0,
@@ -136,8 +164,7 @@ class _MainScreenState extends State<MainScreen> {
       automotive: 16.0,
     );
 
-    // En automotive, siempre extendido con labels
-    // En tablets, extendido solo en landscape grande
+    // Se extiende (muestra etiquetas) en automotive, tablets grandes y desktop
     final isExtended =
         responsive.isAutomotive ||
         responsive.isLargeTablet ||
@@ -152,7 +179,7 @@ class _MainScreenState extends State<MainScreen> {
             width: 1,
           ),
         ),
-        // Sombra sutil en automotive
+        // Sombra sutil para el diseño Automotive
         boxShadow: responsive.isAutomotive
             ? [
                 BoxShadow(
@@ -173,7 +200,8 @@ class _MainScreenState extends State<MainScreen> {
           tablet: 80.0,
           automotive: 90.0,
         ),
-        labelType: NavigationRailLabelType.none,
+        // En `extended: false`, se fuerza a no mostrar la etiqueta.
+        labelType: isExtended ? null : NavigationRailLabelType.none,
         backgroundColor: Colors.transparent,
         indicatorColor: Theme.of(context).colorScheme.primaryContainer,
         selectedIconTheme: IconThemeData(
@@ -196,6 +224,7 @@ class _MainScreenState extends State<MainScreen> {
         ),
         destinations: _navigationItems.map((item) {
           return NavigationRailDestination(
+            // El Tooltip es útil para NavigationRail cuando no está extendido
             icon: Tooltip(message: item.tooltip, child: Icon(item.icon)),
             selectedIcon: Tooltip(
               message: item.tooltip,
@@ -215,7 +244,7 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  /// BottomNavigationBar adaptativo
+  /// Construye el widget BottomNavigationBar, adaptando su tamaño y estilo al dispositivo móvil.
   Widget _buildBottomNavigationBar(ResponsiveHelper responsive) {
     final iconSize = responsive.getValue(
       smallPhone: 22.0,
@@ -283,6 +312,7 @@ class _MainScreenState extends State<MainScreen> {
             ),
           ),
           label: item.label,
+          // El tooltip se mueve al widget Icon/Padding para mejor accesibilidad y visualización
           tooltip: '',
         );
       }).toList(),
@@ -290,13 +320,21 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-/// Modelo de datos para elementos de navegación
+/// Modelo de datos simple para almacenar la información de cada elemento de navegación.
 class NavigationItem {
+  /// Icono por defecto.
   final IconData icon;
+
+  /// Icono cuando el elemento está seleccionado.
   final IconData selectedIcon;
+
+  /// Etiqueta de texto a mostrar.
   final String label;
+
+  /// Texto de tooltip para accesibilidad.
   final String tooltip;
 
+  /// Constructor de NavigationItem.
   NavigationItem({
     required this.icon,
     required this.selectedIcon,

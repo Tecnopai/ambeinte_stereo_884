@@ -4,10 +4,13 @@ import '../core/theme/app_colors.dart';
 import '../services/audio_player_manager.dart';
 import '../utils/responsive_helper.dart';
 
-/// Control de volumen con botón y slider expandible
-/// Muestra un botón con el icono de volumen actual y porcentaje
-/// Al tocar el botón, expande un slider para ajustar el volumen
+/// Control de volumen con botón y slider expandible.
+///
+/// Muestra un botón con el icono de volumen actual y porcentaje.
+/// Al tocar el botón, permite al usuario expandir un slider para ajustar
+/// el volumen. Se sincroniza con los botones de hardware del dispositivo.
 class VolumeControl extends StatefulWidget {
+  /// Instancia del gestor de audio. Necesario para actualizar el volumen interno.
   final AudioPlayerManager audioManager;
 
   const VolumeControl({super.key, required this.audioManager});
@@ -17,17 +20,19 @@ class VolumeControl extends StatefulWidget {
 }
 
 class _VolumeControlState extends State<VolumeControl> {
-  // Controla la visibilidad del slider de volumen
+  /// Controla la visibilidad del slider de volumen expandido.
   bool _showVolumeSlider = false;
 
-  // Volumen local sincronizado con el audio manager
+  /// Volumen local sincronizado con el audio manager y el sistema.
   double _localVolume = 0.7;
 
   @override
   void initState() {
     super.initState();
+    // 1. Obtener el volumen inicial del manager.
     _localVolume = widget.audioManager.volume;
 
+    // 2. Escuchar cambios de volumen internos del manager (ej. si el manager lo cambia).
     widget.audioManager.volumeStream.listen((volume) {
       if (mounted) {
         setState(() {
@@ -36,9 +41,11 @@ class _VolumeControlState extends State<VolumeControl> {
       }
     });
 
+    // 3. Sincronizar el estado inicial con el volumen del sistema.
     _syncWithSystemVolume();
 
-    // El listener recibe el volumen directamente
+    // 4. Escuchar los botones de volumen físico del sistema.
+    // Esto es crucial para mantener la sincronización bidireccional.
     VolumeController.instance.addListener((volume) {
       if (mounted) {
         setState(() => _localVolume = volume);
@@ -47,31 +54,34 @@ class _VolumeControlState extends State<VolumeControl> {
     });
   }
 
+  /// Sincroniza el volumen local y el del manager con el volumen actual del sistema.
   Future<void> _syncWithSystemVolume() async {
     final systemVolume = await VolumeController.instance.getVolume();
     setState(() => _localVolume = systemVolume);
     widget.audioManager.setVolume(systemVolume);
   }
 
-  /// Retorna el icono apropiado según el nivel de volumen
+  /// Retorna el icono apropiado según el nivel de volumen.
   IconData _getVolumeIcon(double volume) {
     if (volume == 0) return Icons.volume_off;
     if (volume < 0.5) return Icons.volume_down;
     return Icons.volume_up;
   }
 
-  /// Alterna la visibilidad del slider de volumen
+  /// Alterna la visibilidad del slider de volumen.
   void _toggleVolumeSlider() {
     setState(() {
       _showVolumeSlider = !_showVolumeSlider;
     });
   }
 
-  /// Maneja los cambios en el slider y actualiza el volumen
+  /// Maneja los cambios en el slider y actualiza el volumen.
   void _handleVolumeChange(double value) {
+    // 1. Actualiza el estado local para el redibujado instantáneo del slider.
     setState(() {
       _localVolume = value;
     });
+    // 2. Notifica al AudioPlayerManager del cambio.
     widget.audioManager.setVolume(value);
   }
 
@@ -79,7 +89,7 @@ class _VolumeControlState extends State<VolumeControl> {
   Widget build(BuildContext context) {
     final responsive = ResponsiveHelper(context);
 
-    // Padding horizontal del contenedor principal
+    // Definición de propiedades responsivas
     final horizontalPadding = responsive.getValue(
       smallPhone: 20.0,
       phone: 24.0,
@@ -88,8 +98,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 80.0,
       automotive: 40.0,
     );
-
-    // Padding del botón de volumen
     final buttonPadding = responsive.getValue(
       smallPhone: 10.0,
       phone: 12.0,
@@ -98,8 +106,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 18.0,
       automotive: 14.0,
     );
-
-    // Border radius de los botones
     final buttonRadius = responsive.getValue(
       smallPhone: 10.0,
       phone: 12.0,
@@ -108,8 +114,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 18.0,
       automotive: 14.0,
     );
-
-    // Tamaño del ícono
     final iconSize = responsive.getValue(
       smallPhone: 22.0,
       phone: 24.0,
@@ -118,8 +122,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 32.0,
       automotive: 26.0,
     );
-
-    // Tamaño de fuente del porcentaje
     final fontSize = responsive.getValue(
       smallPhone: 14.0,
       phone: 16.0,
@@ -128,8 +130,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 20.0,
       automotive: 17.0,
     );
-
-    // Padding del contenedor del slider
     final sliderPadding = responsive.getValue(
       smallPhone: 14.0,
       phone: 16.0,
@@ -138,8 +138,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 24.0,
       automotive: 18.0,
     );
-
-    // Border radius del slider
     final sliderRadius = responsive.getValue(
       smallPhone: 10.0,
       phone: 12.0,
@@ -148,8 +146,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 18.0,
       automotive: 14.0,
     );
-
-    // Espaciado entre botón y slider
     final spacing = responsive.getValue(
       smallPhone: 14.0,
       phone: 16.0,
@@ -158,8 +154,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 24.0,
       automotive: 18.0,
     );
-
-    // Altura del track del slider
     final trackHeight = responsive.getValue(
       smallPhone: 3.5,
       phone: 4.0,
@@ -168,8 +162,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 7.0,
       automotive: 5.0,
     );
-
-    // Radio del thumb del slider
     final thumbRadius = responsive.getValue(
       smallPhone: 10.0,
       phone: 12.0,
@@ -178,8 +170,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 16.0,
       automotive: 13.0,
     );
-
-    // Blur de sombras
     final shadowBlur1 = responsive.getValue(
       smallPhone: 5.0,
       phone: 6.0,
@@ -187,7 +177,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 10.0,
       automotive: 7.0,
     );
-
     final shadowBlur2 = responsive.getValue(
       smallPhone: 6.0,
       phone: 8.0,
@@ -195,8 +184,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 14.0,
       automotive: 10.0,
     );
-
-    // Tamaño de íconos del slider
     final sliderIconSize = responsive.getValue(
       smallPhone: 13.0,
       phone: 14.0,
@@ -205,8 +192,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 18.0,
       automotive: 15.0,
     );
-
-    // Padding del indicador de porcentaje
     final percentPaddingH = responsive.getValue(
       smallPhone: 6.0,
       phone: 8.0,
@@ -215,7 +200,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 14.0,
       automotive: 10.0,
     );
-
     final percentPaddingV = responsive.getValue(
       smallPhone: 5.0,
       phone: 6.0,
@@ -224,8 +208,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 9.0,
       automotive: 7.0,
     );
-
-    // Padding vertical del slider
     final sliderVerticalPadding = responsive.getValue(
       smallPhone: 6.0,
       phone: 8.0,
@@ -234,8 +216,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 14.0,
       automotive: 10.0,
     );
-
-    // Espaciado dentro del slider
     final sliderInnerSpacing = responsive.getValue(
       smallPhone: 3.0,
       phone: 4.0,
@@ -244,8 +224,6 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 10.0,
       automotive: 6.0,
     );
-
-    // Número de divisiones del slider
     final divisions = responsive.getValue(
       smallPhone: 10,
       phone: 10,
@@ -254,6 +232,7 @@ class _VolumeControlState extends State<VolumeControl> {
       desktop: 20,
       automotive: 15,
     );
+    // Fin de propiedades responsivas
 
     return Container(
       padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
@@ -263,7 +242,7 @@ class _VolumeControlState extends State<VolumeControl> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Botón de volumen con icono
+              // Botón de volumen (alterna _showVolumeSlider)
               GestureDetector(
                 onTap: _toggleVolumeSlider,
                 child: Container(
@@ -279,7 +258,7 @@ class _VolumeControlState extends State<VolumeControl> {
                         offset: const Offset(0, 2),
                       ),
                     ],
-                    // Borde resaltado cuando el slider está visible
+                    // Borde resaltado cuando el slider está visible (indicador visual)
                     border: _showVolumeSlider
                         ? Border.all(
                             color: AppColors.primary.withValues(alpha: 0.3),
@@ -297,7 +276,7 @@ class _VolumeControlState extends State<VolumeControl> {
                 ),
               ),
 
-              // Indicador de porcentaje de volumen
+              // Indicador de porcentaje de volumen (siempre visible)
               Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: percentPaddingH,
@@ -320,7 +299,7 @@ class _VolumeControlState extends State<VolumeControl> {
             ],
           ),
 
-          // Slider expandible de volumen
+          // Transición condicional para el Slider expandible
           if (_showVolumeSlider) ...[
             SizedBox(height: spacing),
             Container(
@@ -382,7 +361,7 @@ class _VolumeControlState extends State<VolumeControl> {
                       onChanged: _handleVolumeChange,
                       min: 0.0,
                       max: 1.0,
-                      // Divisiones para valores discretos
+                      // Divisiones para valores discretos (ej. 10%, 20%, etc.)
                       divisions: divisions,
                       label: '${(_localVolume * 100).round()}%',
                     ),

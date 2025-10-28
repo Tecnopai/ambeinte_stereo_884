@@ -1,59 +1,81 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+// Importa el tema de la aplicación.
 import 'theme/app_theme.dart';
+// Importa la pantalla inicial de la aplicación.
 import '../screens/splash_screen.dart';
 
-/// Widget raíz de la aplicación Ambiente Stereo
+/// {@template ambient_stereo_app}
+/// Widget raíz de la aplicación Ambiente Stereo 88.4 FM.
+///
+/// Este widget es un [StatefulWidget] que administra el estado del ciclo de vida
+/// de la aplicación mediante [WidgetsBindingObserver] para fines de analítica.
+/// {@endtemplate}
 class AmbientStereoApp extends StatefulWidget {
+  /// Constructor constante para [AmbientStereoApp].
   const AmbientStereoApp({super.key});
 
   @override
   State<AmbientStereoApp> createState() => _AmbientStereoAppState();
 }
 
-// WidgetsBindingObserver para escuchar eventos de la app
+/// Estado asociado al widget [AmbientStereoApp].
+///
+/// Implementa [WidgetsBindingObserver] para escuchar los cambios en el estado
+/// del ciclo de vida de la aplicación (ej. suspendida, reanudada, inactiva).
 class _AmbientStereoAppState extends State<AmbientStereoApp>
     with WidgetsBindingObserver {
-  // Analytics
+  // Instancia de Firebase Analytics para registrar eventos.
   static FirebaseAnalytics analytics = FirebaseAnalytics.instance;
+
+  // Observador utilizado para registrar automáticamente los cambios de ruta
+  // de navegación en Firebase Analytics.
   static FirebaseAnalyticsObserver observer = FirebaseAnalyticsObserver(
     analytics: analytics,
   );
 
+  /// Inicializa el estado del widget.
   @override
   void initState() {
     super.initState();
 
-    // Registra esta clase para que escuche el ciclo de vida de la app
+    // Registra esta clase como observador del ciclo de vida de la aplicación.
     WidgetsBinding.instance.addObserver(this);
 
-    // El singleton se inicializa automáticamente cuando cualquier pantalla lo necesite
+    // Nota: El singleton se inicializa automáticamente cuando cualquier pantalla lo necesite
   }
 
-  // Limpia el observador cuando la app se cierre
+  /// Limpia el observador cuando el widget se cierra o se elimina.
   @override
   void dispose() {
+    // Es crucial remover el observador para evitar fugas de memoria.
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  // Se ejecuta cada vez que la app cambia de estado
+  /// Se ejecuta cada vez que el estado del ciclo de vida de la aplicación cambia.
+  ///
+  /// @param state El nuevo estado del ciclo de vida ([AppLifecycleState]).
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Si la app vuelve a primer plano, enviamos un evento para mantener al usuario activo
+    // Si la aplicación vuelve a primer plano (resumed), se registra un evento en Analytics.
     if (state == AppLifecycleState.resumed) {
       analytics.logEvent(name: 'app_resumed');
     }
   }
 
+  /// Construye la interfaz de usuario principal de la aplicación.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Ambiente Stereo 88.4 FM',
+      // Aplica el tema oscuro definido en app_theme.dart.
       theme: AppTheme.darkTheme,
+      // Desactiva la etiqueta de "DEBUG" en la esquina superior derecha.
       debugShowCheckedModeBanner: false,
-      // Observer de Firebase Analytics
+      // Asigna el observador de Firebase Analytics al navegador de la aplicación.
       navigatorObservers: [observer],
+      // La pantalla de inicio de la aplicación es la SplashScreen.
       home: const SplashScreen(),
     );
   }

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart'; // Añadir esta importación
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
 import 'main_screen.dart';
 
 /// Pantalla de bienvenida con animaciones
-/// Muestra el logo, nombre de la emisora y un indicador de carga
+/// Muestra el logo, nombre de la emisora, versión y un indicador de carga
 /// Se presenta al iniciar la aplicación antes de navegar a la pantalla principal
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -26,11 +27,33 @@ class _SplashScreenState extends State<SplashScreen>
   late Animation<double> _pulseScale;
   late Animation<double> _fadeAnimation;
 
+  // Variable para almacenar la versión
+  String _version = 'Cargando...';
+
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
+    _loadVersion(); // Cargar la versión
     _startSplashSequence();
+  }
+
+  /// Carga la versión de la aplicación
+  Future<void> _loadVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _version = packageInfo.version;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _version = '2.0.0'; // Versión por defecto en caso de error
+        });
+      }
+    }
   }
 
   /// Inicializa todas las animaciones de la pantalla splash
@@ -146,6 +169,16 @@ class _SplashScreenState extends State<SplashScreen>
       automotive: 18.0,
     );
 
+    // Tamaño de fuente para la versión (más pequeño que el subtítulo)
+    final versionFontSize = responsive.getValue(
+      smallPhone: 12.0,
+      phone: 13.0,
+      largePhone: 14.0,
+      tablet: 15.0,
+      desktop: 16.0,
+      automotive: 14.0,
+    );
+
     final loadingSize = responsive.getValue(
       smallPhone: 28.0,
       phone: 32.0,
@@ -175,6 +208,7 @@ class _SplashScreenState extends State<SplashScreen>
     // Espaciados adaptativos
     final spacing1 = responsive.spacing(32);
     final spacing2 = responsive.spacing(10);
+    final spacingVersion = responsive.spacing(4); // Espaciado para la versión
     final spacing3 = responsive.spacing(16);
     final spacing4 = responsive.spacing(40);
 
@@ -303,6 +337,25 @@ class _SplashScreenState extends State<SplashScreen>
                               fontSize: subtitleFontSize,
                               color: AppColors.textMuted,
                               letterSpacing: 2.0,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    // Versión de la aplicación
+                    SizedBox(height: spacingVersion),
+                    AnimatedBuilder(
+                      animation: _logoOpacity,
+                      builder: (context, child) {
+                        return Opacity(
+                          opacity: _logoOpacity.value * 0.6,
+                          child: Text(
+                            'v$_version',
+                            style: TextStyle(
+                              fontSize: versionFontSize,
+                              color: AppColors.textMuted,
+                              letterSpacing: 1.0,
                             ),
                           ),
                         );
