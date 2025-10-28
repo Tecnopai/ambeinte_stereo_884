@@ -35,6 +35,9 @@
          para programar temporizadores de apagado o reconexión precisa. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 
+    <!-- Permiso para acceder al identificador de publicidad (AD ID) en dispositivos con Google Play Services. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
+
 
             <!-- android:usesCleartextTraffic="true" Permite el tráfico HTTP no cifrado. Necesario si la URL del streaming no es HTTPS. --> 
 
