@@ -3,7 +3,7 @@ description: "Ambiente Stereo 88.4 FM."
 publish_to: "none" # Previene que el paquete se publique en pub.dev.
 
 # Versión de la aplicación: major.minor.patch+build_number
-version: 2.0.12+16
+version: 2.0.13+17
 
 environment:
   # Rango de Dart SDK compatible.
@@ -43,7 +43,7 @@ dependencies:
   # --------------------------------------------------------------------------
   url_launcher: ^6.3.1 # Abre URLs externas (ej. sitio web, redes sociales).
   webview_flutter: ^4.4.0 # Muestra contenido web dentro de la aplicación.
-  share_plus: ^7.2.1 # Permite compartir contenido de la aplicación.
+  share_plus: ^12.0.1 # Permite compartir contenido de la aplicación.
   package_info_plus: ^9.0.0 # Obtiene la versión, nombre del paquete, etc., de forma automática.
   logger: ^2.0.0 # Herramienta profesional para el registro de logs (reemplazando 'print').
   responsive_framework: ^1.2.1 # Facilita el diseño responsivo en Flutter.

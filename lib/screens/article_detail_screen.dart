@@ -1244,7 +1244,9 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   /// Comparte el título y el enlace del artículo usando `share_plus`.
   void _shareArticle(BuildContext context) {
     final shareText = '${widget.article.title}\n\n${widget.article.link}';
-    Share.share(shareText, subject: widget.article.title);
+    SharePlus.instance.share(
+      ShareParams(text: shareText, subject: widget.article.title),
+    );
   }
 
   /// Copia el enlace del artículo al portapapeles y muestra un SnackBar de confirmación.
