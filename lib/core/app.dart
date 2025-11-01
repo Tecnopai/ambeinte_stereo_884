@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 // Importa el tema de la aplicación.
 import 'theme/app_theme.dart';
 // Importa la pantalla inicial de la aplicación.
@@ -77,6 +78,16 @@ class _AmbientStereoAppState extends State<AmbientStereoApp>
       navigatorObservers: [observer],
       // La pantalla de inicio de la aplicación es la SplashScreen.
       home: const SplashScreen(),
+
+      builder: (context, widget) => ResponsiveBreakpoints.builder(
+        child: ClampingScrollWrapper.builder(context, widget!),
+        breakpoints: [
+          const Breakpoint(start: 0, end: 450, name: MOBILE),
+          const Breakpoint(start: 451, end: 800, name: TABLET),
+          const Breakpoint(start: 801, end: 1200, name: DESKTOP),
+          const Breakpoint(start: 1201, end: double.infinity, name: '4K'),
+        ],
+      ),
     );
   }
 }

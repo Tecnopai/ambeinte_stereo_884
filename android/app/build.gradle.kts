@@ -3,12 +3,12 @@ import java.io.FileInputStream
 
 plugins {
     id("com.android.application")
-    // START: FlutterFire Configuration
-    id("com.google.gms.google-services")
     // END: FlutterFire Configuration
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    // START: FlutterFire Configuration
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -66,10 +66,18 @@ android {
 }
 
 dependencies {
+    // BOM centraliza versiones de Firebase
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+
+    // Dependencias específicas de Firebase
     implementation("com.google.firebase:firebase-analytics")
-    implementation ("androidx.media:media:1.7.0")
-    implementation ("androidx.core:core-ktx:1.12.0")
+    implementation("com.google.firebase:firebase-common")
+    implementation("com.google.firebase:firebase-config")
+    implementation("com.google.firebase:firebase-firestore")
+
+    // Librerías Android
+    implementation("androidx.media:media:1.7.0")
+    implementation("androidx.core:core-ktx:1.12.0")
 }
 
 flutter {

@@ -59,10 +59,11 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDXxt8pWMxhMU6UvGMJy4ZJgwexYYS49kI',
-    appId: '1:690975362924:ios:8d8801675184b58a782d49',
+    appId: '1:690975362924:ios:48e7ebf0a392a10e782d49',
     messagingSenderId: '690975362924',
     projectId: 'as884-b3934',
     storageBucket: 'as884-b3934.firebasestorage.app',
-    iosBundleId: 'com.miltonbass.ambientestereo884',
+    iosBundleId: 'com.miltonbass.ambeintestereo884.ambeinteStereo884',
   );
+
 }

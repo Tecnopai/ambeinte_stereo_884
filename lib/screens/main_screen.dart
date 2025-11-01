@@ -4,6 +4,7 @@ import 'radio_player_screen.dart';
 import 'news_screen.dart';
 import 'about_screen.dart';
 import '../utils/responsive_helper.dart';
+import '../utils/version_checker.dart';
 
 /// Define el tipo de navegación utilizado, aunque no se usa directamente en esta clase.
 enum NavigationType { bottom, rail }
@@ -75,6 +76,11 @@ class _MainScreenState extends State<MainScreen> {
         tooltip: 'Información de la app',
       ),
     ];
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await VersionChecker.checkVersion(context);
+    });
   }
 
   /// {inheritdoc}

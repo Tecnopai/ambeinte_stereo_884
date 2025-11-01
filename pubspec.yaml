@@ -1,13 +1,13 @@
 name: ambeinte_stereo_884
 description: "Ambiente Stereo 88.4 FM."
-publish_to: 'none' # Previene que el paquete se publique en pub.dev.
+publish_to: "none" # Previene que el paquete se publique en pub.dev.
 
 # Versión de la aplicación: major.minor.patch+build_number
 version: 2.0.12+16
 
 environment:
   # Rango de Dart SDK compatible.
-  sdk: ^3.8.1
+  sdk: ">=3.8.1 <4.0.0"
 
 dependencies:
   # Dependencia principal del Framework Flutter.
@@ -17,38 +17,37 @@ dependencies:
   # --------------------------------------------------------------------------
   # MÓDULOS DE REPRODUCCIÓN DE AUDIO (Radio Streaming)
   # --------------------------------------------------------------------------
-  radio_player: ^2.0.0            # Componente principal para el streaming de radio.
-  just_audio: ^0.10.5             # Reproductor de audio de alto rendimiento.
-  audio_session: ^0.2.2           # Manejo de la sesión de audio (interrupciones, control de foco).
-  volume_controller: ^3.4.0        # Control programático del volumen del dispositivo.
-  rxdart: ^0.28.0                 # Implementación de ReactiveX para control de estado en notificaciones/lockscreen.
+  radio_player: ^2.0.0 # Componente principal para el streaming de radio.
+  just_audio: ^0.10.5 # Reproductor de audio de alto rendimiento.
+  audio_session: ^0.2.2 # Manejo de la sesión de audio (interrupciones, control de foco).
+  volume_controller: ^3.4.0 # Control programático del volumen del dispositivo.
+  rxdart: ^0.28.0 # Implementación de ReactiveX para control de estado en notificaciones/lockscreen.
 
   # --------------------------------------------------------------------------
   # DEPENDENCIAS DE RED Y PARSEO DE DATOS
   # --------------------------------------------------------------------------
-  http: ^1.2.2                    # Cliente HTTP para realizar peticiones (e.g., obtener la URL del streaming).
-  html: ^0.15.4                   # Parsea documentos HTML para extraer información (e.g., noticias, programación).
-  cached_network_image: ^3.3.1    # Gestión eficiente del caché de imágenes de red (mejora el rendimiento).
+  http: ^1.2.2 # Cliente HTTP para realizar peticiones (e.g., obtener la URL del streaming).
+  html: ^0.15.4 # Parsea documentos HTML para extraer información (e.g., noticias, programación).
+  cached_network_image: ^3.3.1 # Gestión eficiente del caché de imágenes de red (mejora el rendimiento).
 
   # --------------------------------------------------------------------------
   # DEPENDENCIAS DE FIREBASE
   # --------------------------------------------------------------------------
-  firebase_core: ^4.2.0           # Inicialización y configuración de Firebase.
-  cloud_firestore: ^6.0.3         # Base de datos NoSQL en la nube.
-  firebase_analytics: ^12.0.3     # Medición del uso y comportamiento de los usuarios.
-  firebase_remote_config: ^6.1.0  # Configuración de la aplicación en tiempo real (sin actualizar la app).
+  firebase_core: ^4.2.0 # Inicialización y configuración de Firebase.
+  cloud_firestore: ^6.0.3 # Base de datos NoSQL en la nube.
+  firebase_analytics: ^12.0.3 # Medición del uso y comportamiento de los usuarios.
+  firebase_remote_config: ^6.1.0 # Configuración de la aplicación en tiempo real (sin actualizar la app).
 
   # --------------------------------------------------------------------------
   # DEPENDENCIAS DE UTILIDAD E INTERFAZ
   # --------------------------------------------------------------------------
-  url_launcher: ^6.3.1             # Abre URLs externas (ej. sitio web, redes sociales).
-  webview_flutter: ^4.4.0          # Muestra contenido web dentro de la aplicación.
-  share_plus: ^7.2.1               # Permite compartir contenido de la aplicación.
-  package_info_plus: ^9.0.0        # Obtiene la versión, nombre del paquete, etc., de forma automática.
-  logger: ^2.0.0                   # Herramienta profesional para el registro de logs (reemplazando 'print').
-
-  # Iconos (ya incluido con Material, esto es para iconos al estilo iOS)
-  cupertino_icons: ^1.0.8          
+  url_launcher: ^6.3.1 # Abre URLs externas (ej. sitio web, redes sociales).
+  webview_flutter: ^4.4.0 # Muestra contenido web dentro de la aplicación.
+  share_plus: ^7.2.1 # Permite compartir contenido de la aplicación.
+  package_info_plus: ^9.0.0 # Obtiene la versión, nombre del paquete, etc., de forma automática.
+  logger: ^2.0.0 # Herramienta profesional para el registro de logs (reemplazando 'print').
+  responsive_framework: ^1.2.1 # Facilita el diseño responsivo en Flutter.
+  cupertino_icons: ^1.0.8 # Iconos de estilo iOS para Flutter.
 
 dev_dependencies:
   # --------------------------------------------------------------------------
@@ -56,16 +55,15 @@ dev_dependencies:
   # --------------------------------------------------------------------------
   flutter_test:
     sdk: flutter
-  
-  flutter_lints: ^6.0.0            # Conjunto de reglas para un código más limpio y sin errores.
-  
+
+  flutter_lints: ^6.0.0 # Conjunto de reglas para un código más limpio y sin errores.
+
   # Herramientas de Testeo
-  mockito: ^5.4.4                  # Framework para crear objetos simulados (mocks) en pruebas unitarias.
-  build_runner: ^2.4.8             # Herramienta para generar código automáticamente (ej. para mockito).
+  mockito: ^5.4.4 # Framework para crear objetos simulados (mocks) en pruebas unitarias.
+  build_runner: ^2.4.8 # Herramienta para generar código automáticamente (ej. para mockito).
 
   # Herramienta para generar automáticamente los íconos de la aplicación.
   flutter_launcher_icons: ^0.14.4
-
 
 # --------------------------------------------------------------------------
 # CONFIGURACIÓN ESPECÍFICA DE FLUTTER
