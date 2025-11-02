@@ -185,6 +185,7 @@ class VersionChecker {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              //boton actualizar
                               ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(
@@ -210,7 +211,8 @@ class VersionChecker {
                                   style: TextStyle(fontWeight: FontWeight.bold),
                                 ),
                               ),
-                              const SizedBox(height: 8),
+                              // Boton Mas tarde
+                              /*const SizedBox(height: 8),
                               TextButton(
                                 style: TextButton.styleFrom(
                                   foregroundColor: AppColors.textSecondary,
@@ -221,7 +223,7 @@ class VersionChecker {
                                 ),
                                 onPressed: () => Navigator.pop(context),
                                 child: const Text('Más tarde'),
-                              ),
+                              ),*/
                             ],
                           )
                         : Row(
