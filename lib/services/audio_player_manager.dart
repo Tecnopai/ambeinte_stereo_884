@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:radio_player/radio_player.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Gestor centralizado del reproductor de audio usando radio_player
 /// Implementa el patrón Singleton para mantener una única instancia
@@ -13,18 +14,31 @@ class AudioPlayerManager {
   // ========== SINGLETON PATTERN ==========
   static AudioPlayerManager? _instance;
 
+  // ========== NUEVO: ANALYTICS EN TIEMPO REAL ==========
+  Timer? _analyticsHeartbeatTimer;
+  static const Duration _analyticsInterval = Duration(seconds: 30);
+  DateTime? _lastAnalyticsEvent;
+  int _continuousPlaybackMinutes = 0;
+
   factory AudioPlayerManager() {
     _instance ??= AudioPlayerManager._internal();
     return _instance!;
   }
 
+  // ========== NUEVO: FIREBASE STREAMING CONFIG ==========
+  static const String _firebaseStreamConfigPath = 'app_config/streaming';
+  static String _streamUrl = 'https://radio06.cehis.net:9036/stream'; // Default
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  bool _isStreamUrlLoaded = false;
+
   AudioPlayerManager._internal() {
     _log('[AudioPlayerManager] Creando instancia singleton');
+    _loadStreamUrlFromFirebase();
     _initAsync();
   }
 
   // ========== CONSTANTES ==========
-  static const String _streamUrl = 'https://radio06.cehis.net:9036/stream';
+  //static const String _streamUrl = 'https://radio06.cehis.net:9036/stream';
   static const Duration _reconnectDelay = Duration(seconds: 5);
   static const int _maxReconnectAttempts = 8;
   static const bool _autoPlay = true;
@@ -86,6 +100,33 @@ class AudioPlayerManager {
   double get volume => _volumeController.value;
   bool get isInitialized => _isInitialized;
 
+  /// Carga la URL del streaming desde Firebase
+  Future<void> _loadStreamUrlFromFirebase() async {
+    try {
+      _log('[AudioPlayerManager] 📡 Cargando URL desde Firebase...');
+
+      final doc = await _firestore
+          .doc(_firebaseStreamConfigPath)
+          .get()
+          .timeout(const Duration(seconds: 5));
+
+      if (doc.exists && doc.data() != null) {
+        final config = doc.data()!;
+        final newStreamUrl = config['stream_url'] as String?;
+
+        if (newStreamUrl != null && newStreamUrl.isNotEmpty) {
+          _streamUrl = newStreamUrl;
+          _isStreamUrlLoaded = true;
+          _log(
+            '[AudioPlayerManager] ✅ URL cargada desde Firebase: $_streamUrl',
+          );
+        }
+      }
+    } catch (e) {
+      _log('[AudioPlayerManager] ⚠️ Usando URL default: $e');
+    }
+  }
+
   // ========== INICIALIZACIÓN ==========
   Future<void> _initAsync() async {
     if (_isInitialized || _isInitializing) {
@@ -105,7 +146,7 @@ class AudioPlayerManager {
         url: _streamUrl,
         logoAssetPath: 'assets/images/icon.png',
       );
-      _log('[AudioPlayerManager] ✅ Estación configurada con notificaciones');
+      _log('[AudioPlayerManager] ✅ Estación configurada con URL: $_streamUrl');
 
       _setupPlayerListeners();
 
@@ -127,6 +168,7 @@ class AudioPlayerManager {
           'station': 'Ambiente Stereo 88.4',
           'auto_play': _autoPlay ? 'true' : 'false',
           'wakelock_available': _wakeLockAvailable ? 'true' : 'false',
+          'stream_url_source': _isStreamUrlLoaded ? 'firebase' : 'default',
         },
       );
 
@@ -309,15 +351,58 @@ class AudioPlayerManager {
   void _startAudioSession() {
     if (_startTime == null) {
       _startTime = DateTime.now();
+      _continuousPlaybackMinutes = 0;
+
       _logAnalyticsEvent(
         name: 'audio_session_start',
         parameters: {
           'station': 'Ambiente Stereo 88.4',
           'timestamp': DateTime.now().toIso8601String(),
+          'stream_url_source': _isStreamUrlLoaded ? 'firebase' : 'default',
         },
       );
+
+      // Iniciar heartbeat de analytics
+      _startAnalyticsHeartbeat();
+
       _log('[AudioPlayerManager] 📊 TSL Iniciada');
     }
+  }
+
+  /// Envía eventos periódicos mientras el streaming está activo
+  void _startAnalyticsHeartbeat() {
+    _analyticsHeartbeatTimer?.cancel();
+    _analyticsHeartbeatTimer = Timer.periodic(_analyticsInterval, (
+      timer,
+    ) async {
+      if (_playingController.value && _startTime != null) {
+        _continuousPlaybackMinutes++;
+        _lastAnalyticsEvent = DateTime.now();
+
+        final sessionDuration = DateTime.now().difference(_startTime!);
+
+        await _logAnalyticsEvent(
+          name: 'streaming_heartbeat',
+          parameters: {
+            'station': 'Ambiente Stereo 88.4',
+            'continuous_minutes': _continuousPlaybackMinutes,
+            'total_session_minutes': sessionDuration.inMinutes,
+            'is_reconnecting': _isReconnecting ? 'true' : 'false',
+            'reconnect_attempts': _reconnectAttempts,
+            'stream_url_source': _isStreamUrlLoaded ? 'firebase' : 'default',
+            'last_heartbeat': _lastAnalyticsEvent?.toIso8601String(),
+            'timestamp': DateTime.now().toIso8601String(),
+          },
+        );
+
+        _log(
+          '[AudioPlayerManager] 📊 Heartbeat enviado - ${_continuousPlaybackMinutes}min continuos',
+        );
+      } else {
+        // Si no está reproduciendo, detener el heartbeat
+        timer.cancel();
+      }
+    });
   }
 
   void _endAudioSession() {
@@ -325,20 +410,29 @@ class AudioPlayerManager {
       final duration = DateTime.now().difference(_startTime!);
       final durationSeconds = duration.inSeconds;
 
+      // Detener heartbeat
+      _analyticsHeartbeatTimer?.cancel();
+      _analyticsHeartbeatTimer = null;
+
       _logAnalyticsEvent(
         name: 'audio_session_end',
         parameters: {
           'station': 'Ambiente Stereo 88.4',
           'session_duration_sec': durationSeconds,
+          'continuous_minutes': _continuousPlaybackMinutes,
           'total_reconnections': _totalReconnections,
           'timestamp': DateTime.now().toIso8601String(),
         },
       );
 
       _log('[AudioPlayerManager] 📊 TSL Finalizada: ${durationSeconds}s');
+      _log(
+        '[AudioPlayerManager] 📊 Minutos continuos: $_continuousPlaybackMinutes',
+      );
       _log('[AudioPlayerManager] 📊 Total reconexiones: $_totalReconnections');
 
       _startTime = null;
+      _continuousPlaybackMinutes = 0;
       _totalReconnections = 0;
     }
   }
@@ -347,6 +441,9 @@ class AudioPlayerManager {
   void onAppPaused() {
     _log('[AudioPlayerManager] 🔵 App pausada/background');
     _isAppInBackground = true;
+
+    // Pausar heartbeat en background
+    _analyticsHeartbeatTimer?.cancel();
 
     // Guardar TSL temporal si está reproduciendo
     if (_startTime != null && isPlaying) {
@@ -361,6 +458,7 @@ class AudioPlayerManager {
         parameters: {
           'station': 'Ambiente Stereo 88.4',
           'duration_so_far': duration.inSeconds,
+          'continuous_minutes': _continuousPlaybackMinutes,
           'timestamp': DateTime.now().toIso8601String(),
         },
       );
@@ -373,6 +471,8 @@ class AudioPlayerManager {
 
     // La sesión TSL continúa si el audio sigue reproduciendo
     if (isPlaying && _startTime != null) {
+      _startAnalyticsHeartbeat();
+
       final duration = DateTime.now().difference(_startTime!);
       _log(
         '[AudioPlayerManager] 📊 TSL continúa: ${duration.inSeconds}s acumulados',
@@ -625,6 +725,10 @@ class AudioPlayerManager {
   Future<void> dispose() async {
     _log('[AudioPlayerManager] 🧹 Liberando recursos...');
 
+    // Detener heartbeat
+    _analyticsHeartbeatTimer?.cancel();
+    _analyticsHeartbeatTimer = null;
+
     _endAudioSession();
     _reconnectTimer?.cancel();
     await _playbackStateSubscription?.cancel();
@@ -695,6 +799,8 @@ class AudioPlayerManager {
       'isInitialized': _isInitialized,
       'isPlaying': isPlaying,
       'isLoading': isLoading,
+      'streamUrl': _streamUrl,
+      'streamUrlSource': _isStreamUrlLoaded ? 'firebase' : 'default',
       'reconnectAttempts': _reconnectAttempts,
       'totalReconnections': _totalReconnections,
       'isReconnecting': _isReconnecting,

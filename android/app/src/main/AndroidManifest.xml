@@ -62,7 +62,9 @@
             android:windowSoftInputMode="adjustResize"            
             android:showWhenLocked="true"
             android:turnScreenOn="true"
-            android:keepScreenOn="false">
+            android:keepScreenOn="false"
+            android:supportsPictureInPicture="true"
+            android:autoStart="true">
             
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"

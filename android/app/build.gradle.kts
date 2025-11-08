@@ -28,6 +28,7 @@ android {
 
     defaultConfig {
         applicationId = "com.miltonbass.ambientestereo884"
+        multiDexEnabled = true
         
         // SDK mínimo actualizado a 21 para Android Auto/Automotive
         // (Flutter.minSdkVersion ya debería ser >= 21)

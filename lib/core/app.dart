@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:io';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 // Importa el tema de la aplicación.
@@ -62,6 +64,16 @@ class _AmbientStereoAppState extends State<AmbientStereoApp>
     // Si la aplicación vuelve a primer plano (resumed), se registra un evento en Analytics.
     if (state == AppLifecycleState.resumed) {
       analytics.logEvent(name: 'app_resumed');
+    } else if (state == AppLifecycleState.paused) {
+      // Podrías activar PiP automáticamente aquí
+      _enterPipMode();
+    }
+  }
+
+  // Método para entrar en PiP (solo Android)
+  Future<void> _enterPipMode() async {
+    if (Platform.isAndroid) {
+      await MethodChannel('your_channel_name').invokeMethod('enterPipMode');
     }
   }
 
