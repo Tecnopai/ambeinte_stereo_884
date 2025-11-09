@@ -22,6 +22,7 @@ dependencies:
   audio_session: ^0.2.2 # Manejo de la sesión de audio (interrupciones, control de foco).
   volume_controller: ^3.4.0 # Control programático del volumen del dispositivo.
   rxdart: ^0.28.0 # Implementación de ReactiveX para control de estado en notificaciones/lockscreen.
+  audioplayers: ^5.2.1 # Reproductor de audio simple y fácil de usar.
 
   # --------------------------------------------------------------------------
   # DEPENDENCIAS DE RED Y PARSEO DE DATOS
@@ -49,6 +50,10 @@ dependencies:
   responsive_framework: ^1.2.1 # Facilita el diseño responsivo en Flutter.
   cupertino_icons: ^1.0.8 # Iconos de estilo iOS para Flutter.
 
+  # Herramientas para gestión de caché
+  path_provider: ^2.1.1 # Proporciona rutas para almacenar archivos en el dispositivo.
+  flutter_cache_manager: ^3.3.0 # Gestión avanzada de caché de archivos.
+
 dev_dependencies:
   # --------------------------------------------------------------------------
   # HERRAMIENTAS DE DESARROLLO Y TESTING
@@ -64,6 +69,8 @@ dev_dependencies:
 
   # Herramienta para generar automáticamente los íconos de la aplicación.
   flutter_launcher_icons: ^0.14.4
+
+  
 
 # --------------------------------------------------------------------------
 # CONFIGURACIÓN ESPECÍFICA DE FLUTTER

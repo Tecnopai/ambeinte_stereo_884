@@ -38,7 +38,6 @@ class AudioPlayerManager {
   }
 
   // ========== CONSTANTES ==========
-  //static const String _streamUrl = 'https://radio06.cehis.net:9036/stream';
   static const Duration _reconnectDelay = Duration(seconds: 5);
   static const int _maxReconnectAttempts = 8;
   static const bool _autoPlay = true;
@@ -63,6 +62,9 @@ class AudioPlayerManager {
   final Completer<void> _initCompleter = Completer<void>();
   bool _wasPlayingBeforeError = false;
   bool _isAppInBackground = false; // Track estado de app
+
+  // ==========  CONTROL PARA ARTÍCULOS ==========
+  bool _isPausedForArticle = false;
 
   // ========== STREAMS DE ESTADO ==========
   final BehaviorSubject<bool> _playingController = BehaviorSubject<bool>.seeded(
@@ -99,6 +101,9 @@ class AudioPlayerManager {
   bool get isLoading => _loadingController.value;
   double get volume => _volumeController.value;
   bool get isInitialized => _isInitialized;
+
+  // ========== GETTER PARA CONTROL DE ARTÍCULOS ==========
+  bool get isPausedForArticle => _isPausedForArticle;
 
   /// Carga la URL del streaming desde Firebase
   Future<void> _loadStreamUrlFromFirebase() async {
@@ -240,10 +245,12 @@ class AudioPlayerManager {
             break;
 
           case PlaybackState.paused:
-            // Detectar si la pausa fue por error (no por background)
+            // No tratar como error si está pausado para artículo
             if (_wasPlayingBeforeError &&
                 !_isReconnecting &&
-                !_isAppInBackground) {
+                !_isAppInBackground &&
+                !_isPausedForArticle) {
+              // ← CONDICIÓN AÑADIDA
               _log(
                 '[AudioPlayerManager] ⚠️ Pausa inesperada detectada - posible error de red',
               );
@@ -251,8 +258,14 @@ class AudioPlayerManager {
             } else {
               _playingController.add(false);
               _loadingController.add(false);
-              _wasPlayingBeforeError = false;
-              _endAudioSession();
+              // No resetear _wasPlayingBeforeError si es pausa temporal para artículo
+              if (!_isPausedForArticle) {
+                _wasPlayingBeforeError = false;
+              }
+              // No finalizar sesión TSL si es pausa temporal
+              if (!_isPausedForArticle) {
+                _endAudioSession();
+              }
             }
             break;
 
@@ -260,8 +273,10 @@ class AudioPlayerManager {
             _loadingController.add(true);
             _log('[AudioPlayerManager] ⏳ Buffering...');
 
-            // ✅ NUEVO: Si estábamos reproduciendo y NO es por background, podría ser error
-            if (_wasPlayingBeforeError && !_isAppInBackground) {
+            // No tratar buffering como error si está pausado para artículo
+            if (_wasPlayingBeforeError &&
+                !_isAppInBackground &&
+                !_isPausedForArticle) {
               // Dar tiempo para que se resuelva el buffering
               Future.delayed(const Duration(seconds: 3), () {
                 // Si después de 3 segundos sigue buffering, reconectar
@@ -279,7 +294,9 @@ class AudioPlayerManager {
 
           case PlaybackState.unknown:
             _log('[AudioPlayerManager] ⚠️ Estado desconocido');
-            if (_playingController.value && !_isReconnecting) {
+            if (_playingController.value &&
+                !_isReconnecting &&
+                !_isPausedForArticle) {
               _handleReconnection();
             }
             break;
@@ -290,7 +307,8 @@ class AudioPlayerManager {
         _errorController.add('Error de conexión');
         _loadingController.add(false);
 
-        if (_playingController.value || _wasPlayingBeforeError) {
+        if ((_playingController.value || _wasPlayingBeforeError) &&
+            !_isPausedForArticle) {
           _handleReconnection();
         }
       },
@@ -480,6 +498,40 @@ class AudioPlayerManager {
     }
   }
 
+  // ========== MÉTODOS PARA CONTROL DE ARTÍCULOS ==========
+
+  /// Pausar la radio temporalmente para reproducir un artículo
+  Future<void> pauseForArticle() async {
+    if (isPlaying && !_isPausedForArticle) {
+      _isPausedForArticle = true;
+      _wasPlayingBeforeError = false; // Importante: evitar reconexión
+      await pause();
+      _log('[AudioPlayerManager] ⏸️ Pausado temporalmente para artículo');
+
+      await _logAnalyticsEvent(
+        name: 'radio_paused_for_article',
+        parameters: {'timestamp': DateTime.now().toIso8601String()},
+      );
+    }
+  }
+
+  /// Reanudar la radio después de terminar un artículo
+  Future<void> resumeAfterArticle() async {
+    if (_isPausedForArticle) {
+      _isPausedForArticle = false;
+      _log('[AudioPlayerManager] ▶️ Reanudando después de artículo');
+
+      // Esperar un poco antes de reanudar
+      await Future.delayed(const Duration(milliseconds: 500));
+      await play();
+
+      await _logAnalyticsEvent(
+        name: 'radio_resumed_after_article',
+        parameters: {'timestamp': DateTime.now().toIso8601String()},
+      );
+    }
+  }
+
   // ========== TOGGLE PLAYBACK ==========
   Future<void> togglePlayback() async {
     try {
@@ -608,6 +660,14 @@ class AudioPlayerManager {
   // ========== RECONEXIÓN AUTOMÁTICA ==========
 
   void _handleReconnection() {
+    // No reconectar si está pausado para artículo
+    if (_isPausedForArticle) {
+      _log(
+        '[AudioPlayerManager] ℹ️ Ignorando reconexión - pausado para artículo',
+      );
+      return;
+    }
+
     if (_isReconnecting) {
       _log('[AudioPlayerManager] ⚠️ Reconexión ya en progreso...');
       return;
@@ -799,6 +859,7 @@ class AudioPlayerManager {
       'isInitialized': _isInitialized,
       'isPlaying': isPlaying,
       'isLoading': isLoading,
+      'isPausedForArticle': _isPausedForArticle,
       'streamUrl': _streamUrl,
       'streamUrlSource': _isStreamUrlLoaded ? 'firebase' : 'default',
       'reconnectAttempts': _reconnectAttempts,

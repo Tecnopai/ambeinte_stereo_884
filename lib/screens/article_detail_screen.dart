@@ -4,16 +4,12 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
-// import 'package:logger/logger.dart'; // Se asume importado en main.dart
-
 import '../models/article.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
 import '../services/audio_player_manager.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/live_indicator.dart';
-
-// final logger = Logger(); // Se asume inicializado globalmente si se necesita
 
 /// Pantalla de detalle de un artículo de WordPress.
 ///
@@ -62,6 +58,9 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   /// Bandera que indica si el streaming de la radio en vivo está activo.
   bool _isStreamingPlaying = false;
 
+  /// Bandera que indica si la reproducción de la radio fue pausada
+  bool _isRadioPausedForArticle = false;
+
   /// Instancia de Firebase Analytics para el seguimiento.
   final analytics = FirebaseAnalytics.instance;
 
@@ -87,6 +86,53 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
 
     _initializeAudio();
     _setupStreamingListener();
+  }
+
+  /// Pausar la radio cuando se reproduce el artículo
+  Future<void> _pauseRadioForArticle() async {
+    if (widget.audioManager != null &&
+        widget.audioManager!.isPlaying &&
+        !_isRadioPausedForArticle) {
+      await widget.audioManager!.pauseForArticle();
+      _isRadioPausedForArticle = true;
+
+      if (mounted) {
+        setState(() {});
+      }
+
+      debugPrint('🎵 Radio pausada temporalmente para artículo');
+    }
+  }
+
+  /// Reanudar la radio después del artículo
+  Future<void> _resumeRadioIfNeeded() async {
+    if (_isRadioPausedForArticle && widget.audioManager != null) {
+      await widget.audioManager!.resumeAfterArticle();
+      _isRadioPausedForArticle = false;
+
+      if (mounted) {
+        setState(() {});
+      }
+
+      debugPrint('🎵 Radio reanudada después del artículo');
+    }
+  }
+
+  /// Manejo unificado de play/pause del artículo con control de radio
+  Future<void> _toggleArticleAudio() async {
+    if (!_isInitialized || _hasError) return;
+
+    final playerState = _audioPlayer?.playerState;
+    final isPlaying = playerState?.playing ?? false;
+
+    if (isPlaying) {
+      // Pausar artículo
+      await _audioPlayer?.pause();
+    } else {
+      // Reproducir artículo - pausar radio primero
+      await _pauseRadioForArticle();
+      await _audioPlayer?.play();
+    }
   }
 
   /// Configura el listener para saber si el streaming de la radio en vivo está reproduciendo.
@@ -152,6 +198,11 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   /// {inheritdoc}
   @override
   void dispose() {
+    // Reanudar la radio al salir de la pantalla si estaba pausada
+    if (_isRadioPausedForArticle) {
+      _resumeRadioIfNeeded();
+    }
+
     // Es crucial liberar los recursos del reproductor de audio al salir.
     _audioPlayer?.dispose();
     super.dispose();
@@ -201,7 +252,8 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
               'Artículo',
               style: TextStyle(fontSize: responsive.h2, color: Colors.white),
             ),
-            if (_isStreamingPlaying) const LiveIndicator(),
+            if (_isStreamingPlaying && !_isRadioPausedForArticle)
+              const LiveIndicator(),
           ],
         ),
         iconTheme: const IconThemeData(color: Colors.white, size: 32),
@@ -463,13 +515,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                       color: Colors.green,
                     ),
                     iconSize: 64,
-                    onPressed: () {
-                      if (playing) {
-                        _audioPlayer?.pause();
-                      } else {
-                        _audioPlayer?.play();
-                      }
-                    },
+                    onPressed: _toggleArticleAudio,
                   );
                 },
               ),
@@ -540,7 +586,8 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                 style: TextStyle(fontSize: responsive.h2),
               ),
             ),
-            if (_isStreamingPlaying) const LiveIndicator(),
+            if (_isStreamingPlaying && !_isRadioPausedForArticle)
+              const LiveIndicator(),
           ],
         ),
         centerTitle: true,
@@ -571,7 +618,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                   left: padding,
                   right: padding,
                   // Ajusta el padding inferior si el MiniPlayer está visible
-                  bottom: _isStreamingPlaying
+                  bottom: (_isStreamingPlaying && !_isRadioPausedForArticle)
                       ? responsive.getValue(
                           phone: 100.0,
                           tablet: 120.0,
@@ -667,7 +714,6 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
 
   /// Reproductor de audio estándar para móvil/tablet.
   Widget _buildAudioPlayer(ResponsiveHelper responsive, double borderRadius) {
-    // ... (El código de construcción del reproductor)
     return Container(
       padding: EdgeInsets.all(
         responsive.getValue(phone: 16.0, tablet: 20.0, desktop: 24.0),
@@ -879,13 +925,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                         tablet: 38.0,
                         desktop: 44.0,
                       ),
-                      onPressed: () {
-                        if (playing) {
-                          _audioPlayer?.pause();
-                        } else {
-                          _audioPlayer?.play();
-                        }
-                      },
+                      onPressed: _toggleArticleAudio,
                     ),
                   );
                 },
@@ -1233,44 +1273,70 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     );
   }
 
-  /// Abre URL en navegador externo usando `url_launcher`.
+  /// Método para lanzar URLs - AÑADIDO PARA SOLUCIONAR ERROR
   Future<void> _launchUrl(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      // En lugar de print, puedes usar debugPrint o un logger
+      debugPrint('Error launching URL: $e');
     }
   }
 
-  /// Comparte el título y el enlace del artículo usando `share_plus`.
+  /// Método para compartir artículos - AÑADIDO PARA SOLUCIONAR ERROR
   void _shareArticle(BuildContext context) {
-    final shareText = '${widget.article.title}\n\n${widget.article.link}';
-    SharePlus.instance.share(
-      ShareParams(text: shareText, subject: widget.article.title),
-    );
+    try {
+      final shareText = '${widget.article.title}\n\n${widget.article.link}';
+      // Usando SharePlus.instance.share() en lugar del método deprecated
+      SharePlus.instance.share(
+        ShareParams(text: shareText, subject: widget.article.title),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al compartir: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
-  /// Copia el enlace del artículo al portapapeles y muestra un SnackBar de confirmación.
+  /// Método para copiar enlace - AÑADIDO PARA SOLUCIONAR ERROR
   void _copyLink(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: widget.article.link));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Enlace copiado al portapapeles',
-                style: const TextStyle(fontSize: 14),
+    try {
+      Clipboard.setData(ClipboardData(text: widget.article.link));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Enlace copiado al portapapeles',
+                  style: const TextStyle(fontSize: 14),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al copiar enlace: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }

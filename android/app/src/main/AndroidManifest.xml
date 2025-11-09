@@ -63,7 +63,6 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:keepScreenOn="false"
-            android:supportsPictureInPicture="true"
             android:autoStart="true">
             
             <meta-data

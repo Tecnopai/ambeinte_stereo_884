@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import '../services/audio_player_manager.dart';
@@ -6,6 +7,7 @@ import '../widgets/volume_control.dart';
 import '../widgets/sound_waves.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
+import '../utils/cache_manager.dart';
 
 /// Pantalla principal del reproductor de radio
 /// Muestra controles de reproducción, animaciones visuales y estado de conexión.
@@ -21,7 +23,7 @@ class RadioPlayerScreen extends StatefulWidget {
 /// Estado y lógica principal para el reproductor de radio.
 /// Utiliza [TickerProviderStateMixin] para manejar animaciones (como SoundWaves o AnimatedDisc).
 class _RadioPlayerScreenState extends State<RadioPlayerScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   /// Obtiene la instancia singleton del [AudioPlayerManager] para controlar el audio.
   late final AudioPlayerManager _audioManager;
 
@@ -39,10 +41,14 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   /// Mensaje de error o estado de reconexión a mostrar en la interfaz.
   String? _errorMessage;
 
+  /// Timer periódico para limpieza de cache
+  Timer? _cacheCleanupTimer;
+
   /// Inicializa el Audio Manager, configura los listeners y registra la vista.
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     // Registrar vista de pantalla en Firebase Analytics.
     analytics.logScreenView(
@@ -54,6 +60,35 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     _audioManager = AudioPlayerManager();
     _setupListeners();
     _initializeStates();
+    _startCacheManagement();
+  }
+
+  @override
+  void dispose() {
+    _cacheCleanupTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Inicia el sistema de gestión de cache
+  void _startCacheManagement() {
+    // Verificar cache inmediatamente
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      CacheManager.checkAndCleanCache();
+    });
+
+    // Verificar cada 5 minutos
+    _cacheCleanupTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
+      CacheManager.checkAndCleanCache();
+    });
+  }
+
+  /// Cuando la app vuelve a primer plano
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      CacheManager.checkAndCleanCache();
+    }
   }
 
   /// Configura los listeners para los diferentes streams del audio manager
