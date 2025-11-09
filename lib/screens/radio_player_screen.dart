@@ -154,87 +154,26 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   @override
   Widget build(BuildContext context) {
     final responsive = ResponsiveHelper(context);
-
-    // Tamaños responsivos calculados para diferentes dispositivos
-    final padding = responsive.getValue(
-      smallPhone: 16.0,
-      phone: 20.0,
-      largePhone: 24.0,
-      tablet: 32.0,
-      desktop: 40.0,
-      automotive: 24.0,
-    );
-
-    final titleFontSize = responsive.getValue(
-      smallPhone: 13.0,
-      phone: 14.0,
-      largePhone: 15.0,
-      tablet: 16.0,
-      desktop: 18.0,
-      automotive: 16.0,
-    );
-
-    final appBarTitleSize = responsive.getValue(
-      smallPhone: 16.0,
-      phone: 18.0,
-      largePhone: 19.0,
-      tablet: 20.0,
-      desktop: 22.0,
-      automotive: 20.0,
-    );
-
-    final subtitleFontSize = responsive.getValue(
-      smallPhone: 13.0,
-      phone: 14.0,
-      largePhone: 15.0,
-      tablet: 16.0,
-      desktop: 18.0,
-      automotive: 16.0,
-    );
-
-    final playButtonSize = responsive.getValue(
-      smallPhone: 70.0,
-      phone: 80.0,
-      largePhone: 90.0,
-      tablet: 100.0,
-      desktop: 120.0,
-      automotive: 90.0,
-    );
-
-    final playIconSize = responsive.getValue(
-      smallPhone: 35.0,
-      phone: 40.0,
-      largePhone: 45.0,
-      tablet: 50.0,
-      desktop: 60.0,
-      automotive: 45.0,
-    );
-
-    final loadingSize = responsive.getValue(
-      smallPhone: 26.0,
-      phone: 30.0,
-      largePhone: 34.0,
-      tablet: 40.0,
-      desktop: 48.0,
-      automotive: 36.0,
-    );
-
-    // Espaciados responsivos
-    final topSpacing = responsive.spacing(60);
-    final sectionSpacing = responsive.spacing(30);
-    final smallSpacing = responsive.spacing(12);
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
           'Ambiente Stereo 88.4 FM',
           style: TextStyle(
-            fontSize: appBarTitleSize,
+            fontSize: responsive.getValue(
+              smallPhone: 16.0,
+              phone: 18.0,
+              largePhone: 19.0,
+              tablet: 20.0,
+              desktop: 22.0,
+              automotive: 20.0,
+            ),
             fontWeight: FontWeight.w600,
           ),
         ),
         centerTitle: true,
-        // Muestra un indicador visual de reconexión si hay un mensaje de error activo.
         actions: [
           if (_errorMessage != null &&
               _errorMessage!.isNotEmpty &&
@@ -248,83 +187,293 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        // Fondo con gradiente
         decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(padding),
-          child: ConstrainedBox(
-            // Ajusta la altura mínima para centrar el contenido en pantallas grandes
-            constraints: BoxConstraints(
-              minHeight:
-                  MediaQuery.of(context).size.height -
-                  (AppBar().preferredSize.height +
-                      MediaQuery.of(context).padding.top +
-                      padding * 2),
+        // ✅ Layout diferente para landscape vs portrait
+        child: isLandscape
+            ? _buildLandscapeLayout(responsive)
+            : _buildPortraitLayout(responsive),
+      ),
+    );
+  }
+
+  /// Construye el layout para orientación portrait (vertical)
+  Widget _buildPortraitLayout(ResponsiveHelper responsive) {
+    final padding = responsive.getValue(
+      smallPhone: 16.0,
+      phone: 20.0,
+      largePhone: 24.0,
+      tablet: 32.0,
+      desktop: 40.0,
+      automotive: 24.0,
+    );
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(padding),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(height: responsive.spacing(20)),
+
+          // Disco animado
+          Transform.scale(
+            scale: responsive.getValue(
+              smallPhone: 0.7,
+              phone: 0.8,
+              largePhone: 0.9,
+              tablet: 1.0,
+              desktop: 1.1,
+              automotive: 0.9,
             ),
+            child: AnimatedDisc(isPlaying: _isPlaying),
+          ),
+
+          SizedBox(height: responsive.spacing(25)),
+
+          // Información de la estación
+          Text(
+            'Ambiente Stereo 88.4 FM',
+            style: TextStyle(
+              fontSize: responsive.getValue(
+                smallPhone: 14.0,
+                phone: 16.0,
+                largePhone: 18.0,
+                tablet: 20.0,
+                desktop: 22.0,
+                automotive: 18.0,
+              ),
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+              letterSpacing: 0.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+
+          SizedBox(height: responsive.spacing(12)),
+
+          // Texto de estado
+          _buildStatusText(
+            responsive,
+            responsive.getValue(
+              smallPhone: 12.0,
+              phone: 14.0,
+              largePhone: 15.0,
+              tablet: 16.0,
+              desktop: 18.0,
+              automotive: 15.0,
+            ),
+          ),
+
+          SizedBox(height: responsive.spacing(25)),
+
+          // Ondas de sonido
+          if (_isPlaying && !_isLoading)
+            Padding(
+              padding: EdgeInsets.symmetric(
+                vertical: responsive.getValue(
+                  smallPhone: 3.0,
+                  phone: 5.0,
+                  largePhone: 8.0,
+                  tablet: 12.0,
+                  desktop: 15.0,
+                  automotive: 8.0,
+                ),
+              ),
+              child: SoundWaves(isPlaying: _isPlaying),
+            ),
+
+          if (_isPlaying && !_isLoading)
+            SizedBox(height: responsive.spacing(25)),
+
+          // Botón de play/pause
+          _buildPlayButton(
+            responsive: responsive,
+            size: responsive.getValue(
+              smallPhone: 70.0,
+              phone: 80.0,
+              largePhone: 90.0,
+              tablet: 100.0,
+              desktop: 120.0,
+              automotive: 90.0,
+            ),
+            iconSize: responsive.getValue(
+              smallPhone: 35.0,
+              phone: 40.0,
+              largePhone: 45.0,
+              tablet: 50.0,
+              desktop: 60.0,
+              automotive: 45.0,
+            ),
+            loadingSize: responsive.getValue(
+              smallPhone: 26.0,
+              phone: 30.0,
+              largePhone: 34.0,
+              tablet: 40.0,
+              desktop: 48.0,
+              automotive: 36.0,
+            ),
+          ),
+
+          SizedBox(height: responsive.spacing(25)),
+
+          // Control de volumen
+          SizedBox(
+            width: responsive.getValue(
+              smallPhone: 250.0,
+              phone: 280.0,
+              largePhone: 320.0,
+              tablet: 400.0,
+              desktop: 500.0,
+              automotive: 320.0,
+            ),
+            child: VolumeControl(audioManager: _audioManager),
+          ),
+
+          SizedBox(height: responsive.spacing(20)),
+        ],
+      ),
+    );
+  }
+
+  /// Construye el layout para orientación landscape (horizontal)
+  Widget _buildLandscapeLayout(ResponsiveHelper responsive) {
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: responsive.getValue(
+          smallPhone: 12.0,
+          phone: 16.0,
+          largePhone: 20.0,
+          tablet: 24.0,
+          desktop: 32.0,
+          automotive: 20.0,
+        ),
+        vertical: responsive.getValue(
+          // ✅ Menos altura vertical
+          smallPhone: 8.0,
+          phone: 10.0,
+          largePhone: 12.0,
+          tablet: 16.0,
+          desktop: 20.0,
+          automotive: 12.0,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Columna izquierda: Disco más grande
+          Expanded(
+            flex: 2, // ✅ Más espacio para el disco
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(height: topSpacing),
+                // Disco animado - MÁS GRANDE en landscape
+                Transform.scale(
+                  scale: responsive.getValue(
+                    smallPhone: 0.8, // ✅ Más grande
+                    phone: 0.9,
+                    largePhone: 1.0,
+                    tablet: 1.1,
+                    desktop: 1.2,
+                    automotive: 1.0,
+                  ),
+                  child: AnimatedDisc(isPlaying: _isPlaying),
+                ),
 
-                // Disco animado: gira si [_isPlaying] es true.
-                AnimatedDisc(isPlaying: _isPlaying),
-
-                SizedBox(height: sectionSpacing),
-
-                // Título principal de la emisora
+                SizedBox(height: responsive.spacing(8)), // ✅ Menos espaciado
+                // Información compacta
                 Text(
                   'Ambiente Stereo 88.4 FM',
                   style: TextStyle(
-                    fontSize: titleFontSize,
+                    fontSize: responsive.getValue(
+                      smallPhone: 11.0,
+                      phone: 13.0,
+                      largePhone: 15.0,
+                      tablet: 17.0,
+                      desktop: 19.0,
+                      automotive: 15.0,
+                    ),
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
-                    letterSpacing: 0.5,
                   ),
                   textAlign: TextAlign.center,
+                  maxLines: 2,
                 ),
 
-                SizedBox(height: smallSpacing),
+                SizedBox(height: responsive.spacing(4)), // ✅ Menos espaciado
 
-                // Texto de estado (Conectando, En vivo, Pausado)
-                _buildStatusText(responsive, subtitleFontSize),
-
-                SizedBox(height: sectionSpacing),
-
-                // Ondas de sonido animadas: solo se muestran si no está cargando y está reproduciendo.
-                if (_isPlaying && !_isLoading)
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      vertical: responsive.getValue(
-                        phone: 5.0,
-                        largePhone: 8.0,
-                        tablet: 15.0,
-                        desktop: 20.0,
-                        automotive: 10.0,
-                      ),
-                    ),
-                    child: SoundWaves(isPlaying: _isPlaying),
+                _buildStatusText(
+                  responsive,
+                  responsive.getValue(
+                    smallPhone: 9.0,
+                    phone: 10.0,
+                    largePhone: 11.0,
+                    tablet: 12.0,
+                    desktop: 13.0,
+                    automotive: 11.0,
                   ),
-
-                SizedBox(height: sectionSpacing),
-
-                // Botón principal de reproducción/pausa (con estado de carga)
-                _buildPlayButton(
-                  responsive: responsive,
-                  size: playButtonSize,
-                  iconSize: playIconSize,
-                  loadingSize: loadingSize,
                 ),
-
-                SizedBox(height: sectionSpacing + 10),
-
-                // Control de volumen deslizable
-                VolumeControl(audioManager: _audioManager),
-
-                SizedBox(height: sectionSpacing),
               ],
             ),
           ),
-        ),
+
+          SizedBox(
+            width: responsive.spacing(12),
+          ), // ✅ Menos espacio entre columnas
+          // Columna derecha: Controles compactos
+          Expanded(
+            flex: 1, // ✅ Menos espacio para controles
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Eliminamos las ondas de sonido en landscape para ahorrar espacio
+
+                // Botón de play/pause compacto
+                _buildPlayButton(
+                  responsive: responsive,
+                  size: responsive.getValue(
+                    smallPhone: 60.0,
+                    phone: 70.0,
+                    largePhone: 80.0,
+                    tablet: 90.0,
+                    desktop: 100.0,
+                    automotive: 80.0,
+                  ),
+                  iconSize: responsive.getValue(
+                    smallPhone: 28.0,
+                    phone: 32.0,
+                    largePhone: 36.0,
+                    tablet: 40.0,
+                    desktop: 44.0,
+                    automotive: 36.0,
+                  ),
+                  loadingSize: responsive.getValue(
+                    smallPhone: 22.0,
+                    phone: 26.0,
+                    largePhone: 30.0,
+                    tablet: 34.0,
+                    desktop: 38.0,
+                    automotive: 30.0,
+                  ),
+                ),
+
+                SizedBox(height: responsive.spacing(8)), // ✅ Menos espaciado
+                // Control de volumen
+                SizedBox(
+                  width: responsive.getValue(
+                    smallPhone: 140.0,
+                    phone: 160.0,
+                    largePhone: 180.0,
+                    tablet: 200.0,
+                    desktop: 220.0,
+                    automotive: 180.0,
+                  ),
+                  child: VolumeControl(audioManager: _audioManager),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -346,21 +495,21 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     }
 
     final indicatorSize = responsive.getValue(
-      smallPhone: 7.0,
-      phone: 8.0,
-      largePhone: 9.0,
-      tablet: 10.0,
-      desktop: 11.0,
-      automotive: 9.0,
+      smallPhone: 6.0,
+      phone: 7.0,
+      largePhone: 8.0,
+      tablet: 9.0,
+      desktop: 10.0,
+      automotive: 8.0,
     );
 
     final indicatorSpacing = responsive.getValue(
-      smallPhone: 6.0,
-      phone: 8.0,
-      largePhone: 9.0,
-      tablet: 10.0,
-      desktop: 11.0,
-      automotive: 9.0,
+      smallPhone: 4.0,
+      phone: 5.0,
+      largePhone: 6.0,
+      tablet: 7.0,
+      desktop: 8.0,
+      automotive: 6.0,
     );
 
     return Row(
@@ -375,12 +524,11 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: statusColor,
-              // Añade una sombra de resplandor para destacar el estado
               boxShadow: [
                 BoxShadow(
                   color: statusColor.withValues(alpha: 0.5),
-                  blurRadius: 8,
-                  spreadRadius: 2,
+                  blurRadius: 6,
+                  spreadRadius: 1,
                 ),
               ],
             ),
@@ -390,7 +538,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
           style: TextStyle(
             fontSize: fontSize,
             color: statusColor,
-            letterSpacing: 0.3,
+            letterSpacing: 0.2,
             fontWeight: _isLoading ? FontWeight.w600 : FontWeight.normal,
           ),
           textAlign: TextAlign.center,
@@ -402,15 +550,33 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   /// Construye el indicador de reconexión que aparece en el AppBar
   Widget _buildReconnectingIndicator(ResponsiveHelper responsive) {
     final horizontalPadding = responsive.getValue(
-      smallPhone: 6.0,
-      phone: 8.0,
-      largePhone: 10.0,
-      tablet: 12.0,
-      desktop: 14.0,
-      automotive: 10.0,
+      smallPhone: 4.0,
+      phone: 6.0,
+      largePhone: 8.0,
+      tablet: 10.0,
+      desktop: 12.0,
+      automotive: 8.0,
     );
 
     final verticalPadding = responsive.getValue(
+      smallPhone: 2.0,
+      phone: 3.0,
+      largePhone: 4.0,
+      tablet: 5.0,
+      desktop: 6.0,
+      automotive: 4.0,
+    );
+
+    final indicatorSize = responsive.getValue(
+      smallPhone: 9.0,
+      phone: 10.0,
+      largePhone: 11.0,
+      tablet: 12.0,
+      desktop: 14.0,
+      automotive: 11.0,
+    );
+
+    final spacing = responsive.getValue(
       smallPhone: 3.0,
       phone: 4.0,
       largePhone: 5.0,
@@ -419,31 +585,13 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       automotive: 5.0,
     );
 
-    final indicatorSize = responsive.getValue(
-      smallPhone: 11.0,
-      phone: 12.0,
-      largePhone: 13.0,
-      tablet: 14.0,
-      desktop: 16.0,
-      automotive: 13.0,
-    );
-
-    final spacing = responsive.getValue(
-      smallPhone: 5.0,
-      phone: 6.0,
-      largePhone: 7.0,
-      tablet: 8.0,
-      desktop: 9.0,
-      automotive: 7.0,
-    );
-
     final fontSize = responsive.getValue(
-      smallPhone: 9.0,
-      phone: 10.0,
-      largePhone: 11.0,
-      tablet: 12.0,
-      desktop: 13.0,
-      automotive: 11.0,
+      smallPhone: 7.0,
+      phone: 8.0,
+      largePhone: 9.0,
+      tablet: 10.0,
+      desktop: 11.0,
+      automotive: 9.0,
     );
 
     return Container(
@@ -453,7 +601,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       ),
       decoration: BoxDecoration(
         color: AppColors.warning.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: AppColors.warning.withValues(alpha: 0.5),
           width: 1,
@@ -462,12 +610,11 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Indicador de progreso circular (girando)
           SizedBox(
             width: indicatorSize,
             height: indicatorSize,
             child: const CircularProgressIndicator(
-              strokeWidth: 2,
+              strokeWidth: 1.5,
               valueColor: AlwaysStoppedAnimation<Color>(AppColors.warning),
             ),
           ),
@@ -493,32 +640,31 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     required double iconSize,
     required double loadingSize,
   }) {
-    // Definición de tamaños responsivos para estilos visuales
     final shadowBlur = responsive.getValue(
-      smallPhone: 12.0,
-      phone: 15.0,
-      largePhone: 17.0,
-      tablet: 20.0,
-      desktop: 25.0,
-      automotive: 17.0,
+      smallPhone: 8.0,
+      phone: 10.0,
+      largePhone: 12.0,
+      tablet: 15.0,
+      desktop: 18.0,
+      automotive: 12.0,
     );
 
     final shadowSpread = responsive.getValue(
-      smallPhone: 1.5,
-      phone: 2.0,
-      largePhone: 2.5,
-      tablet: 3.0,
-      desktop: 4.0,
-      automotive: 2.5,
+      smallPhone: 1.0,
+      phone: 1.5,
+      largePhone: 2.0,
+      tablet: 2.5,
+      desktop: 3.0,
+      automotive: 2.0,
     );
 
     final strokeWidth = responsive.getValue(
-      smallPhone: 2.5,
-      phone: 3.0,
-      largePhone: 3.5,
-      tablet: 4.0,
-      desktop: 4.5,
-      automotive: 3.5,
+      smallPhone: 2.0,
+      phone: 2.5,
+      largePhone: 3.0,
+      tablet: 3.5,
+      desktop: 4.0,
+      automotive: 3.0,
     );
 
     return Container(
@@ -526,7 +672,6 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        // Gradiente de color para el botón
         gradient: AppColors.buttonGradient,
         boxShadow: [
           BoxShadow(
@@ -540,10 +685,9 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(size / 2),
-          onTap: _togglePlayback, // Llama al método de reproducción/pausa
+          onTap: _togglePlayback,
           child: Center(
             child: _isLoading
-                // Si está cargando, muestra el indicador de progreso.
                 ? SizedBox(
                     width: loadingSize,
                     height: loadingSize,
@@ -552,7 +696,6 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                       strokeWidth: strokeWidth,
                     ),
                   )
-                // Si no está cargando, muestra el icono de play o pause.
                 : Icon(
                     _isPlaying ? Icons.pause : Icons.play_arrow,
                     color: AppColors.textPrimary,
