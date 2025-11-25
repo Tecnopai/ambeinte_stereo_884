@@ -3,7 +3,7 @@ description: "Ambiente Stereo 88.4 FM."
 publish_to: "none" # Previene que el paquete se publique en pub.dev.
 
 # Versión de la aplicación: major.minor.patch+build_number
-version: 2.0.15+19
+version: 2.0.16+20
 
 environment:
   # Rango de Dart SDK compatible.
