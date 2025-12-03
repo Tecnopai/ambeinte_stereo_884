@@ -26,6 +26,9 @@ class AudioPlayerManager {
   }
 
   // ========== FIREBASE STREAMING CONFIG ==========
+  // Firebase path: app_config/streaming
+  // Reglas Firestore: Lectura pública, escritura autenticada
+  // Fallback URL si Firebase no disponible
   static const String _firebaseStreamConfigPath = 'app_config/streaming';
   static String _streamUrl = 'https://radio06.cehis.net:9036/stream'; // Default
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -33,7 +36,6 @@ class AudioPlayerManager {
 
   AudioPlayerManager._internal() {
     _log('[AudioPlayerManager] Creando instancia singleton');
-    _loadStreamUrlFromFirebase();
     _initAsync();
   }
 
@@ -160,6 +162,9 @@ class AudioPlayerManager {
 
     try {
       await _initializeWakeLock();
+
+      // Esperar a que Firebase cargue la URL ANTES de configurar el player
+      await _loadStreamUrlFromFirebase();
 
       await RadioPlayer.setStation(
         title: 'Ambiente Stereo 88.4 FM',
@@ -817,9 +822,8 @@ class AudioPlayerManager {
           'continuous_minutes': _continuousPlaybackMinutes,
           'total_reconnections': _totalReconnections,
           'timestamp': DateTime.now().toIso8601String(),
-          'final_buffer_health': _currentBufferHealth, // Salud final del buffer
-          'average_network_stability':
-              _networkStabilityScore, // Estabilidad promedio
+          'final_buffer_health': _currentBufferHealth,
+          'average_network_stability': _networkStabilityScore,
         },
       );
 
@@ -861,7 +865,7 @@ class AudioPlayerManager {
           'duration_so_far': duration.inSeconds,
           'continuous_minutes': _continuousPlaybackMinutes,
           'timestamp': DateTime.now().toIso8601String(),
-          'buffer_health_at_pause': _currentBufferHealth, // Salud al pausar
+          'buffer_health_at_pause': _currentBufferHealth,
         },
       );
     }
