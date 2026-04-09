@@ -44,6 +44,9 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   /// Timer periódico para limpieza de cache
   Timer? _cacheCleanupTimer;
 
+  /// Metadata actual del stream (artista y título)
+  Map<String, String> _currentMetadata = {};
+
   /// Inicializa el Audio Manager, configura los listeners y registra la vista.
   @override
   void initState() {
@@ -99,6 +102,15 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       if (mounted) {
         setState(() {
           _isPlaying = isPlaying;
+        });
+      }
+    });
+
+    // Listener de metadata: Actualiza artista y título en tiempo real.
+    _audioManager.metadataStream.listen((metadata) {
+      if (mounted) {
+        setState(() {
+          _currentMetadata = metadata;
         });
       }
     });
@@ -382,7 +394,6 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
           automotive: 20.0,
         ),
         vertical: responsive.getValue(
-          // ✅ Menos altura vertical
           smallPhone: 8.0,
           phone: 10.0,
           largePhone: 12.0,
@@ -396,112 +407,121 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
         children: [
           // Columna izquierda: Disco más grande
           Expanded(
-            flex: 2, // ✅ Más espacio para el disco
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Disco animado - MÁS GRANDE en landscape
-                Transform.scale(
-                  scale: responsive.getValue(
-                    smallPhone: 0.8, // ✅ Más grande
-                    phone: 0.9,
-                    largePhone: 1.0,
-                    tablet: 1.1,
-                    desktop: 1.2,
-                    automotive: 1.0,
-                  ),
-                  child: AnimatedDisc(isPlaying: _isPlaying),
-                ),
+            flex: 2,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Calcular tamaño máximo del disco basado en la altura disponible
+                final maxDiscSize = (constraints.maxHeight - 80).clamp(
+                  80.0,
+                  200.0,
+                );
+                final discScale = responsive.getValue(
+                  smallPhone: 0.7,
+                  phone: 0.8,
+                  largePhone: 0.85,
+                  tablet: 0.9,
+                  desktop: 1.0,
+                  automotive: 0.85,
+                );
 
-                SizedBox(height: responsive.spacing(8)), // ✅ Menos espaciado
-                // Información compacta
-                Text(
-                  'Ambiente Stereo 88.4 FM',
-                  style: TextStyle(
-                    fontSize: responsive.getValue(
-                      smallPhone: 11.0,
-                      phone: 13.0,
-                      largePhone: 15.0,
-                      tablet: 17.0,
-                      desktop: 19.0,
-                      automotive: 15.0,
-                    ),
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
+                return SingleChildScrollView(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: maxDiscSize,
+                          maxWidth: maxDiscSize,
+                        ),
+                        child: Transform.scale(
+                          scale: discScale,
+                          child: AnimatedDisc(isPlaying: _isPlaying),
+                        ),
+                      ),
+                      SizedBox(height: responsive.spacing(4)),
+                      Text(
+                        'Ambiente Stereo 88.4 FM',
+                        style: TextStyle(
+                          fontSize: responsive.getValue(
+                            smallPhone: 11.0,
+                            phone: 13.0,
+                            largePhone: 14.0,
+                            tablet: 15.0,
+                            desktop: 16.0,
+                            automotive: 14.0,
+                          ),
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: responsive.spacing(2)),
+                      _buildStatusText(
+                        responsive,
+                        responsive.getValue(
+                          smallPhone: 9.0,
+                          phone: 10.0,
+                          largePhone: 10.0,
+                          tablet: 11.0,
+                          desktop: 12.0,
+                          automotive: 10.0,
+                        ),
+                      ),
+                    ],
                   ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                ),
-
-                SizedBox(height: responsive.spacing(4)), // ✅ Menos espaciado
-
-                _buildStatusText(
-                  responsive,
-                  responsive.getValue(
-                    smallPhone: 9.0,
-                    phone: 10.0,
-                    largePhone: 11.0,
-                    tablet: 12.0,
-                    desktop: 13.0,
-                    automotive: 11.0,
-                  ),
-                ),
-              ],
+                );
+              },
             ),
           ),
 
-          SizedBox(
-            width: responsive.spacing(12),
-          ), // ✅ Menos espacio entre columnas
+          SizedBox(width: responsive.spacing(12)),
+
           // Columna derecha: Controles compactos
           Expanded(
-            flex: 1, // ✅ Menos espacio para controles
+            flex: 1,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Eliminamos las ondas de sonido en landscape para ahorrar espacio
-
-                // Botón de play/pause compacto
                 _buildPlayButton(
                   responsive: responsive,
                   size: responsive.getValue(
                     smallPhone: 60.0,
                     phone: 70.0,
-                    largePhone: 80.0,
-                    tablet: 90.0,
-                    desktop: 100.0,
-                    automotive: 80.0,
+                    largePhone: 75.0,
+                    tablet: 80.0,
+                    desktop: 90.0,
+                    automotive: 75.0,
                   ),
                   iconSize: responsive.getValue(
                     smallPhone: 28.0,
                     phone: 32.0,
-                    largePhone: 36.0,
-                    tablet: 40.0,
-                    desktop: 44.0,
-                    automotive: 36.0,
+                    largePhone: 34.0,
+                    tablet: 36.0,
+                    desktop: 40.0,
+                    automotive: 34.0,
                   ),
                   loadingSize: responsive.getValue(
                     smallPhone: 22.0,
                     phone: 26.0,
-                    largePhone: 30.0,
-                    tablet: 34.0,
-                    desktop: 38.0,
-                    automotive: 30.0,
+                    largePhone: 28.0,
+                    tablet: 30.0,
+                    desktop: 34.0,
+                    automotive: 28.0,
                   ),
                 ),
-
-                SizedBox(height: responsive.spacing(8)), // ✅ Menos espaciado
-                // Control de volumen
+                SizedBox(height: responsive.spacing(8)),
                 SizedBox(
                   width: responsive.getValue(
                     smallPhone: 140.0,
                     phone: 160.0,
-                    largePhone: 180.0,
-                    tablet: 200.0,
-                    desktop: 220.0,
-                    automotive: 180.0,
+                    largePhone: 170.0,
+                    tablet: 180.0,
+                    desktop: 200.0,
+                    automotive: 170.0,
                   ),
                   child: VolumeControl(audioManager: _audioManager),
                 ),
@@ -537,7 +557,6 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       desktop: 10.0,
       automotive: 8.0,
     );
-
     final indicatorSpacing = responsive.getValue(
       smallPhone: 4.0,
       phone: 5.0,
@@ -546,38 +565,77 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       desktop: 8.0,
       automotive: 6.0,
     );
+    final metadataFontSize = responsive.getValue(
+      smallPhone: 10.0,
+      phone: 11.0,
+      largePhone: 12.0,
+      tablet: 13.0,
+      desktop: 14.0,
+      automotive: 12.0,
+    );
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    final artist = _currentMetadata['artist'] ?? '';
+    final title = _currentMetadata['title'] ?? '';
+    final hasMetadata = _isPlaying && !_isLoading && title.isNotEmpty;
+
+    final metadataText = (artist.isEmpty || artist == 'Desconocido')
+        ? title
+        : '$artist — $title';
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // Indicador circular de estado (punto animado)
-        if (_isLoading || _isPlaying)
-          Container(
-            width: indicatorSize,
-            height: indicatorSize,
-            margin: EdgeInsets.only(right: indicatorSpacing),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: statusColor,
-              boxShadow: [
-                BoxShadow(
-                  color: statusColor.withValues(alpha: 0.5),
-                  blurRadius: 6,
-                  spreadRadius: 1,
+        // Fila de estado: punto indicador + texto
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (_isLoading || _isPlaying)
+              Container(
+                width: indicatorSize,
+                height: indicatorSize,
+                margin: EdgeInsets.only(right: indicatorSpacing),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: statusColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: statusColor.withValues(alpha: 0.5),
+                      blurRadius: 6,
+                      spreadRadius: 1,
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            Text(
+              statusText,
+              style: TextStyle(
+                fontSize: fontSize,
+                color: statusColor,
+                letterSpacing: 0.2,
+                fontWeight: _isLoading ? FontWeight.w600 : FontWeight.normal,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+
+        // Metadata: artista - título (solo cuando está en vivo con datos)
+        if (hasMetadata)
+          Padding(
+            padding: const EdgeInsets.only(top: 4.0),
+            child: Text(
+              metadataText,
+              style: TextStyle(
+                fontSize: metadataFontSize,
+                color: AppColors.textPrimary.withValues(alpha: 0.70),
+                fontStyle: FontStyle.italic,
+                letterSpacing: 0.1,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-        Text(
-          statusText,
-          style: TextStyle(
-            fontSize: fontSize,
-            color: statusColor,
-            letterSpacing: 0.2,
-            fontWeight: _isLoading ? FontWeight.w600 : FontWeight.normal,
-          ),
-          textAlign: TextAlign.center,
-        ),
       ],
     );
   }

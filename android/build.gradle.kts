@@ -6,8 +6,9 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        // Necesario para que el plugin de Google Services funcione
         classpath("com.google.gms:google-services:4.4.2")
+        classpath("com.android.tools.build:gradle:8.9.1")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20")
     }
 }
 
