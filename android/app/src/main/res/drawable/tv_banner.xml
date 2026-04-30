@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Banner para Google TV / Android TV — 320x180dp -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Fondo sólido oscuro -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#0F1A0F" />
+        </shape>
+    </item>
+
+    <!-- Logo centrado sobre el fondo -->
+    <item android:gravity="center">
+        <bitmap
+            android:src="@drawable/tv_banner_logo"
+            android:gravity="center" />
+    </item>
+
+</layer-list>

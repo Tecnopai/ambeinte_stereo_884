@@ -566,7 +566,6 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
           gradient: AppColors.buttonGradient, // Gradiente estilizado
         ),
         child: _isLoading
-            // Indicador de carga si está conectando/buffering
             ? SizedBox(
                 width: buttonSize * 0.4,
                 height: buttonSize * 0.4,
@@ -575,7 +574,6 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
                   strokeWidth: 2,
                 ),
               )
-            // Icono de Play o Pause
             : Icon(
                 _isPlaying ? Icons.pause : Icons.play_arrow,
                 color: AppColors.textPrimary,
@@ -724,7 +722,7 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
                   // Estilización del Slider
                   data: SliderThemeData(
                     activeTrackColor: AppColors.primary,
-                    inactiveTrackColor: const Color(0xFF374151),
+                    inactiveTrackColor: AppColors.textSecondary.withValues(alpha: 0.2),
                     thumbColor: AppColors.primary,
                     overlayColor: AppColors.primary.withValues(alpha: 0.2),
                     trackHeight: trackHeight,

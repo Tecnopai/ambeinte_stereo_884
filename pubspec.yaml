@@ -3,7 +3,7 @@ description: "Ambiente Stereo 88.4 FM."
 publish_to: "none" # Previene que el paquete se publique en pub.dev.
 
 # Versión de la aplicación: major.minor.patch+build_number
-version: 2.0.18+22
+version: 2.1.01+23
 
 environment:
   # Rango de Dart SDK compatible.
@@ -48,6 +48,7 @@ dependencies:
   package_info_plus: ^9.0.0 # Obtiene la versión, nombre del paquete, etc., de forma automática.
   logger: ^2.0.0 # Herramienta profesional para el registro de logs (reemplazando 'print').
   responsive_framework: ^1.5.1 # Facilita el diseño responsivo en Flutter.
+  google_fonts: ^6.2.1 # Tipografías de Google (Inter para diseño editorial moderno).
   cupertino_icons: ^1.0.8 # Iconos de estilo iOS para Flutter.
 
   # Herramientas para gestión de caché

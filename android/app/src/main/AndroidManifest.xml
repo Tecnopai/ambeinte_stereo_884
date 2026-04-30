@@ -38,13 +38,18 @@
     <!-- Permiso para acceder al identificador de publicidad (AD ID) en dispositivos con Google Play Services. -->
     <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
 
-
-            <!-- android:usesCleartextTraffic="true" Permite el tráfico HTTP no cifrado. Necesario si la URL del streaming no es HTTPS. --> 
+    <!-- ================================================================== -->
+    <!-- SOPORTE ANDROID TV / GOOGLE TV                                      -->
+    <!-- required="false" permite que la app corra en TV Y en móvil          -->
+    <!-- ================================================================== -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
     <application
         android:label="Ambientestereo884.fm"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:banner="@drawable/tv_banner"
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="true">
         
@@ -80,11 +85,18 @@
                 android:name="google_analytics_default_allow_analytics_storage"
                 android:value="true" />
             
+            <!-- Launcher para teléfonos y tablets -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            
+
+            <!-- Launcher para Android TV / Google TV -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
+            </intent-filter>
+
         </activity>
         
         <!-- SERVICIO DEL REPRODUCTOR (Gestiona la reproducción en segundo plano y la notificación de medios) -->

@@ -1,10 +1,13 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'radio_player_screen.dart';
 import 'news_screen.dart';
 import 'about_screen.dart';
 import '../utils/responsive_helper.dart';
 import '../utils/version_checker.dart';
+import '../core/theme/app_colors.dart';
 
 /// Define el tipo de navegación utilizado, aunque no se usa directamente en esta clase.
 enum NavigationType { bottom, rail }
@@ -250,78 +253,94 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  /// Construye el widget BottomNavigationBar, adaptando su tamaño y estilo al dispositivo móvil.
+  /// Barra de navegación flotante estilo iOS — píldora con blur.
   Widget _buildBottomNavigationBar(ResponsiveHelper responsive) {
-    final iconSize = responsive.getValue(
-      smallPhone: 22.0,
-      phone: 24.0,
-      largePhone: 26.0,
-      tablet: 28.0,
-    );
-
-    final fontSize = responsive.getValue(
-      smallPhone: 11.0,
-      phone: 12.0,
-      largePhone: 13.0,
-      tablet: 14.0,
-    );
-
-    final elevation = responsive.getValue(phone: 8.0, tablet: 12.0);
-
-    return BottomNavigationBar(
-      currentIndex: _currentIndex,
-      onTap: _onTabTapped,
-      type: BottomNavigationBarType.fixed,
-      enableFeedback: true,
-      elevation: elevation,
-      iconSize: iconSize,
-      selectedFontSize: fontSize,
-      unselectedFontSize: fontSize * 0.85,
-      selectedItemColor: Theme.of(context).colorScheme.primary,
-      unselectedItemColor: Theme.of(context).colorScheme.onSurfaceVariant,
-      selectedIconTheme: IconThemeData(size: iconSize),
-      unselectedIconTheme: IconThemeData(size: iconSize * 0.9),
-      selectedLabelStyle: TextStyle(
-        fontWeight: FontWeight.w600,
-        fontSize: fontSize,
-      ),
-      unselectedLabelStyle: TextStyle(
-        fontWeight: FontWeight.normal,
-        fontSize: fontSize * 0.85,
-      ),
-      items: _navigationItems.map((item) {
-        return BottomNavigationBarItem(
-          icon: Tooltip(
-            message: item.tooltip,
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                vertical: responsive.getValue(
-                  phone: 4.0,
-                  largePhone: 6.0,
-                  tablet: 8.0,
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(36),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              height: 68,
+              decoration: BoxDecoration(
+                color: AppColors.surface.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(36),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.18),
+                  width: 1,
                 ),
               ),
-              child: Icon(item.icon),
-            ),
-          ),
-          activeIcon: Tooltip(
-            message: item.tooltip,
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                vertical: responsive.getValue(
-                  phone: 4.0,
-                  largePhone: 6.0,
-                  tablet: 8.0,
-                ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(_navigationItems.length, (index) {
+                  return _buildNavItem(
+                    item: _navigationItems[index],
+                    isSelected: _currentIndex == index,
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      _onTabTapped(index);
+                    },
+                  );
+                }),
               ),
-              child: Icon(item.selectedIcon),
             ),
           ),
-          label: item.label,
-          // El tooltip se mueve al widget Icon/Padding para mejor accesibilidad y visualización
-          tooltip: '',
-        );
-      }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem({
+    required NavigationItem item,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.primary.withValues(alpha: 0.18)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: Icon(
+                isSelected ? item.selectedIcon : item.icon,
+                key: ValueKey(isSelected),
+                color: isSelected
+                    ? AppColors.primary
+                    : AppColors.textSecondary,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 3),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 180),
+              style: TextStyle(
+                color: isSelected
+                    ? AppColors.primary
+                    : AppColors.textSecondary,
+                fontSize: 10,
+                fontWeight:
+                    isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+              child: Text(item.label),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

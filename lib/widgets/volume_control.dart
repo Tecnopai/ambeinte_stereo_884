@@ -344,7 +344,7 @@ class _VolumeControlState extends State<VolumeControl> {
                   SliderTheme(
                     data: SliderThemeData(
                       activeTrackColor: AppColors.primary,
-                      inactiveTrackColor: const Color(0xFF374151),
+                      inactiveTrackColor: AppColors.textSecondary.withValues(alpha: 0.2),
                       thumbColor: AppColors.primary,
                       overlayColor: AppColors.primary.withValues(alpha: 0.2),
                       trackHeight: trackHeight,

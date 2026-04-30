@@ -768,7 +768,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
         gradient: AppColors.buttonGradient,
         boxShadow: [
           BoxShadow(
-            color: const Color.fromARGB(77, 203, 203, 229),
+            color: Colors.white.withValues(alpha: 0.18),
             blurRadius: shadowBlur,
             spreadRadius: shadowSpread,
           ),
