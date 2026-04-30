@@ -31,11 +31,6 @@ class MainActivity: FlutterActivity() {
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Adquirir wake lock para mantener CPU activa durante streaming y evitar que el sistema la suspenda.
-        acquireWakeLock()
-        
-        // Solicitar ignorar optimizaciones de batería para asegurar la continuidad del audio en segundo plano.
         requestIgnoreBatteryOptimizations()
     }
 
@@ -78,9 +73,9 @@ class MainActivity: FlutterActivity() {
             // PARTIAL_WAKE_LOCK mantiene la CPU encendida, pero permite que la pantalla se apague.
             wakeLock = powerManager.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
-                "AmbienteStereo::StreamingWakeLock" // Etiqueta para el log del sistema.
+                "AmbienteStereo::StreamingWakeLock"
             )
-            wakeLock?.acquire()
+            wakeLock?.acquire(4 * 60 * 60 * 1000L) // 4 horas máximo por sesión
         }
     }
 
@@ -144,7 +139,5 @@ class MainActivity: FlutterActivity() {
      */
     override fun onResume() {
         super.onResume()
-        // Asegura que el wake lock esté activo cuando la app vuelve al frente.
-        acquireWakeLock()
     }
 }
