@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -24,6 +26,40 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Necesitamos acceso a la red para transmitir el audio de la radio en vivo.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>FlutterSceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -41,60 +77,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>CADisableMinimumFrameDurationOnPhone</key>
-	<true/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-	
-	<!-- ========== NUEVAS CONFIGURACIONES PARA AUDIO EN BACKGROUND ========== -->
-	
-	<!-- Permitir reproducción de audio en background -->
-	<!-- CRÍTICO: Sin esto, el audio se detiene al minimizar la app -->
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>audio</string>
-	</array>
-	
-	<!-- Permitir conexiones HTTP (además de HTTPS) -->
-	<!-- Necesario si tu stream usa HTTP: https://radio06.cehis.net:9036/stream -->
-	<!-- Si tu stream usa HTTPS, puedes omitir NSAllowsArbitraryLoads y usar solo NSExceptionDomains -->
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<!-- Opción 1: Permitir todas las conexiones HTTP (más simple pero menos seguro) -->
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-		
-		<!-- Opción 2: Permitir solo dominios específicos (más seguro - descomentar si prefieres esto) -->
-		<!--
-		<key>NSAllowsArbitraryLoads</key>
-		<false/>
-		<key>NSExceptionDomains</key>
-		<dict>
-			<key>radio06.cehis.net</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-				<key>NSIncludesSubdomains</key>
-				<true/>
-			</dict>
-			<key>ambientestereo.fm</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-				<key>NSIncludesSubdomains</key>
-				<true/>
-			</dict>
-		</dict>
-		-->
-	</dict>
-	
-	<!-- Soporte para vistas embebidas (usado por webview_flutter) -->
 	<key>io.flutter.embedded_views_preview</key>
 	<true/>
-	
-	<!-- Descripción para acceso a red local (requerido por Apple) -->
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Necesitamos acceso a la red para transmitir el audio de la radio en vivo.</string>
-	
 </dict>
 </plist>

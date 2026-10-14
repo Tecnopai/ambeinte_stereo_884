@@ -394,7 +394,7 @@ class NewsService {
 
       // Si no hay término de búsqueda, retornar la lista de artículos recientes.
       if (searchTerm.trim().isEmpty) {
-        return getArticles();
+        return await getArticles();
       }
 
       final encodedSearch = Uri.encodeComponent(searchTerm.trim());
