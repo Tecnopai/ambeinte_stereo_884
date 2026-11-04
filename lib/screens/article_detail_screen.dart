@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
 import '../models/article.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
@@ -61,28 +60,10 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   /// Bandera que indica si la reproducción de la radio fue pausada
   bool _isRadioPausedForArticle = false;
 
-  /// Instancia de Firebase Analytics para el seguimiento.
-  final analytics = FirebaseAnalytics.instance;
-
   /// {inheritdoc}
   @override
   void initState() {
     super.initState();
-
-    // 1. Analítica: Registro de la vista de la pantalla.
-    analytics.logScreenView(
-      screenName: 'article_detail',
-      screenClass: 'ArticleDetailScreen',
-    );
-
-    // 2. Analítica: Registro de lectura de artículo.
-    analytics.logEvent(
-      name: 'article_view',
-      parameters: {
-        'article_id': widget.article.id,
-        'article_title': widget.article.title,
-      },
-    );
 
     _initializeAudio();
     _setupStreamingListener();

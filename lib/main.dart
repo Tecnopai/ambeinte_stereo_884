@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
 import 'firebase_options.dart';
 import 'core/app.dart';
 import 'package:logger/logger.dart';
@@ -40,17 +39,12 @@ void main() async {
       ),
     );
 
-    // Inicialización de Firebase (requerido para todos los servicios como Analytics y Remote Config).
+    // Inicialización de Firebase. Solo se usa Firestore para LEER la
+    // configuración (URL del stream y versión). La app no recopila datos de
+    // los usuarios: no hay Analytics ni ningún otro SDK de rastreo.
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-
-    // Configuración inicial de Firebase Analytics.
-    final analytics = FirebaseAnalytics.instance;
-    // Habilita explícitamente la colección de datos de Analytics.
-    await analytics.setAnalyticsCollectionEnabled(true);
-    // Registra el evento de apertura de la aplicación.
-    await analytics.logAppOpen();
   } catch (e) {
     // En caso de fallo de inicialización (ej. configuración incorrecta de Firebase),
     // se registra el error usando la instancia global del logger.

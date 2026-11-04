@@ -70,10 +70,9 @@ dependencies {
     // BOM centraliza versiones de Firebase
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
 
-    // Dependencias específicas de Firebase
-    implementation("com.google.firebase:firebase-analytics")
+    // Dependencias específicas de Firebase (solo lectura de configuración).
+    // La app no recopila datos: no agregar firebase-analytics ni otros SDK de rastreo.
     implementation("com.google.firebase:firebase-common")
-    implementation("com.google.firebase:firebase-config")
     implementation("com.google.firebase:firebase-firestore")
 
     // Librerías Android

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
 import '../services/audio_player_manager.dart';
 import '../widgets/animated_disc.dart';
 import '../widgets/volume_control.dart';
@@ -27,9 +26,6 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   /// Obtiene la instancia singleton del [AudioPlayerManager] para controlar el audio.
   late final AudioPlayerManager _audioManager;
 
-  /// Instancia de [FirebaseAnalytics] para registrar eventos del usuario.
-  final analytics = FirebaseAnalytics.instance;
-
   // --- Variables de Estado ---
 
   /// Estado de reproducción actual (true si está sonando).
@@ -52,12 +48,6 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-
-    // Registrar vista de pantalla en Firebase Analytics.
-    analytics.logScreenView(
-      screenName: 'radio_player',
-      screenClass: 'RadioPlayerScreen',
-    );
 
     // Obtener singleton en initState.
     _audioManager = AudioPlayerManager();
@@ -178,12 +168,6 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   Future<void> _togglePlayback() async {
     try {
       await _audioManager.togglePlayback();
-
-      // Registrar evento de play/pause en Firebase Analytics.
-      await analytics.logEvent(
-        name: _audioManager.isPlaying ? 'audio_play' : 'audio_pause',
-        parameters: {'station': 'Ambiente Stereo 88.4'},
-      );
     } catch (e) {
       // Muestra un SnackBar si la conexión inicial falla.
       if (mounted) {
@@ -206,6 +190,9 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
     return Scaffold(
       appBar: AppBar(
+        // Mismo color que el inicio del degradado del fondo, para que la barra
+        // superior no se vea negra sobre el fondo verde.
+        backgroundColor: AppColors.primaryGradient.colors.first,
         title: Text(
           'Ambiente Stereo 88.4 FM',
           style: TextStyle(

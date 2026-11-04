@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
 import 'radio_player_screen.dart';
 import 'news_screen.dart';
 import 'about_screen.dart';
@@ -38,15 +37,10 @@ class _MainScreenState extends State<MainScreen> {
   /// Lista de elementos de navegación con íconos y etiquetas.
   late List<NavigationItem> _navigationItems;
 
-  /// Instancia de Firebase Analytics para el seguimiento.
-  final analytics = FirebaseAnalytics.instance;
-
   /// {inheritdoc}
   @override
   void initState() {
     super.initState();
-    // Analítica: Registra la vista de la pantalla principal.
-    analytics.logScreenView(screenName: 'main', screenClass: 'MainScreen');
 
     // Inicialización de las pantallas (cada una obtiene el singleton AudioManager)
     _screens = const [
@@ -319,9 +313,7 @@ class _MainScreenState extends State<MainScreen> {
               child: Icon(
                 isSelected ? item.selectedIcon : item.icon,
                 key: ValueKey(isSelected),
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.textSecondary,
+                color: isSelected ? AppColors.primary : AppColors.textSecondary,
                 size: 24,
               ),
             ),
@@ -329,12 +321,9 @@ class _MainScreenState extends State<MainScreen> {
             AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 180),
               style: TextStyle(
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.textSecondary,
+                color: isSelected ? AppColors.primary : AppColors.textSecondary,
                 fontSize: 10,
-                fontWeight:
-                    isSelected ? FontWeight.w600 : FontWeight.normal,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
               child: Text(item.label),
             ),

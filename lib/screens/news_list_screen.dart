@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
 import '../models/article.dart';
 import '../models/category.dart';
 import '../services/news_service.dart';
@@ -31,9 +30,6 @@ class _NewsListScreenState extends State<NewsListScreen> {
   /// Controlador para detectar el desplazamiento y disparar la carga infinita.
   final ScrollController _scrollController = ScrollController();
 
-  /// Instancia de Firebase Analytics.
-  final analytics = FirebaseAnalytics.instance;
-
   /// Lista de artículos actualmente mostrados.
   List<Article> _articles = [];
 
@@ -56,12 +52,6 @@ class _NewsListScreenState extends State<NewsListScreen> {
   @override
   void initState() {
     super.initState();
-
-    // Registrar vista de pantalla
-    analytics.logScreenView(
-      screenName: 'news_list',
-      screenClass: 'NewsListScreen',
-    );
 
     _loadArticles();
     _scrollController.addListener(_onScroll);
@@ -428,15 +418,6 @@ class _NewsListScreenState extends State<NewsListScreen> {
       ),
       child: InkWell(
         onTap: () {
-          // Registrar evento antes de navegar
-          analytics.logEvent(
-            name: 'article_open',
-            parameters: {
-              'article_id': article.id,
-              'article_title': article.title,
-            },
-          );
-
           // Nota: Se asume que ArticleDetailScreen se puede construir sin
           // el audioManager aquí, o que lo obtiene por un método alternativo.
           Navigator.push(

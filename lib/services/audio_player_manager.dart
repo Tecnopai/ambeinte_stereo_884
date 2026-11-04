@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:radio_player/radio_player.dart';
 import 'package:rxdart/rxdart.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Gestor centralizado del reproductor de audio usando radio_player
@@ -13,12 +15,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class AudioPlayerManager {
   // ========== SINGLETON PATTERN ==========
   static AudioPlayerManager? _instance;
-
-  // ========== ANALYTICS EN TIEMPO REAL ==========
-  Timer? _analyticsHeartbeatTimer;
-  static const Duration _analyticsInterval = Duration(seconds: 30);
-  DateTime? _lastAnalyticsEvent;
-  int _continuousPlaybackMinutes = 0;
 
   factory AudioPlayerManager() {
     _instance ??= AudioPlayerManager._internal();
@@ -36,7 +32,30 @@ class AudioPlayerManager {
 
   AudioPlayerManager._internal() {
     _log('[AudioPlayerManager] Creando instancia singleton');
+    if (Platform.isIOS) {
+      _audioSessionChannel.setMethodCallHandler(_handleNativeCall);
+    }
     _initAsync();
+  }
+
+  /// Llamadas desde AppDelegate.swift (solo iOS).
+  Future<void> _handleNativeCall(MethodCall call) async {
+    if (call.method == 'remotePause') {
+      _log('[AudioPlayerManager] ⏸️ Pausa desde pantalla de bloqueo');
+      // Pausa del usuario: no reconectar.
+      _wasPlayingBeforeError = false;
+      _reconnectTimer?.cancel();
+      _deferredReconnectTimer?.cancel();
+      _isReconnecting = false;
+      _reconnectAttempts = 0;
+      _progressiveBufferingTimer?.cancel();
+      _progressiveBufferingTimer = null;
+      _isInBufferingState = false;
+      _playingController.add(false);
+      _loadingController.add(false);
+      _errorController.add('');
+      _endAudioSession();
+    }
   }
 
   // ========== CONSTANTES ==========
@@ -50,8 +69,7 @@ class AudioPlayerManager {
   static const Duration _progressiveBufferingCheck = Duration(seconds: 3);
   static const Duration _minReconnectInterval = Duration(seconds: 15);
 
-  // ========== ANALYTICS Y ESTADO DE TSL ==========
-  final FirebaseAnalytics _analytics = FirebaseAnalytics.instance;
+  // ========== SESIÓN DE ESCUCHA (solo local) ==========
   DateTime? _startTime;
   int _totalReconnections = 0;
 
@@ -61,6 +79,18 @@ class AudioPlayerManager {
   );
   bool _wakeLockAvailable = false;
   bool _wakeLockAcquired = false;
+
+  // ========== iOS: SESIÓN DE AUDIO Y METADATA ==========
+  // Ver AppDelegate.swift: restaura la sesión exclusiva que volume_controller
+  // cambia a `.mixWithOthers` (eso oculta los controles de la pantalla de bloqueo).
+  static const _audioSessionChannel = MethodChannel(
+    'com.miltonbass.ambientestereo884/audio_session',
+  );
+  // En iOS el AVPlayer no siempre entrega la metadata ICY del stream, así que se
+  // consulta el título actual al servidor Icecast (status-json.xsl).
+  static const Duration _iosMetadataInterval = Duration(seconds: 15);
+  Timer? _iosMetadataTimer;
+  String? _lastPolledTitle;
 
   // ========== ESTADO ==========
   bool _isInitialized = false;
@@ -100,6 +130,7 @@ class AudioPlayerManager {
   // ========== CONTROL DE RECONEXIÓN ==========
   int _reconnectAttempts = 0;
   Timer? _reconnectTimer;
+  Timer? _deferredReconnectTimer;
   bool _isReconnecting = false;
   DateTime? _lastReconnectAttempt;
 
@@ -122,31 +153,59 @@ class AudioPlayerManager {
   // ========== GETTER PARA CONTROL DE ARTÍCULOS ==========
   bool get isPausedForArticle => _isPausedForArticle;
 
-  /// Carga la URL del streaming desde Firebase
+  /// Carga la URL del streaming desde Firestore (`app_config/streaming`,
+  /// campo `stream_url`). Orden de prioridad:
+  ///   1. Servidor de Firestore (máx. 5 s).
+  ///   2. Caché local de Firestore: la última URL descargada con éxito
+  ///      (sirve sin internet estable o si el servidor tarda).
+  ///   3. URL por defecto definida en el código.
+  /// Solo se acepta una URL http/https válida, para que un valor mal escrito
+  /// en Firebase no deje la app sin audio.
   Future<void> _loadStreamUrlFromFirebase() async {
+    _log('[AudioPlayerManager] 📡 Cargando URL desde Firebase...');
+    final docRef = _firestore.doc(_firebaseStreamConfigPath);
+
+    // 1. Servidor
     try {
-      _log('[AudioPlayerManager] 📡 Cargando URL desde Firebase...');
-
-      final doc = await _firestore
-          .doc(_firebaseStreamConfigPath)
-          .get()
+      final doc = await docRef
+          .get(const GetOptions(source: Source.server))
           .timeout(const Duration(seconds: 5));
-
-      if (doc.exists && doc.data() != null) {
-        final config = doc.data()!;
-        final newStreamUrl = config['stream_url'] as String?;
-
-        if (newStreamUrl != null && newStreamUrl.isNotEmpty) {
-          _streamUrl = newStreamUrl;
-          _isStreamUrlLoaded = true;
-          _log(
-            '[AudioPlayerManager] ✅ URL cargada desde Firebase: $_streamUrl',
-          );
-        }
-      }
+      if (_applyStreamUrl(doc.data()?['stream_url'], 'servidor')) return;
     } catch (e) {
-      _log('[AudioPlayerManager] ⚠️ Usando URL default: $e');
+      _log('[AudioPlayerManager] ⚠️ Firestore (servidor) no disponible: $e');
     }
+
+    // 2. Caché local (última URL buena)
+    try {
+      final cached = await docRef
+          .get(const GetOptions(source: Source.cache))
+          .timeout(const Duration(seconds: 2));
+      if (_applyStreamUrl(cached.data()?['stream_url'], 'caché')) return;
+    } catch (e) {
+      _log('[AudioPlayerManager] ⚠️ Sin URL en caché: $e');
+    }
+
+    // 3. URL por defecto
+    _log('[AudioPlayerManager] ⚠️ Usando URL por defecto: $_streamUrl');
+  }
+
+  /// Aplica [value] como URL del stream si es una URL http/https válida.
+  bool _applyStreamUrl(Object? value, String origen) {
+    if (value is! String) return false;
+    final url = value.trim();
+    final uri = Uri.tryParse(url);
+    final isValid =
+        uri != null &&
+        (uri.scheme == 'https' || uri.scheme == 'http') &&
+        uri.host.isNotEmpty;
+    if (!isValid) {
+      _log('[AudioPlayerManager] ⚠️ URL inválida en Firebase ($origen): "$url"');
+      return false;
+    }
+    _streamUrl = url;
+    _isStreamUrlLoaded = true;
+    _log('[AudioPlayerManager] ✅ URL cargada desde Firebase ($origen): $url');
+    return true;
   }
 
   // ========== INICIALIZACIÓN ==========
@@ -187,16 +246,6 @@ class AudioPlayerManager {
 
       _log('[AudioPlayerManager] ✅ Inicialización completa');
 
-      await _logAnalyticsEvent(
-        name: 'player_initialized',
-        parameters: {
-          'station': 'Ambiente Stereo 88.4',
-          'auto_play': _autoPlay ? 'true' : 'false',
-          'wakelock_available': _wakeLockAvailable ? 'true' : 'false',
-          'stream_url_source': _isStreamUrlLoaded ? 'firebase' : 'default',
-        },
-      );
-
       if (_autoPlay) {
         _log('[AudioPlayerManager] 🎵 Auto-iniciando reproducción...');
         Future.delayed(const Duration(milliseconds: 500), () {
@@ -216,11 +265,6 @@ class AudioPlayerManager {
       if (!_initCompleter.isCompleted) {
         _initCompleter.completeError(e, stackTrace);
       }
-
-      await _logAnalyticsEvent(
-        name: 'player_init_error',
-        parameters: {'error': e.toString().substring(0, 100)},
-      );
     }
   }
 
@@ -295,11 +339,6 @@ class AudioPlayerManager {
             '[AudioPlayerManager] 🎵 Metadata: ${data['artist']} - ${data['title']}',
           );
           _metadataController.add(data);
-
-          _logAnalyticsEvent(
-            name: 'song_changed',
-            parameters: {'artist': data['artist']!, 'title': data['title']!},
-          );
         }
       },
       onError: (error) {
@@ -313,6 +352,7 @@ class AudioPlayerManager {
 
   /// Maneja el estado de reproducción normal
   void _handlePlayingState() {
+    _deferredReconnectTimer?.cancel();
     _playingController.add(true);
     _loadingController.add(false);
     _reconnectAttempts = 0;
@@ -331,9 +371,113 @@ class AudioPlayerManager {
 
     _startAudioSession();
 
+    restoreExclusiveAudioSession();
+    _startIosMetadataPolling();
+
     _log(
       '[AudioPlayerManager] ✅ Reproducción normal - Buffer inteligente activo',
     );
+  }
+
+  // ========== iOS: NOW PLAYING ==========
+
+  /// Restaura la sesión de audio exclusiva en iOS para que aparezcan los
+  /// controles en la pantalla de bloqueo y el Centro de control.
+  /// No hace nada en Android.
+  Future<void> restoreExclusiveAudioSession() async {
+    if (!Platform.isIOS) return;
+    try {
+      final changed =
+          await _audioSessionChannel.invokeMethod<bool>(
+            'setExclusivePlayback',
+          ) ??
+          false;
+      // Cambiar la categoría con el audio sonando puede pausar el reproductor
+      // nativo: si estaba sonando, se reanuda de inmediato.
+      if (changed && _wasPlayingBeforeError && !_isPausedForArticle) {
+        _log('[AudioPlayerManager] 🔁 Sesión restaurada, reanudando audio');
+        await RadioPlayer.play();
+      }
+    } catch (e) {
+      _log(
+        '[AudioPlayerManager] ⚠️ No se pudo restaurar la sesión de audio: $e',
+      );
+    }
+  }
+
+  void _startIosMetadataPolling() {
+    if (!Platform.isIOS || _iosMetadataTimer != null) return;
+    _pollStreamTitle();
+    _iosMetadataTimer = Timer.periodic(
+      _iosMetadataInterval,
+      (_) => _pollStreamTitle(),
+    );
+  }
+
+  void _stopIosMetadataPolling() {
+    _iosMetadataTimer?.cancel();
+    _iosMetadataTimer = null;
+  }
+
+  /// Lee el título actual desde el status-json.xsl de Icecast y lo envía al
+  /// reproductor nativo, que actualiza la pantalla de bloqueo y emite el
+  /// evento en metadataStream.
+  Future<void> _pollStreamTitle() async {
+    if (!isPlaying) return;
+    try {
+      final streamUri = Uri.parse(_streamUrl);
+      final statusUri = Uri(
+        scheme: streamUri.scheme,
+        host: streamUri.host,
+        port: streamUri.port,
+        path: '/status-json.xsl',
+      );
+      final response = await http
+          .get(statusUri)
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode != 200) return;
+
+      final icestats =
+          (json.decode(response.body) as Map<String, dynamic>)['icestats'];
+      final source = icestats is Map ? icestats['source'] : null;
+
+      Map? mount;
+      if (source is Map) {
+        mount = source;
+      } else if (source is List && source.isNotEmpty) {
+        for (final s in source) {
+          if (s is Map &&
+              (s['listenurl'] as String? ?? '').endsWith(streamUri.path)) {
+            mount = s;
+            break;
+          }
+        }
+        mount ??= source.first is Map ? source.first as Map : null;
+      }
+
+      final streamTitle = (mount?['title'] ?? mount?['yp_currently_playing'])
+          ?.toString()
+          .trim();
+      if (streamTitle == null ||
+          streamTitle.isEmpty ||
+          streamTitle == _lastPolledTitle) {
+        return;
+      }
+      _lastPolledTitle = streamTitle;
+
+      // Mismo formato que la metadata ICY: "Artista - Título".
+      final separator = streamTitle.indexOf(' - ');
+      final artist = separator > 0
+          ? streamTitle.substring(0, separator).trim()
+          : null;
+      final title = separator > 0
+          ? streamTitle.substring(separator + 3).trim()
+          : streamTitle;
+
+      await RadioPlayer.setCustomMetadata(artist: artist, title: title);
+    } catch (e) {
+      _log('[AudioPlayerManager] ⚠️ Error leyendo título del stream: $e');
+    }
   }
 
   /// Maneja el estado de pausa
@@ -593,7 +737,14 @@ class AudioPlayerManager {
         _lastSuccessfulReconnect!,
       );
       if (timeSinceLastReconnect < _minReconnectInterval) {
-        _log('[AudioPlayerManager] ⏳ Reconexión muy reciente - ignorando');
+        // Antes se ignoraba sin reintentar y la radio quedaba en silencio.
+        // Ahora se reintenta cuando se cumple el intervalo mínimo.
+        final wait = _minReconnectInterval - timeSinceLastReconnect;
+        _log(
+          '[AudioPlayerManager] ⏳ Reconexión muy reciente - reintento en ${wait.inSeconds}s',
+        );
+        _deferredReconnectTimer?.cancel();
+        _deferredReconnectTimer = Timer(wait, _handleReconnection);
         return;
       }
     }
@@ -616,14 +767,6 @@ class AudioPlayerManager {
       _loadingController.add(false);
       _playingController.add(false);
       _wasPlayingBeforeError = false;
-
-      _logAnalyticsEvent(
-        name: 'reconnection_failed',
-        parameters: {
-          'attempts': _reconnectAttempts,
-          'max_attempts': _maxReconnectAttempts,
-        },
-      );
 
       return;
     }
@@ -662,16 +805,6 @@ class AudioPlayerManager {
       '[AudioPlayerManager] 🔄 Intento de reconexión $_reconnectAttempts/$_maxReconnectAttempts',
     );
 
-    _logAnalyticsEvent(
-      name: 'connection_retry',
-      parameters: {
-        'attempt': _reconnectAttempts,
-        'max_attempts': _maxReconnectAttempts,
-        'buffer_health': _currentBufferHealth,
-        'network_score': _networkStabilityScore,
-      },
-    );
-
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(_reconnectDelay, () async {
       try {
@@ -691,14 +824,6 @@ class AudioPlayerManager {
         _errorController.add('');
         _lastSuccessfulReconnect = DateTime.now();
         _log('[AudioPlayerManager] ✅ Reconexión inteligente exitosa');
-
-        _logAnalyticsEvent(
-          name: 'reconnection_success',
-          parameters: {
-            'attempt': _reconnectAttempts,
-            'buffer_health_restored': true,
-          },
-        );
       } catch (e) {
         _log('[AudioPlayerManager] ❌ Error en reconexión inteligente: $e');
         _isReconnecting = false;
@@ -743,101 +868,25 @@ class AudioPlayerManager {
     }
   }
 
-  // ========== TSL LOGIC ==========
+  // ========== SESIÓN DE ESCUCHA (solo local, para depuración) ==========
+  // No se envía a ningún servidor; solo se usa en los logs de depuración y en
+  // getDebugInfo().
 
   void _startAudioSession() {
     if (_startTime == null) {
       _startTime = DateTime.now();
-      _continuousPlaybackMinutes = 0;
-
-      _logAnalyticsEvent(
-        name: 'audio_session_start',
-        parameters: {
-          'station': 'Ambiente Stereo 88.4',
-          'timestamp': DateTime.now().toIso8601String(),
-          'stream_url_source': _isStreamUrlLoaded ? 'firebase' : 'default',
-          'buffer_intelligent': true, // Indicar que usa buffer inteligente
-        },
-      );
-
-      // Iniciar heartbeat de analytics
-      _startAnalyticsHeartbeat();
-
-      _log('[AudioPlayerManager] 📊 TSL Iniciada con buffer inteligente');
+      _log('[AudioPlayerManager] 📊 Sesión de escucha iniciada');
     }
-  }
-
-  /// Envía eventos periódicos mientras el streaming está activo
-  void _startAnalyticsHeartbeat() {
-    _analyticsHeartbeatTimer?.cancel();
-    _analyticsHeartbeatTimer = Timer.periodic(_analyticsInterval, (
-      timer,
-    ) async {
-      if (_playingController.value && _startTime != null) {
-        _continuousPlaybackMinutes++;
-        _lastAnalyticsEvent = DateTime.now();
-
-        final sessionDuration = DateTime.now().difference(_startTime!);
-
-        await _logAnalyticsEvent(
-          name: 'streaming_heartbeat',
-          parameters: {
-            'station': 'Ambiente Stereo 88.4',
-            'continuous_minutes': _continuousPlaybackMinutes,
-            'total_session_minutes': sessionDuration.inMinutes,
-            'is_reconnecting': _isReconnecting ? 'true' : 'false',
-            'reconnect_attempts': _reconnectAttempts,
-            'stream_url_source': _isStreamUrlLoaded ? 'firebase' : 'default',
-            'last_heartbeat': _lastAnalyticsEvent?.toIso8601String(),
-            'timestamp': DateTime.now().toIso8601String(),
-            'buffer_health': _currentBufferHealth, // Salud del buffer
-            'network_stability': _networkStabilityScore, // Estabilidad de red
-          },
-        );
-
-        _log(
-          '[AudioPlayerManager] 📊 Heartbeat enviado - ${_continuousPlaybackMinutes}min continuos - Salud: $_currentBufferHealth/3',
-        );
-      } else {
-        // Si no está reproduciendo, detener el heartbeat
-        timer.cancel();
-      }
-    });
   }
 
   void _endAudioSession() {
     if (_startTime != null) {
       final duration = DateTime.now().difference(_startTime!);
-      final durationSeconds = duration.inSeconds;
-
-      // Detener heartbeat
-      _analyticsHeartbeatTimer?.cancel();
-      _analyticsHeartbeatTimer = null;
-
-      _logAnalyticsEvent(
-        name: 'audio_session_end',
-        parameters: {
-          'station': 'Ambiente Stereo 88.4',
-          'session_duration_sec': durationSeconds,
-          'continuous_minutes': _continuousPlaybackMinutes,
-          'total_reconnections': _totalReconnections,
-          'timestamp': DateTime.now().toIso8601String(),
-          'final_buffer_health': _currentBufferHealth,
-          'average_network_stability': _networkStabilityScore,
-        },
-      );
-
-      _log('[AudioPlayerManager] 📊 TSL Finalizada: ${durationSeconds}s');
       _log(
-        '[AudioPlayerManager] 📊 Minutos continuos: $_continuousPlaybackMinutes',
+        '[AudioPlayerManager] 📊 Sesión finalizada: ${duration.inSeconds}s - '
+        'reconexiones: $_totalReconnections',
       );
-      _log('[AudioPlayerManager] 📊 Total reconexiones: $_totalReconnections');
-      _log(
-        '[AudioPlayerManager] 📊 Salud final del buffer: $_currentBufferHealth/3',
-      );
-
       _startTime = null;
-      _continuousPlaybackMinutes = 0;
       _totalReconnections = 0;
     }
   }
@@ -846,44 +895,11 @@ class AudioPlayerManager {
   void onAppPaused() {
     _log('[AudioPlayerManager] 🔵 App pausada/background');
     _isAppInBackground = true;
-
-    // Pausar heartbeat en background
-    _analyticsHeartbeatTimer?.cancel();
-
-    // Guardar TSL temporal si está reproduciendo
-    if (_startTime != null && isPlaying) {
-      final duration = DateTime.now().difference(_startTime!);
-      _log(
-        '[AudioPlayerManager] 📊 TSL checkpoint (background): ${duration.inSeconds}s',
-      );
-
-      // Registrar evento de background (no finalizar sesión)
-      _logAnalyticsEvent(
-        name: 'audio_session_background',
-        parameters: {
-          'station': 'Ambiente Stereo 88.4',
-          'duration_so_far': duration.inSeconds,
-          'continuous_minutes': _continuousPlaybackMinutes,
-          'timestamp': DateTime.now().toIso8601String(),
-          'buffer_health_at_pause': _currentBufferHealth,
-        },
-      );
-    }
   }
 
   void onAppResumed() {
     _log('[AudioPlayerManager] 🟢 App resumida/foreground');
     _isAppInBackground = false;
-
-    // La sesión TSL continúa si el audio sigue reproduciendo
-    if (isPlaying && _startTime != null) {
-      _startAnalyticsHeartbeat();
-
-      final duration = DateTime.now().difference(_startTime!);
-      _log(
-        '[AudioPlayerManager] 📊 TSL continúa: ${duration.inSeconds}s acumulados - Salud: $_currentBufferHealth/3',
-      );
-    }
   }
 
   // ========== MÉTODOS PARA CONTROL DE ARTÍCULOS ==========
@@ -895,14 +911,6 @@ class AudioPlayerManager {
       _wasPlayingBeforeError = false; // Importante: evitar reconexión
       await pause();
       _log('[AudioPlayerManager] ⏸️ Pausado temporalmente para artículo');
-
-      await _logAnalyticsEvent(
-        name: 'radio_paused_for_article',
-        parameters: {
-          'timestamp': DateTime.now().toIso8601String(),
-          'buffer_health': _currentBufferHealth,
-        },
-      );
     }
   }
 
@@ -915,14 +923,6 @@ class AudioPlayerManager {
       // Esperar un poco antes de reanudar
       await Future.delayed(const Duration(milliseconds: 500));
       await play();
-
-      await _logAnalyticsEvent(
-        name: 'radio_resumed_after_article',
-        parameters: {
-          'timestamp': DateTime.now().toIso8601String(),
-          'buffer_health': _currentBufferHealth,
-        },
-      );
     }
   }
 
@@ -941,14 +941,6 @@ class AudioPlayerManager {
       } else {
         await play();
       }
-
-      await _logAnalyticsEvent(
-        name: 'toggle_playback',
-        parameters: {
-          'action': isPlaying ? 'pause' : 'play',
-          'buffer_health': _currentBufferHealth,
-        },
-      );
     } catch (e) {
       _log('[AudioPlayerManager] ❌ Error en togglePlayback: $e');
       _errorController.add('Error al cambiar reproducción');
@@ -987,15 +979,6 @@ class AudioPlayerManager {
       _isReconnecting = false;
       _lastSuccessfulReconnect = DateTime.now();
       _recentBufferingDurations.clear(); // Limpiar historial en nueva conexión
-
-      await _logAnalyticsEvent(
-        name: 'play_button_pressed',
-        parameters: {
-          'station': 'Ambiente Stereo 88.4',
-          'timestamp': DateTime.now().toIso8601String(),
-          'buffer_health': _currentBufferHealth,
-        },
-      );
     } on TimeoutException catch (e) {
       _log('[AudioPlayerManager] ⏱️ Timeout al reproducir: $e');
       _loadingController.add(false);
@@ -1005,14 +988,6 @@ class AudioPlayerManager {
       _log('[AudioPlayerManager] ❌ Error al reproducir: $e');
       _loadingController.add(false);
       _errorController.add('Error al conectar');
-
-      await _logAnalyticsEvent(
-        name: 'play_error',
-        parameters: {
-          'error': e.toString().substring(0, 100),
-          'buffer_health': _currentBufferHealth,
-        },
-      );
     }
   }
 
@@ -1026,16 +1001,9 @@ class AudioPlayerManager {
       _loadingController.add(false);
 
       _reconnectTimer?.cancel();
+      _deferredReconnectTimer?.cancel();
       _isReconnecting = false;
       _reconnectAttempts = 0;
-
-      await _logAnalyticsEvent(
-        name: 'pause_button_pressed',
-        parameters: {
-          'station': 'Ambiente Stereo 88.4',
-          'buffer_health': _currentBufferHealth,
-        },
-      );
     } catch (e) {
       _log('[AudioPlayerManager] ❌ Error al pausar: $e');
       _errorController.add('Error al pausar');
@@ -1048,18 +1016,10 @@ class AudioPlayerManager {
       await _ensureInitialized();
 
       final clampedVolume = volume.clamp(0.0, 1.0);
-      final oldVolume = _volumeController.value;
       _volumeController.add(clampedVolume);
 
       final volumePercent = (clampedVolume * 100).toInt();
       _log('[AudioPlayerManager] 🔊 Volumen: $volumePercent%');
-
-      if ((clampedVolume * 10).round() != (oldVolume * 10).round()) {
-        await _logAnalyticsEvent(
-          name: 'volume_changed',
-          parameters: {'volume': volumePercent},
-        );
-      }
     } catch (e) {
       _log('[AudioPlayerManager] ❌ Error al cambiar volumen: $e');
     }
@@ -1079,13 +1039,13 @@ class AudioPlayerManager {
     _log('[AudioPlayerManager] 🧹 Liberando recursos...');
 
     // Detener todos los timers
-    _analyticsHeartbeatTimer?.cancel();
-    _analyticsHeartbeatTimer = null;
+    _stopIosMetadataPolling();
     _progressiveBufferingTimer?.cancel();
     _progressiveBufferingTimer = null;
 
     _endAudioSession();
     _reconnectTimer?.cancel();
+    _deferredReconnectTimer?.cancel();
     await _playbackStateSubscription?.cancel();
     await _metadataSubscription?.cancel();
 
@@ -1120,31 +1080,6 @@ class AudioPlayerManager {
     if (kDebugMode) {
       // ignore: avoid_print
       print(message);
-    }
-  }
-
-  Future<void> _logAnalyticsEvent({
-    required String name,
-    required Map<String, dynamic> parameters,
-  }) async {
-    try {
-      final cleanParams = <String, Object>{};
-
-      parameters.forEach((key, value) {
-        if (value is String) {
-          cleanParams[key] = value;
-        } else if (value is num) {
-          cleanParams[key] = value;
-        } else if (value is bool) {
-          cleanParams[key] = value ? 'true' : 'false';
-        } else {
-          cleanParams[key] = value.toString();
-        }
-      });
-
-      await _analytics.logEvent(name: name, parameters: cleanParams);
-    } catch (e) {
-      _log('[AudioPlayerManager] ⚠️ Error en Analytics: $e');
     }
   }
 

@@ -279,19 +279,26 @@ class NewsService {
       name: 'NewsService',
     );
 
-    // Obtener todos los medios en PARALELO
-    final mediaFutures = mediaIds
-        .where(
-          (id) => !_mediaCache.containsKey(id),
-        ) // Solo los que no están en caché
-        .map((id) => _fetchMedia(id));
+    // Solo los que no están en caché
+    final missingIds = mediaIds
+        .where((id) => !_mediaCache.containsKey(id))
+        .toList();
 
-    if (mediaFutures.isNotEmpty) {
+    if (missingIds.isNotEmpty) {
       developer.log(
-        '⬇️ Descargando ${mediaFutures.length} imágenes nuevas',
+        '⬇️ Descargando ${missingIds.length} imágenes nuevas',
         name: 'NewsService',
       );
-      await Future.wait(mediaFutures);
+      // Una sola petición para todos los medios (antes era una por artículo).
+      await _fetchMediaBatch(missingIds);
+
+      // Respaldo: los que no llegaron en el lote se piden uno a uno en paralelo.
+      final stillMissing = missingIds.where(
+        (id) => !_mediaCache.containsKey(id),
+      );
+      if (stillMissing.isNotEmpty) {
+        await Future.wait(stillMissing.map(_fetchMedia));
+      }
     }
 
     // Ahora enriquecer los artículos con los datos de media
@@ -314,6 +321,40 @@ class NewsService {
 
     developer.log('✅ Artículos enriquecidos', name: 'NewsService');
     return enrichedList;
+  }
+
+  /// Obtiene varios medios en una sola petición (`/media?include=...`) y los
+  /// guarda en caché. WordPress acepta hasta 100 por página.
+  Future<void> _fetchMediaBatch(List<int> mediaIds) async {
+    for (var i = 0; i < mediaIds.length; i += 100) {
+      final chunk = mediaIds.skip(i).take(100).toList();
+      try {
+        final uri = Uri.parse(
+          '$_baseUrl/media?include=${chunk.join(',')}&per_page=${chunk.length}',
+        );
+        final response = await http.get(uri).timeout(_timeout);
+        if (response.statusCode != 200) {
+          developer.log(
+            '⚠️ Error al obtener lote de media: ${response.statusCode}',
+            name: 'NewsService',
+          );
+          continue;
+        }
+        final data = json.decode(response.body);
+        if (data is List) {
+          for (final item in data) {
+            if (item is Map<String, dynamic> && item['id'] is int) {
+              _mediaCache[item['id'] as int] = item;
+            }
+          }
+        }
+      } catch (e) {
+        developer.log(
+          '❌ Error al obtener lote de media: $e',
+          name: 'NewsService',
+        );
+      }
+    }
   }
 
   /// Obtiene los datos de un medio y los guarda en caché.

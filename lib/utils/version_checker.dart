@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -43,8 +44,18 @@ class VersionChecker {
       if (!snapshot.exists) return;
 
       final data = snapshot.data();
-      final latestVersion = data?['latest_version'] ?? localVersion;
-      final updateUrl = data?['update_url'];
+
+      // iOS usa campos propios para no enviar a los usuarios de iPhone a
+      // Google Play (Apple rechaza apps que enlazan a otra tienda).
+      // Si los campos de iOS no existen, no se muestra ningún aviso.
+      final versionKey = Platform.isIOS
+          ? 'latest_version_ios'
+          : 'latest_version';
+      final urlKey = Platform.isIOS ? 'update_url_ios' : 'update_url';
+      if (Platform.isIOS && data?[versionKey] == null) return;
+
+      final latestVersion = data?[versionKey] ?? localVersion;
+      final updateUrl = data?[urlKey];
 
       // ------------------------------------------------------------------------
       // 3. Comparar versiones y decidir si se requiere actualización

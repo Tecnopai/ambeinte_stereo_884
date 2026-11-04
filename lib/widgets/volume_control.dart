@@ -52,6 +52,11 @@ class _VolumeControlState extends State<VolumeControl> {
         widget.audioManager.setVolume(volume);
       }
     });
+    // En iOS, addListener cambia la sesión a `.mixWithOthers`; se restaura.
+    Future.delayed(
+      const Duration(milliseconds: 500),
+      widget.audioManager.restoreExclusiveAudioSession,
+    );
   }
 
   /// Sincroniza el volumen local y el del manager con el volumen actual del sistema.

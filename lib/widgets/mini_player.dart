@@ -91,6 +91,11 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
             ); // Actualiza el estado del manager
           }
         });
+        // En iOS, addListener cambia la sesión a `.mixWithOthers`; se restaura.
+        Future.delayed(
+          const Duration(milliseconds: 500),
+          widget.audioManager.restoreExclusiveAudioSession,
+        );
       }
     });
 

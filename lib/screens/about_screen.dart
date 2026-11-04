@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
 import 'package:flutter/gestures.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
 import '../services/audio_player_manager.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/live_indicator.dart';
@@ -39,16 +38,11 @@ class _AboutScreenState extends State<AboutScreen> {
   /// Indicador de estado para la carga del contenido web.
   bool _isLoadingContent = true;
 
-  /// Instancia de Firebase Analytics para el seguimiento.
-  final analytics = FirebaseAnalytics.instance;
-
   /// {inheritdoc}
   @override
   void initState() {
     super.initState();
     // ananlitica
-    // Se registra la vista de pantalla para Firebase Analytics.
-    analytics.logScreenView(screenName: 'about', screenClass: 'AboutScreen');
     // obtener singleton
     _audioManager = AudioPlayerManager();
     _loadVersion();

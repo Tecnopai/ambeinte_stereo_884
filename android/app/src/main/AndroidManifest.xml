@@ -35,8 +35,9 @@
          para programar temporizadores de apagado o reconexión precisa. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 
-    <!-- Permiso para acceder al identificador de publicidad (AD ID) en dispositivos con Google Play Services. -->
-    <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
+    <!-- La app NO usa el identificador de publicidad. tools:node="remove" garantiza
+         que ninguna librería lo vuelva a agregar al manifiesto final. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove"/>
 
     <!-- ================================================================== -->
     <!-- SOPORTE ANDROID TV / GOOGLE TV                                      -->
@@ -52,7 +53,16 @@
         android:banner="@drawable/tv_banner"
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="true">
-        
+
+        <!-- La app no recopila datos. Si alguna librería incluyera Firebase
+             Analytics, queda desactivado de forma permanente. -->
+        <meta-data
+            android:name="firebase_analytics_collection_deactivated"
+            android:value="true" />
+        <meta-data
+            android:name="google_analytics_adid_collection_enabled"
+            android:value="false" />
+
         <!-- android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" Configuración para asegurar que Flutter maneje todos los cambios de configuración. -->
         <!-- android:showWhenLocked="true" Configuración crítica para controles de medios en la pantalla de bloqueo y cuando el dispositivo está bloqueado. -->
 
@@ -75,16 +85,6 @@
               android:resource="@style/NormalTheme"
               />
 
-            <!-- Configuración de Firebase Analytics para habilitar el reporte automático de pantallas. -->
-            <meta-data
-                android:name="google_analytics_automatic_screen_reporting_enabled"
-                android:value="true" />
-        
-            <!-- Configuración de Firebase Analytics para permitir el almacenamiento de datos analíticos. -->
-            <meta-data
-                android:name="google_analytics_default_allow_analytics_storage"
-                android:value="true" />
-            
             <!-- Launcher para teléfonos y tablets -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 // Importa el tema de la aplicación.
 import 'theme/app_theme.dart';
 // Importa la pantalla inicial de la aplicación.
 import '../screens/splash_screen.dart';
+import '../services/audio_player_manager.dart';
 
 /// {@template ambient_stereo_app}
 /// Widget raíz de la aplicación Ambiente Stereo 88.4 FM.
@@ -26,15 +26,6 @@ class AmbientStereoApp extends StatefulWidget {
 /// del ciclo de vida de la aplicación (ej. suspendida, reanudada, inactiva).
 class _AmbientStereoAppState extends State<AmbientStereoApp>
     with WidgetsBindingObserver {
-  // Instancia de Firebase Analytics para registrar eventos.
-  static FirebaseAnalytics analytics = FirebaseAnalytics.instance;
-
-  // Observador utilizado para registrar automáticamente los cambios de ruta
-  // de navegación en Firebase Analytics.
-  static FirebaseAnalyticsObserver observer = FirebaseAnalyticsObserver(
-    analytics: analytics,
-  );
-
   /// Inicializa el estado del widget.
   @override
   void initState() {
@@ -59,9 +50,10 @@ class _AmbientStereoAppState extends State<AmbientStereoApp>
   /// @param state El nuevo estado del ciclo de vida ([AppLifecycleState]).
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Si la aplicación vuelve a primer plano (resumed), se registra un evento en Analytics.
     if (state == AppLifecycleState.resumed) {
-      analytics.logEvent(name: 'app_resumed');
+      // En iOS, volume_controller vuelve a poner la sesión en `.mixWithOthers`
+      // al regresar a primer plano; se restaura la sesión exclusiva.
+      AudioPlayerManager().restoreExclusiveAudioSession();
     }
   }
 
@@ -74,8 +66,6 @@ class _AmbientStereoAppState extends State<AmbientStereoApp>
       theme: AppTheme.darkTheme,
       // Desactiva la etiqueta de "DEBUG" en la esquina superior derecha.
       debugShowCheckedModeBanner: false,
-      // Asigna el observador de Firebase Analytics al navegador de la aplicación.
-      navigatorObservers: [observer],
       // La pantalla de inicio de la aplicación es la SplashScreen.
       home: const SplashScreen(),
 
