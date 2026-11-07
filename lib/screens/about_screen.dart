@@ -10,6 +10,7 @@ import '../widgets/mini_player.dart';
 import '../widgets/live_indicator.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
+import 'report_problem_screen.dart';
 
 /// Pantalla "Acerca de" que muestra información sobre la aplicación y la emisora.
 ///
@@ -364,6 +365,8 @@ class _AboutScreenState extends State<AboutScreen> {
                     _buildWebsiteButton2(responsive),
                     SizedBox(height: responsive.spacing(14)),
                     _buildWebsiteButton1(responsive),
+                    SizedBox(height: responsive.spacing(14)),
+                    _buildReportProblemButton(responsive),
                     if (isPlaying) SizedBox(height: responsive.spacing(20)),
                   ],
                 ),
@@ -681,6 +684,16 @@ class _AboutScreenState extends State<AboutScreen> {
         await launchUrl(emailUri);
       }
     });
+  }
+
+  /// Abre la pantalla para enviar el registro de diagnóstico (opcional).
+  Widget _buildReportProblemButton(ResponsiveHelper responsive) {
+    return _buildButton(
+      responsive,
+      'Reportar un problema',
+      Icons.bug_report_outlined,
+      () => ReportProblemScreen.open(context),
+    );
   }
 
   /// Construye un botón elevado con un ícono y un estilo responsivo.

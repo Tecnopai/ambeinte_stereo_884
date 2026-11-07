@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'core/app.dart';
+import 'services/diagnostics_log.dart';
 import 'package:logger/logger.dart';
 
 /// Instancia global del logger para uso en toda la aplicación.
@@ -17,6 +18,10 @@ void main() async {
   // Asegura que todos los bindings de widgets estén inicializados antes
   // de realizar operaciones asíncronas, como la inicialización de Firebase.
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Registro de diagnóstico local (solo en el teléfono, ver DiagnosticsLog).
+  // No se espera: si tarda, los eventos se guardan cuando termine de cargar.
+  DiagnosticsLog.instance.init();
 
   try {
     // Configurar orientaciones permitidas para la aplicación (vertical y horizontal).

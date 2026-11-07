@@ -7,6 +7,7 @@ import '../widgets/sound_waves.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
 import '../utils/cache_manager.dart';
+import 'report_problem_screen.dart';
 
 /// Pantalla principal del reproductor de radio
 /// Muestra controles de reproducción, animaciones visuales y estado de conexión.
@@ -121,8 +122,30 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
           _errorMessage = error;
         });
 
-        // Mostrar SnackBar con el estado de error o reconexión
-        if (error.isNotEmpty) {
+        // Se agotaron los intentos: aviso más largo con opción de reportar.
+        if (error.startsWith('No se pudo reconectar')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.info, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(error)),
+                ],
+              ),
+              backgroundColor: AppColors.warning,
+              duration: const Duration(seconds: 10),
+              action: SnackBarAction(
+                label: 'Reportar',
+                textColor: Colors.white,
+                onPressed: () {
+                  if (mounted) ReportProblemScreen.open(context);
+                },
+              ),
+            ),
+          );
+        } else if (error.isNotEmpty) {
+          // Mostrar SnackBar con el estado de error o reconexión
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Row(

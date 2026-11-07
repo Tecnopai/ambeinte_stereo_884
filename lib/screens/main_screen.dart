@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'radio_player_screen.dart';
 import 'news_screen.dart';
 import 'about_screen.dart';
+import 'report_problem_screen.dart';
 import '../utils/responsive_helper.dart';
 import '../utils/version_checker.dart';
 import '../core/theme/app_colors.dart';
@@ -77,6 +78,12 @@ class _MainScreenState extends State<MainScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await VersionChecker.checkVersion(context);
+
+      // Si la última vez la radio falló, ofrecer enviar un reporte. Se espera
+      // un momento para no aparecer encima del arranque de la radio.
+      await Future.delayed(const Duration(seconds: 4));
+      if (!mounted) return;
+      await ReportProblemScreen.offerIfPreviousSessionFailed(context);
     });
   }
 

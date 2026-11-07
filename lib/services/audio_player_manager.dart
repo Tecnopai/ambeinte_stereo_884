@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:radio_player/radio_player.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'diagnostics_log.dart';
 
 /// Gestor centralizado del reproductor de audio usando radio_player
 /// Implementa el patrón Singleton para mantener una única instancia
@@ -42,10 +44,12 @@ class AudioPlayerManager {
   Future<void> _handleNativeCall(MethodCall call) async {
     if (call.method == 'remotePause') {
       _log('[AudioPlayerManager] ⏸️ Pausa desde pantalla de bloqueo');
+      _diag('Pausa desde pantalla de bloqueo');
       // Pausa del usuario: no reconectar.
-      _wasPlayingBeforeError = false;
+      _userWantsPlayback = false;
       _reconnectTimer?.cancel();
       _deferredReconnectTimer?.cancel();
+      _attemptWatchdog?.cancel();
       _isReconnecting = false;
       _reconnectAttempts = 0;
       _progressiveBufferingTimer?.cancel();
@@ -60,7 +64,7 @@ class AudioPlayerManager {
 
   // ========== CONSTANTES ==========
   static const Duration _reconnectDelay = Duration(seconds: 5);
-  static const int _maxReconnectAttempts = 8;
+  static const int _maxReconnectAttempts = 4;
   static const bool _autoPlay = true;
   static const Duration _playTimeout = Duration(seconds: 15);
   static const Duration _initTimeout = Duration(seconds: 10);
@@ -96,7 +100,11 @@ class AudioPlayerManager {
   bool _isInitialized = false;
   bool _isInitializing = false;
   final Completer<void> _initCompleter = Completer<void>();
-  bool _wasPlayingBeforeError = false;
+
+  /// El usuario quiere oír la radio. Solo cambia por acciones del usuario
+  /// (play/pausa en la app, en la notificación o en la pantalla de bloqueo),
+  /// nunca por un corte de red: así la reconexión no se rinde por error.
+  bool _userWantsPlayback = false;
   bool _isAppInBackground = false; // Track estado de app
 
   // ========== CONTROL PARA ARTÍCULOS ==========
@@ -134,9 +142,30 @@ class AudioPlayerManager {
   bool _isReconnecting = false;
   DateTime? _lastReconnectAttempt;
 
+  /// Si un intento de reconexión no logra sonar en este tiempo, se pasa al
+  /// siguiente intento (antes la app podía quedarse "Reconectando..." sin fin).
+  Timer? _attemptWatchdog;
+
+  /// Último estado recibido del reproductor, para distinguir una pausa del
+  /// usuario (playing → paused) de un corte de red (buffering → paused).
+  PlaybackState? _lastPlaybackState;
+
+  /// Tipo de red actual (wifi, datos móviles...), para reconectar al cambiar.
+  String? _lastNetwork;
+
+  /// Se agotaron los intentos de reconexión: si la red vuelve o cambia, se
+  /// reintenta solo sin que el usuario tenga que tocar nada.
+  bool _gaveUpWaitingForNetwork = false;
+
+  /// La estación se acaba de configurar y aún no se ha usado. Al dar play
+  /// después de una pausa se configura de nuevo para abrir una conexión
+  /// nueva y escuchar la señal en vivo, no la que quedó en el búfer.
+  bool _stationIsFresh = false;
+
   // Subscription para los streams del player
   StreamSubscription? _playbackStateSubscription;
   StreamSubscription? _metadataSubscription;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   // ========== GETTERS PÚBLICOS ==========
   Stream<bool> get playingStream => _playingController.stream;
@@ -187,6 +216,7 @@ class AudioPlayerManager {
 
     // 3. URL por defecto
     _log('[AudioPlayerManager] ⚠️ Usando URL por defecto: $_streamUrl');
+    _diag('URL del stream: por defecto ($_streamUrl)');
   }
 
   /// Aplica [value] como URL del stream si es una URL http/https válida.
@@ -205,6 +235,7 @@ class AudioPlayerManager {
     _streamUrl = url;
     _isStreamUrlLoaded = true;
     _log('[AudioPlayerManager] ✅ URL cargada desde Firebase ($origen): $url');
+    _diag('URL del stream: $origen ($url)');
     return true;
   }
 
@@ -225,14 +256,11 @@ class AudioPlayerManager {
       // Esperar a que Firebase cargue la URL ANTES de configurar el player
       await _loadStreamUrlFromFirebase();
 
-      await RadioPlayer.setStation(
-        title: 'Ambiente Stereo 88.4 FM',
-        url: _streamUrl,
-        logoAssetPath: 'assets/images/icon.png',
-      );
+      await _setStation();
       _log('[AudioPlayerManager] ✅ Estación configurada con URL: $_streamUrl');
 
       _setupPlayerListeners();
+      _setupConnectivityListener();
 
       _isInitialized = true;
       _isInitializing = false;
@@ -258,6 +286,7 @@ class AudioPlayerManager {
 
       _log('[AudioPlayerManager] ❌ Error en inicialización: $e');
       _log('[AudioPlayerManager] Stack trace: $stackTrace');
+      _diag('Error al iniciar el reproductor: $e');
 
       _errorController.add('Error al inicializar: $e');
       _loadingController.add(false);
@@ -296,6 +325,9 @@ class AudioPlayerManager {
     _playbackStateSubscription = RadioPlayer.playbackStateStream.listen(
       (state) {
         _log('[AudioPlayerManager] 📊 Estado: $state');
+        _diag('Estado: ${state.name}');
+        final previous = _lastPlaybackState;
+        _lastPlaybackState = state;
 
         switch (state) {
           case PlaybackState.playing:
@@ -303,7 +335,7 @@ class AudioPlayerManager {
             break;
 
           case PlaybackState.paused:
-            _handlePausedState();
+            _handlePausedState(previous);
             break;
 
           case PlaybackState.buffering:
@@ -317,11 +349,11 @@ class AudioPlayerManager {
       },
       onError: (error) {
         _log('[AudioPlayerManager] ❌ Error en playbackStateStream: $error');
+        _diag('Error del reproductor: $error');
         _errorController.add('Error de conexión');
         _loadingController.add(false);
 
-        if ((_playingController.value || _wasPlayingBeforeError) &&
-            !_isPausedForArticle) {
+        if (_userWantsPlayback && !_isPausedForArticle) {
           _scheduleReconnectionWithDelay();
         }
       },
@@ -353,11 +385,16 @@ class AudioPlayerManager {
   /// Maneja el estado de reproducción normal
   void _handlePlayingState() {
     _deferredReconnectTimer?.cancel();
+    _attemptWatchdog?.cancel();
+    if (_reconnectAttempts > 0 || _isReconnecting) {
+      _diag('Reconectado en el intento $_reconnectAttempts');
+      _lastSuccessfulReconnect = DateTime.now();
+    }
     _playingController.add(true);
     _loadingController.add(false);
     _reconnectAttempts = 0;
     _isReconnecting = false;
-    _wasPlayingBeforeError = true;
+    _userWantsPlayback = true;
     _errorController.add('');
     _isInBufferingState = false;
 
@@ -394,7 +431,7 @@ class AudioPlayerManager {
           false;
       // Cambiar la categoría con el audio sonando puede pausar el reproductor
       // nativo: si estaba sonando, se reanuda de inmediato.
-      if (changed && _wasPlayingBeforeError && !_isPausedForArticle) {
+      if (changed && _userWantsPlayback && !_isPausedForArticle) {
         _log('[AudioPlayerManager] 🔁 Sesión restaurada, reanudando audio');
         await RadioPlayer.play();
       }
@@ -481,31 +518,44 @@ class AudioPlayerManager {
   }
 
   /// Maneja el estado de pausa
-  void _handlePausedState() {
+  /// En Android, radio_player reporta "paused" tanto cuando el usuario pausa
+  /// (notificación, audífonos, llamada) como cuando el stream falla (el
+  /// reproductor queda en IDLE). Se distinguen por el estado anterior:
+  ///   - playing → paused: pausa del usuario o del sistema.
+  ///   - buffering/unknown → paused: el stream se cortó.
+  void _handlePausedState(PlaybackState? previous) {
     // Limpiar estado de buffering
     _isInBufferingState = false;
     _progressiveBufferingTimer?.cancel();
     _progressiveBufferingTimer = null;
 
-    if (_wasPlayingBeforeError &&
-        !_isReconnecting &&
-        !_isAppInBackground &&
-        !_isPausedForArticle) {
+    // Durante una reconexión los cambios de estado los provoca la propia
+    // reconexión: el vigilante del intento decide si funcionó.
+    if (_isReconnecting) return;
+
+    // Sin red, una pausa tampoco puede ser del usuario de forma fiable: se
+    // trata como corte y se reconecta cuando vuelva la red.
+    final streamFailed =
+        previous == PlaybackState.buffering ||
+        previous == PlaybackState.unknown ||
+        _lastNetwork == _noNetwork;
+
+    if (_userWantsPlayback && streamFailed && !_isPausedForArticle) {
       _log(
-        '[AudioPlayerManager] ⚠️ Pausa inesperada detectada - posible error de red',
+        '[AudioPlayerManager] ⚠️ El stream se detuvo mientras cargaba - posible error de red',
       );
-      _scheduleReconnectionWithDelay();
-    } else {
+      _diag('El stream se detuvo mientras cargaba');
       _playingController.add(false);
-      _loadingController.add(false);
-      // No resetear _wasPlayingBeforeError si es pausa temporal para artículo
-      if (!_isPausedForArticle) {
-        _wasPlayingBeforeError = false;
-      }
-      // No finalizar sesión TSL si es pausa temporal
-      if (!_isPausedForArticle) {
-        _endAudioSession();
-      }
+      _scheduleReconnectionWithDelay();
+      return;
+    }
+
+    _playingController.add(false);
+    _loadingController.add(false);
+    if (!_isPausedForArticle) {
+      // Pausa del usuario o del sistema: no reconectar.
+      _userWantsPlayback = false;
+      _endAudioSession();
     }
   }
 
@@ -516,8 +566,10 @@ class AudioPlayerManager {
 
     _log('[AudioPlayerManager] ⏳ Buffering inteligente activado');
 
-    // Solo manejar buffering si estaba reproduciendo activamente
-    if (_wasPlayingBeforeError && !_isAppInBackground && !_isPausedForArticle) {
+    // Solo vigilar el buffering si el usuario quiere oír la radio. También en
+    // segundo plano: ahí es donde más se corta con datos móviles. Durante una
+    // reconexión el vigilante del intento se encarga.
+    if (_userWantsPlayback && !_isReconnecting && !_isPausedForArticle) {
       _handleIntelligentBuffering();
     }
   }
@@ -527,9 +579,11 @@ class AudioPlayerManager {
     _log('[AudioPlayerManager] ⚠️ Estado desconocido');
 
     // Ser más conservador con el estado unknown - esperar antes de reconectar
-    if (_playingController.value && !_isReconnecting && !_isPausedForArticle) {
+    if (_userWantsPlayback && !_isReconnecting && !_isPausedForArticle) {
       Future.delayed(const Duration(seconds: 3), () {
-        if (_playingController.value && !_isReconnecting) {
+        if (_userWantsPlayback &&
+            !_isReconnecting &&
+            _lastPlaybackState == PlaybackState.unknown) {
           _scheduleReconnectionWithDelay();
         }
       });
@@ -622,7 +676,7 @@ class AudioPlayerManager {
       checkCount++;
 
       // Verificar si sigue en estado de buffering
-      if (_loadingController.value && _wasPlayingBeforeError) {
+      if (_loadingController.value && _userWantsPlayback) {
         if (checkCount >= maxChecks) {
           _log(
             '[AudioPlayerManager] ⚠️ Buffering persistente después de $maxChecks checks',
@@ -710,15 +764,30 @@ class AudioPlayerManager {
 
   // ========== RECONEXIÓN INTELIGENTE ==========
 
-  /// Programa una reconexión con delay para evitar ciclos agresivos
+  /// Programa una reconexión con delay para evitar ciclos agresivos.
+  /// Si en ese tiempo el audio vuelve solo, no se reconecta.
   void _scheduleReconnectionWithDelay() {
     Future.delayed(const Duration(seconds: 3), () {
-      if ((_playingController.value || _wasPlayingBeforeError) &&
+      if (_userWantsPlayback &&
           !_isReconnecting &&
-          !_isPausedForArticle) {
+          !_isPausedForArticle &&
+          _lastPlaybackState != PlaybackState.playing) {
         _handleReconnection();
       }
     });
+  }
+
+  /// Vuelve a configurar la estación con la URL del stream. En Android esto
+  /// reemplaza la fuente del reproductor y obliga a abrir una conexión nueva;
+  /// pausar y reanudar reutiliza la conexión vieja, que tras un cambio de red
+  /// (wifi ↔ datos, cambio de antena) puede quedar muerta.
+  Future<void> _setStation() async {
+    await RadioPlayer.setStation(
+      title: 'Ambiente Stereo 88.4 FM',
+      url: _streamUrl,
+      logoAssetPath: 'assets/images/icon.png',
+    );
+    _stationIsFresh = true;
   }
 
   /// Maneja la lógica de reconexión con inteligencia
@@ -737,8 +806,6 @@ class AudioPlayerManager {
         _lastSuccessfulReconnect!,
       );
       if (timeSinceLastReconnect < _minReconnectInterval) {
-        // Antes se ignoraba sin reintentar y la radio quedaba en silencio.
-        // Ahora se reintenta cuando se cumple el intervalo mínimo.
         final wait = _minReconnectInterval - timeSinceLastReconnect;
         _log(
           '[AudioPlayerManager] ⏳ Reconexión muy reciente - reintento en ${wait.inSeconds}s',
@@ -754,20 +821,26 @@ class AudioPlayerManager {
       return;
     }
 
-    if (!_wasPlayingBeforeError && !_playingController.value) {
+    if (!_userWantsPlayback) {
       _log('[AudioPlayerManager] ℹ️ No reconectar - usuario pausó manualmente');
       return;
     }
 
     if (_reconnectAttempts >= _maxReconnectAttempts) {
       _log('[AudioPlayerManager] ❌ Máximo de reconexiones alcanzado');
+      _diag(
+        'Sin conexión tras $_maxReconnectAttempts intentos; '
+        'se reintentará si cambia la red',
+      );
+      _userWantsPlayback = false;
+      // Si vuelve la red o cambia (wifi ↔ datos), se reintenta solo.
+      _gaveUpWaitingForNetwork = true;
       _errorController.add(
         'No se pudo reconectar. Presiona ▶ para reintentar.',
       );
       _loadingController.add(false);
       _playingController.add(false);
-      _wasPlayingBeforeError = false;
-
+      RadioPlayer.pause().catchError((_) {});
       return;
     }
 
@@ -777,6 +850,11 @@ class AudioPlayerManager {
       );
       if (timeSinceLastAttempt.inSeconds < 2) {
         _log('[AudioPlayerManager] ⏳ Esperando antes de reintentar...');
+        _deferredReconnectTimer?.cancel();
+        _deferredReconnectTimer = Timer(
+          const Duration(seconds: 2),
+          _handleReconnection,
+        );
         return;
       }
     }
@@ -789,7 +867,9 @@ class AudioPlayerManager {
 
     // Mensaje inteligente basado en salud de red
     String userMessage;
-    if (_isNetworkDegraded) {
+    if (_lastNetwork == _noNetwork) {
+      userMessage = 'Sin conexión a internet...';
+    } else if (_isNetworkDegraded) {
       userMessage = 'Mejorando conexión de red...';
     } else if (_currentBufferHealth <= 0) {
       userMessage = 'Reiniciando stream...';
@@ -804,45 +884,121 @@ class AudioPlayerManager {
     _log(
       '[AudioPlayerManager] 🔄 Intento de reconexión $_reconnectAttempts/$_maxReconnectAttempts',
     );
+    _diag(
+      'Reconexión $_reconnectAttempts/$_maxReconnectAttempts '
+      '(red: ${_lastNetwork ?? 'desconocida'})',
+    );
+
+    // El primer intento va rápido; los siguientes esperan más.
+    final delay = _reconnectAttempts == 1
+        ? const Duration(seconds: 1)
+        : _reconnectDelay;
 
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(_reconnectDelay, () async {
-      try {
-        _log('[AudioPlayerManager] 🔄 Ejecutando reconexión inteligente...');
-
-        await RadioPlayer.pause();
-        await Future.delayed(const Duration(milliseconds: 500));
-
-        await RadioPlayer.play().timeout(
-          _playTimeout,
-          onTimeout: () {
-            throw TimeoutException('Timeout en reconexión');
-          },
-        );
-
+    _reconnectTimer = Timer(delay, () async {
+      if (!_userWantsPlayback || _isPausedForArticle) {
         _isReconnecting = false;
-        _errorController.add('');
-        _lastSuccessfulReconnect = DateTime.now();
-        _log('[AudioPlayerManager] ✅ Reconexión inteligente exitosa');
-      } catch (e) {
-        _log('[AudioPlayerManager] ❌ Error en reconexión inteligente: $e');
-        _isReconnecting = false;
-
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (_reconnectAttempts < _maxReconnectAttempts) {
-            _handleReconnection();
-          } else {
-            _errorController.add(
-              'Conexión perdida. Presiona ▶ para reintentar.',
-            );
-            _playingController.add(false);
-            _loadingController.add(false);
-            _wasPlayingBeforeError = false;
-          }
-        });
+        return;
       }
+
+      try {
+        _log('[AudioPlayerManager] 🔄 Abriendo conexión nueva al stream...');
+        await _setStation().timeout(const Duration(seconds: 10));
+        await RadioPlayer.play().timeout(_playTimeout);
+      } catch (e) {
+        _log('[AudioPlayerManager] ❌ Error en reconexión: $e');
+        _diag('Error al reconectar: $e');
+      }
+
+      // El intento solo cuenta como exitoso cuando el reproductor llega a
+      // "playing" (_handlePlayingState). Si no suena a tiempo, se pasa al
+      // siguiente intento en vez de quedarse cargando para siempre.
+      _attemptWatchdog?.cancel();
+      _attemptWatchdog = Timer(_playTimeout, () {
+        if (!_isReconnecting) return;
+        _log('[AudioPlayerManager] ⏱️ El intento no logró sonar a tiempo');
+        _diag(
+          'Intento $_reconnectAttempts sin audio tras '
+          '${_playTimeout.inSeconds} s',
+        );
+        _isReconnecting = false;
+        _lastReconnectAttempt = null;
+        _handleReconnection();
+      });
     });
   }
+
+  // ========== CAMBIOS DE RED ==========
+
+  static const String _noNetwork = 'sin red';
+
+  void _setupConnectivityListener() {
+    final connectivity = Connectivity();
+    connectivity
+        .checkConnectivity()
+        .then(_onNetworkChanged)
+        .catchError((Object e) => _log('[AudioPlayerManager] ⚠️ Red: $e'));
+    _connectivitySubscription = connectivity.onConnectivityChanged.listen(
+      _onNetworkChanged,
+      onError: (Object e) => _log('[AudioPlayerManager] ⚠️ Red: $e'),
+    );
+  }
+
+  static String _describeNetwork(List<ConnectivityResult> results) {
+    const names = {
+      ConnectivityResult.wifi: 'wifi',
+      ConnectivityResult.mobile: 'datos móviles',
+      ConnectivityResult.ethernet: 'cable',
+      ConnectivityResult.vpn: 'vpn',
+      ConnectivityResult.bluetooth: 'bluetooth',
+    };
+    final active =
+        results
+            .where((r) => r != ConnectivityResult.none)
+            .map((r) => names[r] ?? r.name)
+            .toSet()
+            .toList()
+          ..sort();
+    return active.isEmpty ? _noNetwork : active.join(' + ');
+  }
+
+  void _onNetworkChanged(List<ConnectivityResult> results) {
+    final network = _describeNetwork(results);
+    final previous = _lastNetwork;
+    if (network == previous) return;
+    _lastNetwork = network;
+
+    _log('[AudioPlayerManager] 📶 Red: ${previous ?? '-'} → $network');
+    _diag('Red: ${previous ?? 'inicio'} → $network');
+
+    // Primera lectura, o se fue la red: se espera a que vuelva.
+    if (previous == null || network == _noNetwork) return;
+    if (_isPausedForArticle) return;
+    if (!_userWantsPlayback && !_gaveUpWaitingForNetwork) return;
+
+    // Si sigue sonando y solo se agregó una red (p. ej. wifi + vpn), no se
+    // interrumpe. Si cambió de red (wifi → datos) o volvió la conexión, la
+    // conexión vieja ya no sirve: se abre una nueva de inmediato.
+    final previousParts = previous.split(' + ').toSet();
+    final sharesNetwork = network.split(' + ').any(previousParts.contains);
+    if (_lastPlaybackState == PlaybackState.playing && sharesNetwork) return;
+
+    _log('[AudioPlayerManager] 🔁 Cambio de red - reconectando');
+    _userWantsPlayback = true;
+    _gaveUpWaitingForNetwork = false;
+    _reconnectTimer?.cancel();
+    _deferredReconnectTimer?.cancel();
+    _attemptWatchdog?.cancel();
+    _progressiveBufferingTimer?.cancel();
+    _progressiveBufferingTimer = null;
+    _isReconnecting = false;
+    _reconnectAttempts = 0;
+    _lastReconnectAttempt = null;
+    _lastSuccessfulReconnect = null;
+    _handleReconnection();
+  }
+
+  void _diag(String message) => DiagnosticsLog.instance.add(message);
 
   Future<void> _ensureInitialized() async {
     if (_isInitialized) return;
@@ -893,12 +1049,16 @@ class AudioPlayerManager {
 
   // Lifecycle tracking con flag de background
   void onAppPaused() {
+    if (_isAppInBackground) return;
     _log('[AudioPlayerManager] 🔵 App pausada/background');
+    _diag('App en segundo plano');
     _isAppInBackground = true;
   }
 
   void onAppResumed() {
+    if (!_isAppInBackground) return;
     _log('[AudioPlayerManager] 🟢 App resumida/foreground');
+    _diag('App en primer plano');
     _isAppInBackground = false;
   }
 
@@ -908,7 +1068,7 @@ class AudioPlayerManager {
   Future<void> pauseForArticle() async {
     if (isPlaying && !_isPausedForArticle) {
       _isPausedForArticle = true;
-      _wasPlayingBeforeError = false; // Importante: evitar reconexión
+      _userWantsPlayback = false; // Importante: evitar reconexión
       await pause();
       _log('[AudioPlayerManager] ⏸️ Pausado temporalmente para artículo');
     }
@@ -960,13 +1120,28 @@ class AudioPlayerManager {
         return;
       }
 
-      _wasPlayingBeforeError = false;
+      _diag('Play');
+      _userWantsPlayback = true;
+      _gaveUpWaitingForNetwork = false;
+      // Un play del usuario empieza de cero: cancela cualquier reconexión.
+      _reconnectTimer?.cancel();
+      _deferredReconnectTimer?.cancel();
+      _attemptWatchdog?.cancel();
+      _isReconnecting = false;
+      _reconnectAttempts = 0;
+      _lastReconnectAttempt = null;
       _loadingController.add(true);
       _errorController.add('');
 
       _log(
         '[AudioPlayerManager] ▶️ Iniciando reproducción con buffer inteligente...',
       );
+
+      // Después de una pausa o de una falla, conexión nueva al stream.
+      if (!_stationIsFresh) {
+        await _setStation().timeout(const Duration(seconds: 10));
+      }
+      _stationIsFresh = false;
 
       await RadioPlayer.play().timeout(
         _playTimeout,
@@ -975,17 +1150,18 @@ class AudioPlayerManager {
         },
       );
 
-      _reconnectAttempts = 0;
-      _isReconnecting = false;
       _lastSuccessfulReconnect = DateTime.now();
       _recentBufferingDurations.clear(); // Limpiar historial en nueva conexión
     } on TimeoutException catch (e) {
       _log('[AudioPlayerManager] ⏱️ Timeout al reproducir: $e');
+      _diag('Play tardó demasiado: $e');
       _loadingController.add(false);
       _errorController.add('Conexión lenta. Reintentando...');
+      _lastSuccessfulReconnect = null;
       _handleReconnection();
     } catch (e) {
       _log('[AudioPlayerManager] ❌ Error al reproducir: $e');
+      _diag('Error al reproducir: $e');
       _loadingController.add(false);
       _errorController.add('Error al conectar');
     }
@@ -996,14 +1172,17 @@ class AudioPlayerManager {
       await _ensureInitialized();
 
       _log('[AudioPlayerManager] ⏸️ Pausando reproducción...');
-      _wasPlayingBeforeError = false;
-      await RadioPlayer.pause();
-      _loadingController.add(false);
-
+      _diag('Pausa');
+      _userWantsPlayback = false;
+      _gaveUpWaitingForNetwork = false;
       _reconnectTimer?.cancel();
       _deferredReconnectTimer?.cancel();
+      _attemptWatchdog?.cancel();
       _isReconnecting = false;
       _reconnectAttempts = 0;
+
+      await RadioPlayer.pause();
+      _loadingController.add(false);
     } catch (e) {
       _log('[AudioPlayerManager] ❌ Error al pausar: $e');
       _errorController.add('Error al pausar');
@@ -1030,7 +1209,7 @@ class AudioPlayerManager {
     _isReconnecting = false;
     _reconnectTimer?.cancel();
     _errorController.add('');
-    _wasPlayingBeforeError = false;
+    _userWantsPlayback = false;
     _log('[AudioPlayerManager] 🔄 Contador de reconexión reseteado');
   }
 
@@ -1046,8 +1225,10 @@ class AudioPlayerManager {
     _endAudioSession();
     _reconnectTimer?.cancel();
     _deferredReconnectTimer?.cancel();
+    _attemptWatchdog?.cancel();
     await _playbackStateSubscription?.cancel();
     await _metadataSubscription?.cancel();
+    await _connectivitySubscription?.cancel();
 
     await _playingController.close();
     await _loadingController.close();
@@ -1095,7 +1276,7 @@ class AudioPlayerManager {
       'reconnectAttempts': _reconnectAttempts,
       'totalReconnections': _totalReconnections,
       'isReconnecting': _isReconnecting,
-      'wasPlayingBeforeError': _wasPlayingBeforeError,
+      'userWantsPlayback': _userWantsPlayback,
       'isAppInBackground': _isAppInBackground,
       'volume': volume,
       'sessionActive': _startTime != null,

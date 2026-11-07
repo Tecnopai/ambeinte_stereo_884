@@ -51,9 +51,12 @@ class _AmbientStereoAppState extends State<AmbientStereoApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      AudioPlayerManager().onAppResumed();
       // En iOS, volume_controller vuelve a poner la sesión en `.mixWithOthers`
       // al regresar a primer plano; se restaura la sesión exclusiva.
       AudioPlayerManager().restoreExclusiveAudioSession();
+    } else if (state == AppLifecycleState.paused) {
+      AudioPlayerManager().onAppPaused();
     }
   }
 

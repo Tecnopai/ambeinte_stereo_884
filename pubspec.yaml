@@ -3,7 +3,7 @@ description: "Ambiente Stereo 88.4 FM."
 publish_to: "none" # Previene que el paquete se publique en pub.dev.
 
 # Versión de la aplicación: major.minor.patch+build_number
-version: 2.2.01+24
+version: 2.2.2+25
 
 environment:
   # Rango de Dart SDK compatible.
@@ -52,8 +52,10 @@ dependencies:
   cupertino_icons: ^1.0.8 # Iconos de estilo iOS para Flutter.
 
   # Herramientas para gestión de caché
-  path_provider: ^2.1.1 # Proporciona rutas para almacenar archivos en el dispositivo.
+  path_provider: ^2.1.6 # Proporciona rutas para almacenar archivos en el dispositivo.
   flutter_cache_manager: ^3.3.0 # Gestión avanzada de caché de archivos.
+  connectivity_plus: ^7.3.2 # Detecta cambios de red (wifi/datos) para reconectar el stream.
+  device_info_plus: ^12.4.0 # Modelo y versión del sistema para el reporte de problemas (solo local).
 
 dev_dependencies:
   # --------------------------------------------------------------------------
