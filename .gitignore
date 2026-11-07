@@ -121,3 +121,9 @@ app.*.symbols
 .idea/caches/deviceStreaming.xml
 .idea/deviceManager.xml
 .idea/caches/deviceStreaming.xml
+
+# Archivos temporales del compilador de Kotlin
+android/.kotlin/
+
+# Configuración local de Swift Package Manager generada por Xcode
+ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
