@@ -3,7 +3,7 @@ description: "Ambiente Stereo 88.4 FM."
 publish_to: "none" # Previene que el paquete se publique en pub.dev.
 
 # Versión de la aplicación: major.minor.patch+build_number
-version: 2.2.2+25
+version: 2.2.2+26
 
 environment:
   # Rango de Dart SDK compatible.
@@ -34,8 +34,8 @@ dependencies:
   # --------------------------------------------------------------------------
   # DEPENDENCIAS DE FIREBASE
   # --------------------------------------------------------------------------
-  firebase_core: ^4.2.0 # Inicialización y configuración de Firebase.
-  cloud_firestore: ^6.0.3 # Solo LECTURA de configuración (URL del stream y versión).
+  firebase_core: ^4.15.2 # Inicialización y configuración de Firebase.
+  cloud_firestore: ^6.10.2 # Solo LECTURA de configuración (URL del stream y versión).
   # La app no recopila datos de usuarios: no incluir Analytics, Crashlytics,
   # publicidad ni otros SDK de rastreo.
 
