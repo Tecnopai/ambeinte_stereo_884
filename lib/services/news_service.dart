@@ -21,17 +21,80 @@ class NewsService {
   // Caché simple para evitar peticiones duplicadas de media
   static final Map<int, Map<String, dynamic>> _mediaCache = {};
 
+  // ============================================
+  // SUBCATEGORÍAS
+  // ============================================
+  // WordPress, al filtrar con `categories=286`, NO incluye los artículos de
+  // las subcategorías (p. ej. "Tu Mundo Gospel" y "De Interés" dentro de
+  // "Lo+Leído"). Por eso cada consulta agrega las subcategorías de las
+  // categorías permitidas. El árbol se descarga una vez por sesión.
+
+  /// id de categoría → ids de sus subcategorías directas.
+  static Map<int, List<int>>? _childrenCache;
+  static Future<Map<int, List<int>>>? _childrenLoading;
+
+  Future<Map<int, List<int>>> _categoryChildren() {
+    final cached = _childrenCache;
+    if (cached != null) return Future.value(cached);
+    return _childrenLoading ??= _loadCategoryChildren().whenComplete(
+      () => _childrenLoading = null,
+    );
+  }
+
+  Future<Map<int, List<int>>> _loadCategoryChildren() async {
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/categories?per_page=100&_fields=id,parent',
+      );
+      final response = await http.get(uri).timeout(_timeout);
+      if (response.statusCode != 200) return {};
+
+      final children = <int, List<int>>{};
+      for (final item in json.decode(response.body) as List<dynamic>) {
+        final id = item['id'] as int;
+        final parent = item['parent'] as int? ?? 0;
+        if (parent != 0) (children[parent] ??= []).add(id);
+      }
+      _childrenCache = children;
+      return children;
+    } catch (e) {
+      // Sin el árbol se consulta solo la categoría pedida (como antes) y se
+      // reintenta en la próxima consulta.
+      developer.log('⚠️ Sin árbol de categorías: $e', name: 'NewsService');
+      return {};
+    }
+  }
+
+  /// [ids] más todas sus subcategorías, a cualquier profundidad.
+  Future<Set<int>> _withSubcategories(Iterable<int> ids) async {
+    final children = await _categoryChildren();
+    final result = <int>{};
+    final pending = [...ids];
+    while (pending.isNotEmpty) {
+      final id = pending.removeLast();
+      if (result.add(id)) pending.addAll(children[id] ?? const []);
+    }
+    return result;
+  }
+
+  /// Categorías permitidas con sus subcategorías.
+  Future<Set<int>> _allowedWithSubcategories() =>
+      _withSubcategories(AppConstants.allowedCategoryIds);
+
   /// Filtra artículos para mostrar solo los de categorías permitidas.
   /// Verifica que el artículo tenga al menos una categoría incluida en
-  /// [AppConstants.allowedCategoryIds].
-  List<Article> _filterByAllowedCategories(List<Article> articles) {
+  /// [allowed] (las permitidas con sus subcategorías).
+  List<Article> _filterByAllowedCategories(
+    List<Article> articles,
+    Set<int> allowed,
+  ) {
     developer.log(
       '🔍 Filtrando ${articles.length} artículos',
       name: 'NewsService',
     );
 
     // Si no hay categorías permitidas configuradas, retornar todos
-    if (AppConstants.allowedCategoryIds.isEmpty) {
+    if (allowed.isEmpty) {
       developer.log(
         '⚠️ No hay categorías permitidas configuradas - retornando todos los artículos',
         name: 'NewsService',
@@ -50,9 +113,7 @@ class NewsService {
       }
 
       // Retorna true si alguna de las categorías del artículo está en la lista permitida.
-      final hasAllowed = article.categories.any(
-        (categoryId) => AppConstants.allowedCategoryIds.contains(categoryId),
-      );
+      final hasAllowed = article.categories.any(allowed.contains);
 
       if (!hasAllowed) {
         developer.log(
@@ -146,9 +207,12 @@ class NewsService {
         return [];
       }
 
+      // La categoría y sus subcategorías (ver _withSubcategories).
+      final categoryIds = (await _withSubcategories([categoryId])).join(',');
+
       // Primero obtenemos los artículos básicos sin _embed
       final uri = Uri.parse(
-        '$_baseUrl/posts?categories=$categoryId&page=$page&per_page=$_itemsPerPage',
+        '$_baseUrl/posts?categories=$categoryIds&page=$page&per_page=$_itemsPerPage',
       );
 
       developer.log('🌐 URL: $uri', name: 'NewsService');
@@ -174,7 +238,10 @@ class NewsService {
             .toList();
 
         // Aplicar el filtro de categorías permitidas post-carga
-        return _filterByAllowedCategories(articles);
+        return _filterByAllowedCategories(
+          articles,
+          await _allowedWithSubcategories(),
+        );
       } else if (response.statusCode == 400) {
         developer.log('ℹ️ Página fuera de rango', name: 'NewsService');
         return [];
@@ -201,9 +268,10 @@ class NewsService {
       // Construir URL con filtro de categorías si está configurado
       String url = '$_baseUrl/posts?page=$page&per_page=$_itemsPerPage';
 
-      // Si hay categorías permitidas, filtrar en la API
-      if (AppConstants.allowedCategoryIds.isNotEmpty) {
-        final categoryIds = AppConstants.allowedCategoryIds.join(',');
+      // Si hay categorías permitidas, filtrar en la API (con subcategorías)
+      final allowed = await _allowedWithSubcategories();
+      if (allowed.isNotEmpty) {
+        final categoryIds = allowed.join(',');
         url += '&categories=$categoryIds';
         developer.log(
           '🔖 Filtrando por categorías: $categoryIds',
@@ -235,11 +303,7 @@ class NewsService {
             .map((item) => Article.fromJson(item))
             .toList();
 
-        // Aplicar el filtro de categorías permitidas solo si no se filtró en la API
-        if (AppConstants.allowedCategoryIds.isEmpty) {
-          return articles;
-        }
-        return _filterByAllowedCategories(articles);
+        return _filterByAllowedCategories(articles, allowed);
       } else if (response.statusCode == 400) {
         developer.log('ℹ️ Página fuera de rango', name: 'NewsService');
         return [];
@@ -404,11 +468,9 @@ class NewsService {
         final article = Article.fromJson(enrichedData.first);
 
         // Verificar que el artículo tenga al menos una categoría permitida
-        if (AppConstants.allowedCategoryIds.isNotEmpty) {
-          final hasAllowedCategory = article.categories.any(
-            (categoryId) =>
-                AppConstants.allowedCategoryIds.contains(categoryId),
-          );
+        final allowed = await _allowedWithSubcategories();
+        if (allowed.isNotEmpty) {
+          final hasAllowedCategory = article.categories.any(allowed.contains);
 
           if (!hasAllowedCategory) {
             throw Exception('Artículo no pertenece a una categoría permitida');
@@ -444,8 +506,9 @@ class NewsService {
       String url =
           '$_baseUrl/posts?search=$encodedSearch&per_page=$_itemsPerPage';
 
-      if (AppConstants.allowedCategoryIds.isNotEmpty) {
-        final categoryIds = AppConstants.allowedCategoryIds.join(',');
+      final allowed = await _allowedWithSubcategories();
+      if (allowed.isNotEmpty) {
+        final categoryIds = allowed.join(',');
         url += '&categories=$categoryIds';
       }
 
@@ -470,11 +533,7 @@ class NewsService {
             .map((item) => Article.fromJson(item))
             .toList();
 
-        // Aplicar el filtro de categorías permitidas solo si no se filtró en la API
-        if (AppConstants.allowedCategoryIds.isEmpty) {
-          return articles;
-        }
-        return _filterByAllowedCategories(articles);
+        return _filterByAllowedCategories(articles, allowed);
       } else {
         throw Exception('Error en la búsqueda: ${response.statusCode}');
       }
