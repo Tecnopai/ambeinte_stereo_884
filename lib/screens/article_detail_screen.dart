@@ -7,6 +7,7 @@ import '../models/article.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
 import '../services/audio_player_manager.dart';
+import '../services/podcast_player.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/live_indicator.dart';
 
@@ -110,7 +111,8 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
       // Pausar artículo
       await _audioPlayer?.pause();
     } else {
-      // Reproducir artículo - pausar radio primero
+      // Reproducir artículo - pausar radio (y podcast) primero
+      await PodcastPlayer.pauseIfPlaying();
       await _pauseRadioForArticle();
       await _audioPlayer?.play();
     }

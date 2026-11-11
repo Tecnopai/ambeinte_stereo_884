@@ -1,20 +1,24 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'radio_player_screen.dart';
 import 'news_screen.dart';
+import 'podcasts_screen.dart';
 import 'about_screen.dart';
 import 'report_problem_screen.dart';
 import '../utils/responsive_helper.dart';
 import '../utils/version_checker.dart';
 import '../core/theme/app_colors.dart';
+import '../widgets/podcast_widgets.dart';
+import '../services/podcast_service.dart';
 
 /// Define el tipo de navegación utilizado, aunque no se usa directamente en esta clase.
 enum NavigationType { bottom, rail }
 
 /// Pantalla principal y contenedora de la aplicación.
 ///
-/// Gestiona la navegación adaptativa entre las diferentes secciones (Radio, Noticias, Nosotros)
+/// Gestiona la navegación adaptativa entre las diferentes secciones (Radio, Noticias, Podcast, Nosotros)
 /// utilizando un BottomNavigationBar para móvil/portrait y un NavigationRail para tablet/desktop/automotive.
 class MainScreen extends StatefulWidget {
   /// Constructor de MainScreen. El AudioManager se gestiona internamente por cada pantalla.
@@ -50,6 +54,7 @@ class _MainScreenState extends State<MainScreen> {
       // Se asume que NewsScreen también obtiene su manager internamente,
       // o se ajustaría para recibirlo, pero mantenemos la estructura sin parámetro.
       NewsScreen(),
+      PodcastsScreen(),
       AboutScreen(),
     ];
 
@@ -68,12 +73,25 @@ class _MainScreenState extends State<MainScreen> {
         tooltip: 'Últimas noticias',
       ),
       NavigationItem(
+        icon: Icons.podcasts_outlined,
+        selectedIcon: Icons.podcasts,
+        label: 'Podcast',
+        tooltip: 'Podcasts',
+        badge: PodcastService.instance.hasNew,
+      ),
+      NavigationItem(
         icon: Icons.info_outline,
         selectedIcon: Icons.info,
         label: 'Nosotros',
         tooltip: 'Información de la app',
       ),
     ];
+
+    // Revisar si hay episodios nuevos (punto verde en "Podcast"). Se espera a
+    // que la radio arranque para no competir por la conexión.
+    Future.delayed(const Duration(seconds: 8), () {
+      if (mounted) PodcastService.instance.checkForNew();
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -143,9 +161,24 @@ class _MainScreenState extends State<MainScreen> {
       ),
 
       // Muestra el BottomNavigationBar solo en dispositivos móviles y tablets en vertical
+      // El mini reproductor del podcast va encima de la barra inferior
+      // (o solo, en pantallas con barra lateral).
       bottomNavigationBar: useNavigationRail
-          ? null
-          : _buildBottomNavigationBar(responsive),
+          ? const SafeArea(
+              top: false,
+              child: PodcastMiniPlayer(
+                margin: EdgeInsets.fromLTRB(12, 8, 12, 8),
+              ),
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const PodcastMiniPlayer(
+                  margin: EdgeInsets.fromLTRB(20, 8, 20, 0),
+                ),
+                _buildBottomNavigationBar(responsive),
+              ],
+            ),
     );
   }
 
@@ -235,10 +268,13 @@ class _MainScreenState extends State<MainScreen> {
         destinations: _navigationItems.map((item) {
           return NavigationRailDestination(
             // El Tooltip es útil para NavigationRail cuando no está extendido
-            icon: Tooltip(message: item.tooltip, child: Icon(item.icon)),
+            icon: Tooltip(
+              message: item.tooltip,
+              child: _withBadge(item, Icon(item.icon)),
+            ),
             selectedIcon: Tooltip(
               message: item.tooltip,
-              child: Icon(item.selectedIcon),
+              child: _withBadge(item, Icon(item.selectedIcon)),
             ),
             label: Text(item.label),
             padding: EdgeInsets.symmetric(
@@ -293,6 +329,23 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  /// Agrega el punto verde de "hay novedades" al ícono, si corresponde.
+  Widget _withBadge(NavigationItem item, Widget icon, {Key? key}) {
+    final badge = item.badge;
+    if (badge == null) return KeyedSubtree(key: key, child: icon);
+    return ValueListenableBuilder<bool>(
+      key: key,
+      valueListenable: badge,
+      builder: (context, show, child) => Badge(
+        isLabelVisible: show,
+        smallSize: 9,
+        backgroundColor: AppColors.accent,
+        child: child,
+      ),
+      child: icon,
+    );
+  }
+
   Widget _buildNavItem({
     required NavigationItem item,
     required bool isSelected,
@@ -304,7 +357,7 @@ class _MainScreenState extends State<MainScreen> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected
               ? AppColors.primary.withValues(alpha: 0.18)
@@ -317,11 +370,16 @@ class _MainScreenState extends State<MainScreen> {
           children: [
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 180),
-              child: Icon(
-                isSelected ? item.selectedIcon : item.icon,
+              child: _withBadge(
+                item,
+                Icon(
+                  isSelected ? item.selectedIcon : item.icon,
+                  color: isSelected
+                      ? AppColors.primary
+                      : AppColors.textSecondary,
+                  size: 24,
+                ),
                 key: ValueKey(isSelected),
-                color: isSelected ? AppColors.primary : AppColors.textSecondary,
-                size: 24,
               ),
             ),
             const SizedBox(height: 3),
@@ -355,11 +413,15 @@ class NavigationItem {
   /// Texto de tooltip para accesibilidad.
   final String tooltip;
 
+  /// Muestra un punto en el ícono mientras sea true (opcional).
+  final ValueListenable<bool>? badge;
+
   /// Constructor de NavigationItem.
   NavigationItem({
     required this.icon,
     required this.selectedIcon,
     required this.label,
     required this.tooltip,
+    this.badge,
   });
 }
