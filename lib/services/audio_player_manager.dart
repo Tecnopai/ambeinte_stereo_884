@@ -1158,7 +1158,10 @@ class AudioPlayerManager {
     _startProgressiveBufferingCheck(_bufferingTimeout);
   }
 
-  static const Duration _bufferingTimeout = Duration(seconds: 30);
+  /// Pruebas con internet móvil malo: esperar más que esto deja silencios
+  /// largos; reconectar trae audio de inmediato (el servidor envía de golpe
+  /// unos segundos al conectar).
+  static const Duration _bufferingTimeout = Duration(seconds: 15);
 
   /// Evalúa la salud del buffer basado en historial reciente
   void _evaluateBufferHealth() {
@@ -1787,7 +1790,9 @@ class AudioPlayerManager {
         },
       );
 
-      _lastSuccessfulReconnect = DateTime.now();
+      // No se marca aquí _lastSuccessfulReconnect: play() vuelve antes de
+      // que suene, y si la conexión falla, esa marca retrasaba 15 s el
+      // primer reintento. Se marca al sonar de verdad (_handlePlayingState).
       _recentBufferingDurations.clear(); // Limpiar historial en nueva conexión
     } on TimeoutException catch (e) {
       _log('[AudioPlayerManager] ⏱️ Timeout al reproducir: $e');

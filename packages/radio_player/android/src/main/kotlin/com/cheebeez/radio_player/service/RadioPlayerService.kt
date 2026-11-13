@@ -101,7 +101,7 @@ class RadioPlayerService : MediaSessionService(), Player.Listener {
             .build()
 
         // Reserva de audio (modificación local, ver MODIFICACIONES.md).
-        // Arranque rápido (2.5 s), pero tras un corte se juntan 12 s antes
+        // Arranque rápido (2.5 s), pero tras un corte se juntan 8 s antes
         // de seguir sonando, para que las fallas cortas del internet móvil
         // no vuelvan a cortar el audio.
         val loadControl = DefaultLoadControl.Builder()
@@ -109,7 +109,7 @@ class RadioPlayerService : MediaSessionService(), Player.Listener {
                 /* minBufferMs = */ 30_000,
                 /* maxBufferMs = */ 60_000,
                 /* bufferForPlaybackMs = */ 2_500,
-                /* bufferForPlaybackAfterRebufferMs = */ 12_000
+                /* bufferForPlaybackAfterRebufferMs = */ 8_000
             )
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
