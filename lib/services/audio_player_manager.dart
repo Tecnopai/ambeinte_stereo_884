@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show HttpDate, Platform;
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -288,6 +288,13 @@ class AudioPlayerManager {
         .doc(_firebaseStreamConfigPath)
         .snapshots()
         .listen((doc) {
+          // La dirección de los títulos también se puede cambiar en vivo.
+          final titlesUrl = _validUrl(_field(doc.data(), 'titulos_url'));
+          if (titlesUrl != _titlesUrl) {
+            _titlesUrl = titlesUrl;
+            if (titlesUrl == null) _applyWebTitle('');
+          }
+
           final value = _field(doc.data(), 'aviso');
           final text = value is String ? value.trim() : '';
           if (text == _noticeController.value) return;
@@ -343,6 +350,8 @@ class AudioPlayerManager {
     _serverIndex = 0;
     _streamUrl = urls.first;
     _isStreamUrlLoaded = true;
+    _streamHasTitles = false;
+    _titlesUrl = _validUrl(_field(data, 'titulos_url'));
     _log('[AudioPlayerManager] ✅ URL cargada desde Firebase ($origen): $urls');
     _diag(
       'URL del stream: $origen (${urls.first})'
@@ -373,6 +382,7 @@ class AudioPlayerManager {
     _offAir = false;
     _connectedStreamStart = null;
     _stationIsFresh = false;
+    _streamHasTitles = false;
     _diag(
       'Cambio al servidor ${_serverIndex + 1} de ${_streamUrls.length} '
       '($reason): $_streamUrl',
@@ -503,16 +513,31 @@ class AudioPlayerManager {
 
     _metadataSubscription = RadioPlayer.metadataStream.listen(
       (metadata) {
-        if (metadata.artist != null || metadata.title != null) {
-          final data = {
-            'artist': metadata.artist ?? 'Desconocido',
-            'title': metadata.title ?? 'Sin título',
-          };
-          _log(
-            '[AudioPlayerManager] 🎵 Metadata: ${data['artist']} - ${data['title']}',
-          );
-          _metadataController.add(data);
+        final artist = metadata.artist?.trim() ?? '';
+        final title = metadata.title?.trim() ?? '';
+        if (artist.isEmpty && title.isEmpty) return;
+
+        // El reproductor también devuelve los títulos que pone la propia app
+        // (los de la web o el nombre de la emisora): esos ya se mostraron y
+        // no indican que el servidor envíe títulos.
+        final isOwn =
+            (title == _webSong && artist == (_webArtist ?? '')) ||
+            (title == _stationName && artist.isEmpty);
+        if (isOwn) return;
+
+        if (!_streamHasTitles) {
+          _streamHasTitles = true;
+          _diag('El servidor envía los títulos en la señal');
         }
+
+        final data = {
+          'artist': metadata.artist ?? 'Desconocido',
+          'title': metadata.title ?? 'Sin título',
+        };
+        _log(
+          '[AudioPlayerManager] 🎵 Metadata: ${data['artist']} - ${data['title']}',
+        );
+        _metadataController.add(data);
       },
       onError: (error) {
         _log('[AudioPlayerManager] ⚠️ Error en metadataStream: $error');
@@ -764,7 +789,105 @@ class AudioPlayerManager {
 
   // ========== ESTADO DEL SERVIDOR ==========
 
+  // ========== TÍTULOS DESDE LA WEB ==========
+  // Si el servidor de streaming no envía los títulos en la señal (p. ej. con
+  // el Comrex conectado directo), se leen de una dirección web configurada en
+  // Firebase (`titulos_url`), donde el computador de emisión publica
+  // {"titulo": "...", "actualizado": <segundos unix>}. No usa lecturas de
+  // Firebase y no depende del servidor de streaming.
+
+  static const String _stationName = 'Ambiente Stereo 88.4 FM';
+  static const Duration _webTitleInterval = Duration(seconds: 20);
+
+  /// Un título más viejo que esto no se muestra (ningún audio dura más de
+  /// 55 min: si no cambió en una hora, el envío de títulos se detuvo).
+  static const Duration _webTitleMaxAge = Duration(minutes: 60);
+
+  String? _titlesUrl;
+  bool _streamHasTitles = false;
+  Timer? _webTitleTimer;
+  String _webTitle = '';
+  String? _webArtist;
+  String? _webSong;
+
+  void _startWebTitles() {
+    if (_webTitleTimer != null) return;
+    unawaited(_pollWebTitle());
+    _webTitleTimer = Timer.periodic(_webTitleInterval, (_) => _pollWebTitle());
+  }
+
+  void _stopWebTitles() {
+    _webTitleTimer?.cancel();
+    _webTitleTimer = null;
+  }
+
+  Future<void> _pollWebTitle() async {
+    final url = _titlesUrl;
+    if (url == null || _streamHasTitles || !isPlaying) return;
+    try {
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode != 200) return;
+      final data = json.decode(utf8.decode(response.bodyBytes));
+      if (data is! Map) return;
+
+      final text = '${data['titulo'] ?? ''}'.trim();
+      final updated = data['actualizado'];
+      // La antigüedad se mide con la hora del servidor web, no la del
+      // teléfono (que puede estar mal configurada).
+      final serverDate = response.headers['date'];
+      DateTime now = DateTime.now();
+      if (serverDate != null) {
+        try {
+          now = HttpDate.parse(serverDate);
+        } catch (_) {}
+      }
+      final fresh =
+          updated is num &&
+          now.difference(
+                DateTime.fromMillisecondsSinceEpoch(
+                  (updated * 1000).round(),
+                  isUtc: true,
+                ),
+              ) <=
+              _webTitleMaxAge;
+
+      if (_streamHasTitles || !isPlaying) return;
+      _applyWebTitle(fresh ? text : '');
+    } catch (e) {
+      _log('[AudioPlayerManager] ⚠️ Títulos web: $e');
+    }
+  }
+
+  /// Muestra [text] ("Artista - Título" o solo título) en la app, la
+  /// notificación y la pantalla de bloqueo. '' = sin título.
+  void _applyWebTitle(String text) {
+    if (text == _webTitle) return;
+    _webTitle = text;
+    if (text.isEmpty) {
+      _webArtist = null;
+      _webSong = null;
+      _metadataController.add(const {});
+      if (isPlaying) {
+        RadioPlayer.setCustomMetadata(
+          title: _stationName,
+        ).catchError((Object e) => _log('[AudioPlayerManager] ⚠️ $e'));
+      }
+      return;
+    }
+    final separator = text.indexOf(' - ');
+    _webArtist = separator > 0 ? text.substring(0, separator).trim() : null;
+    _webSong = separator > 0 ? text.substring(separator + 3).trim() : text;
+    _metadataController.add({'artist': _webArtist ?? '', 'title': _webSong!});
+    RadioPlayer.setCustomMetadata(
+      artist: _webArtist,
+      title: _webSong,
+    ).catchError((Object e) => _log('[AudioPlayerManager] ⚠️ $e'));
+  }
+
   void _startHealthChecks() {
+    _startWebTitles();
     // Al abrir una conexión se revisa de inmediato, para anotar qué
     // transmisión está recibiendo.
     unawaited(_checkServerHealth());
@@ -775,6 +898,7 @@ class AudioPlayerManager {
   }
 
   void _stopHealthChecks() {
+    _stopWebTitles();
     _healthTimer?.cancel();
     _healthTimer = null;
   }
