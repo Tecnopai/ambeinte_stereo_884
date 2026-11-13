@@ -17,7 +17,10 @@ dependencies:
   # --------------------------------------------------------------------------
   # MÓDULOS DE REPRODUCCIÓN DE AUDIO (Radio Streaming)
   # --------------------------------------------------------------------------
-  radio_player: ^2.0.0 # Componente principal para el streaming de radio.
+  # Copia local de radio_player 2.2.1 con más reserva de audio tras un corte
+  # (ver packages/radio_player/MODIFICACIONES.md).
+  radio_player:
+    path: packages/radio_player
   just_audio: ^0.10.5 # Reproductor de audio de alto rendimiento.
   audio_session: ^0.2.2 # Manejo de la sesión de audio (interrupciones, control de foco).
   volume_controller: ^3.4.0 # Control programático del volumen del dispositivo.

@@ -943,24 +943,18 @@ class AudioPlayerManager {
     // Evaluar salud actual de la red
     _evaluateBufferHealth();
 
-    // ESTRATEGIA 1: Buffer health degradation progresiva
-    if (_currentBufferHealth > 0) {
-      _currentBufferHealth--;
-      _log(
-        '[AudioPlayerManager] 🟡 Buffer Health reducido: $_currentBufferHealth/3',
-      );
+    if (_currentBufferHealth > 0) _currentBufferHealth--;
 
-      // Intentar recuperación natural con timeout adaptativo
-      final adaptiveTimeout = _calculateAdaptiveBufferingTimeout();
-      _startProgressiveBufferingCheck(adaptiveTimeout);
-    } else {
-      // ESTRATEGIA 2: Salud crítica - reconexión necesaria
-      _log(
-        '[AudioPlayerManager] 🔴 Buffer Health crítico - Reconexión necesaria',
-      );
-      _handleReconnection();
-    }
+    // Se deja que el reproductor recupere el audio por su cuenta: tras un
+    // corte junta una reserva antes de seguir (ver packages/radio_player).
+    // Reconectar antes de tiempo tira esa reserva y, con internet móvil
+    // malo, causa el ciclo "suena, se corta, suena". Solo se reconecta si
+    // lleva [_bufferingTimeout] sin poder cargar; si la conexión falla del
+    // todo, el reproductor queda en pausa y eso ya dispara la reconexión.
+    _startProgressiveBufferingCheck(_bufferingTimeout);
   }
+
+  static const Duration _bufferingTimeout = Duration(seconds: 30);
 
   /// Evalúa la salud del buffer basado en historial reciente
   void _evaluateBufferHealth() {
@@ -1007,7 +1001,8 @@ class AudioPlayerManager {
     _progressiveBufferingTimer?.cancel();
 
     int checkCount = 0;
-    const maxChecks = 3;
+    final maxChecks =
+        timeout.inSeconds ~/ _progressiveBufferingCheck.inSeconds;
 
     _progressiveBufferingTimer = Timer.periodic(_progressiveBufferingCheck, (
       timer,
@@ -1065,7 +1060,15 @@ class AudioPlayerManager {
       message = 'Reconectando...';
     }
 
-    _errorController.add('$message ($currentCheck/$maxChecks)');
+    // Un solo aviso por corte (antes salía uno cada 3 s).
+    if (currentCheck == 2) {
+      _errorController.add(
+        _isNetworkDegraded
+            ? 'Internet inestable: recuperando el audio…'
+            : 'Recuperando el audio…',
+      );
+    }
+    _log('[AudioPlayerManager] $message ($currentCheck/$maxChecks)');
   }
 
   /// Se ejecuta cuando el buffering se resuelve naturalmente
