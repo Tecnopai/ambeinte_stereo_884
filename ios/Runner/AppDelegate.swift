@@ -56,5 +56,14 @@ import UIKit
       channel.invokeMethod("remotePause", arguments: nil)
       return .success
     }
+
+    // Al reanudar desde la pantalla de bloqueo, radio_player reutiliza la
+    // conexión anterior al stream, que el servidor ya cerró tras la pausa, y
+    // queda "conectando" sin fin. Se avisa a Dart para que abra una conexión
+    // nueva y vigile la carga igual que con el botón de play de la app.
+    commandCenter.playCommand.addTarget { _ in
+      channel.invokeMethod("remotePlay", arguments: nil)
+      return .success
+    }
   }
 }

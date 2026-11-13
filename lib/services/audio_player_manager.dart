@@ -61,6 +61,12 @@ class AudioPlayerManager {
       _loadingController.add(false);
       _errorController.add('');
       _endAudioSession();
+    } else if (call.method == 'remotePlay') {
+      _log('[AudioPlayerManager] ▶️ Play desde pantalla de bloqueo');
+      _diag('Play desde pantalla de bloqueo');
+      // Mismo camino que el botón de play: conexión nueva al stream y
+      // vigilancia de la carga con reintentos.
+      if (!_isPausedForArticle) await play();
     }
   }
 
