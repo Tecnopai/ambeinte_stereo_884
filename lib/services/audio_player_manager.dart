@@ -1130,6 +1130,18 @@ class AudioPlayerManager {
     _loadingController.add(true);
     _isInBufferingState = true;
 
+    // iOS: el reproductor solo pasa a buffering cuando se le pidió reproducir.
+    // Si la app creía que el usuario había pausado, la reanudación vino de
+    // fuera (fin de una interrupción como una notificación o Siri, audífonos,
+    // Centro de control, CarPlay) y la app no se enteró. Se trata como un play
+    // para vigilar la carga; si no suena, se reconecta con conexión nueva.
+    // (En Android el reproductor puede reportar buffering estando en pausa.)
+    if (Platform.isIOS && !_userWantsPlayback && !_isPausedForArticle) {
+      _diag('Reanudación externa (iOS)');
+      _userWantsPlayback = true;
+      _endOutage();
+    }
+
     _log('[AudioPlayerManager] ⏳ Buffering inteligente activado');
 
     // Solo vigilar el buffering si el usuario quiere oír la radio. También en
