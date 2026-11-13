@@ -61,6 +61,9 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
   final TextEditingController _descriptionController = TextEditingController();
   String? _preview;
 
+  /// El registro técnico solo se muestra si el usuario lo pide.
+  bool _showDetails = false;
+
   @override
   void initState() {
     super.initState();
@@ -144,33 +147,47 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'Esto es lo que se enviará:',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
+            const SizedBox(height: 16),
+            // El detalle técnico queda oculto: quien quiera revisarlo antes
+            // de enviarlo, lo abre.
+            Center(
+              child: TextButton.icon(
+                onPressed: () => setState(() => _showDetails = !_showDetails),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.textSecondary,
+                ),
+                icon: Icon(
+                  _showDetails
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                ),
+                label: Text(
+                  _showDetails
+                      ? 'Ocultar lo que se enviará'
+                      : 'Ver lo que se enviará',
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceVariant,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: _preview == null
-                  ? const Center(child: CircularProgressIndicator())
-                  : SelectableText(
-                      _preview!,
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 11,
-                        color: AppColors.textMuted,
+            if (_showDetails) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: _preview == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : SelectableText(
+                        _preview!,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                          color: AppColors.textMuted,
+                        ),
                       ),
-                    ),
-            ),
+              ),
+            ],
           ],
         ),
       ),

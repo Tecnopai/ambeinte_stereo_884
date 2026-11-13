@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -142,10 +141,11 @@ class DiagnosticsLog {
   /// Anota un evento con fecha y hora.
   void add(String message) {
     _append(message);
-    if (kDebugMode) {
-      // ignore: avoid_print
-      print('[Diagnóstico] $message');
-    }
+    // También al registro del sistema (logcat), incluso en la versión
+    // publicada, para seguir las pruebas en vivo con el teléfono conectado por
+    // cable. Ninguna otra app puede leerlo y no se envía a ningún lado.
+    // ignore: avoid_print
+    print('[Diagnóstico] $message');
     // Si el archivo aún no cargó, se escribe cuando termine init().
     if (_ready != null) _scheduleWrite();
   }

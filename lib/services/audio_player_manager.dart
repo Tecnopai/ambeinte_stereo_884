@@ -283,8 +283,14 @@ class AudioPlayerManager {
         .doc(_firebaseStreamConfigPath)
         .snapshots()
         .listen((doc) {
-          final value = doc.data()?['aviso'];
-          final text = value is String ? value.trim() : '';
+          // Se acepta el nombre del campo con espacios o mayúsculas
+          // ("aviso ", "Aviso"): en la consola de Firebase no se notan.
+          Object? value;
+          doc.data()?.forEach((key, v) {
+            if (key.trim().toLowerCase() == 'aviso') value = v;
+          });
+          final found = value;
+          final text = found is String ? found.trim() : '';
           if (text == _noticeController.value) return;
           _noticeController.add(text);
           if (text.isNotEmpty) _diag('Aviso de la emisora: $text');
