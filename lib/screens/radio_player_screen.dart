@@ -13,8 +13,11 @@ import 'report_problem_screen.dart';
 /// Muestra controles de reproducción, animaciones visuales y estado de conexión.
 /// Incluye disco animado, ondas de sonido y control de volumen.
 class RadioPlayerScreen extends StatefulWidget {
+  /// Abre la pestaña Podcast (se ofrece cuando la emisora está caída).
+  final VoidCallback? onOpenPodcasts;
+
   /// Constructor de RadioPlayerScreen.
-  const RadioPlayerScreen({super.key});
+  const RadioPlayerScreen({super.key, this.onOpenPodcasts});
 
   @override
   State<RadioPlayerScreen> createState() => _RadioPlayerScreenState();
@@ -245,11 +248,65 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
         width: double.infinity,
         height: double.infinity,
         decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
-        // ✅ Layout diferente para landscape vs portrait
-        child: isLandscape
-            ? _buildLandscapeLayout(responsive)
-            : _buildPortraitLayout(responsive),
+        child: Column(
+          children: [
+            _buildNotices(),
+            // ✅ Layout diferente para landscape vs portrait
+            Expanded(
+              child: isLandscape
+                  ? _buildLandscapeLayout(responsive)
+                  : _buildPortraitLayout(responsive),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  /// Avisos fijos arriba del reproductor: el aviso que el equipo escribe en
+  /// Firebase y el estado de una falla larga de la emisora.
+  Widget _buildNotices() {
+    return StreamBuilder<String>(
+      stream: _audioManager.noticeStream,
+      initialData: _audioManager.notice,
+      builder: (context, noticeSnap) {
+        return StreamBuilder<String>(
+          stream: _audioManager.outageStream,
+          initialData: _audioManager.outage,
+          builder: (context, outageSnap) {
+            final notice = noticeSnap.data ?? '';
+            final outage = outageSnap.data ?? '';
+            if (notice.isEmpty && outage.isEmpty) {
+              return const SizedBox.shrink();
+            }
+            return SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Column(
+                  children: [
+                    if (notice.isNotEmpty)
+                      _NoticeCard(icon: Icons.campaign_rounded, text: notice),
+                    if (notice.isNotEmpty && outage.isNotEmpty)
+                      const SizedBox(height: 8),
+                    if (outage.isNotEmpty)
+                      _NoticeCard(
+                        icon: Icons.portable_wifi_off_rounded,
+                        text: outage,
+                        actionLabel:
+                            widget.onOpenPodcasts == null ||
+                                _audioManager.outageIsNoInternet
+                            ? null
+                            : 'Mientras tanto, escucha nuestros podcasts',
+                        onAction: widget.onOpenPodcasts,
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -805,6 +862,72 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                     size: iconSize,
                   ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tarjeta de aviso sobre el fondo verde del reproductor.
+class _NoticeCard extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const _NoticeCard({
+    required this.icon,
+    required this.text,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, color: Colors.white, size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (actionLabel != null && onAction != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 26, top: 4),
+                child: TextButton.icon(
+                  onPressed: onAction,
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  icon: const Icon(Icons.podcasts, size: 18),
+                  label: Text(actionLabel!),
+                ),
+              ),
+          ],
         ),
       ),
     );

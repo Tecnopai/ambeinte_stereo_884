@@ -48,14 +48,14 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
 
     // Inicialización de las pantallas (cada una obtiene el singleton AudioManager)
-    _screens = const [
-      RadioPlayerScreen(),
+    _screens = [
+      RadioPlayerScreen(onOpenPodcasts: () => _onTabTapped(2)),
       // Nota: NewsScreen requiere el audioManager si se inicializa aquí.
       // Se asume que NewsScreen también obtiene su manager internamente,
       // o se ajustaría para recibirlo, pero mantenemos la estructura sin parámetro.
-      NewsScreen(),
-      PodcastsScreen(),
-      AboutScreen(),
+      const NewsScreen(),
+      const PodcastsScreen(),
+      const AboutScreen(),
     ];
 
     // Definición de los elementos de navegación

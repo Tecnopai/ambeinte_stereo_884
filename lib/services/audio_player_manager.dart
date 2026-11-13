@@ -52,6 +52,8 @@ class AudioPlayerManager {
       _attemptWatchdog?.cancel();
       _isReconnecting = false;
       _reconnectAttempts = 0;
+      _endOutage();
+      _stopHealthChecks();
       _progressiveBufferingTimer?.cancel();
       _progressiveBufferingTimer = null;
       _isInBufferingState = false;
@@ -68,6 +70,15 @@ class AudioPlayerManager {
   static const bool _autoPlay = true;
   static const Duration _playTimeout = Duration(seconds: 15);
   static const Duration _initTimeout = Duration(seconds: 10);
+
+  /// Tras los intentos rápidos se sigue intentando, más espaciado, durante
+  /// este tiempo antes de rendirse (una caída de la emisora puede durar
+  /// varios minutos).
+  static const Duration _slowRetryInterval = Duration(seconds: 30);
+  static const Duration _maxOutage = Duration(minutes: 15);
+
+  /// Cada cuánto se consulta el estado público del servidor mientras suena.
+  static const Duration _healthInterval = Duration(minutes: 1);
 
   // ========== BUFFER INTELIGENTE - CONSTANTES ==========
   static const Duration _progressiveBufferingCheck = Duration(seconds: 3);
@@ -152,6 +163,7 @@ class AudioPlayerManager {
 
   /// Tipo de red actual (wifi, datos móviles...), para reconectar al cambiar.
   String? _lastNetwork;
+  DateTime? _lastNetworkChangeAt;
 
   /// Se agotaron los intentos de reconexión: si la red vuelve o cambia, se
   /// reintenta solo sin que el usuario tenga que tocar nada.
@@ -161,6 +173,36 @@ class AudioPlayerManager {
   /// después de una pausa se configura de nuevo para abrir una conexión
   /// nueva y escuchar la señal en vivo, no la que quedó en el búfer.
   bool _stationIsFresh = false;
+
+  // ========== CAÍDAS DE LA EMISORA ==========
+
+  /// Cuándo empezó la falla actual (null = sin falla).
+  DateTime? _outageStart;
+
+  /// Ya pasó la espera larga: el próximo intento lento se hace de verdad.
+  bool _slowRetryDue = false;
+
+  /// El servidor responde pero no está transmitiendo (no existe el punto de
+  /// montaje del stream).
+  bool _offAir = false;
+
+  /// Dónde está la falla actual, para mostrar el mensaje correcto.
+  _OutageCause _cause = _OutageCause.unknown;
+
+  Timer? _healthTimer;
+  bool _healthCheckInFlight = false;
+
+  /// Hora de inicio de la transmisión que recibe la conexión actual, según
+  /// el servidor. Si cambia, la transmisión se reinició y la conexión vieja
+  /// puede quedar sonando mal (ruido): se abre una nueva.
+  String? _connectedStreamStart;
+  static const String _offAirMarker = '<fuera del aire>';
+
+  final BehaviorSubject<String> _outageController =
+      BehaviorSubject<String>.seeded('');
+  final BehaviorSubject<String> _noticeController =
+      BehaviorSubject<String>.seeded('');
+  StreamSubscription? _noticeSubscription;
 
   // Subscription para los streams del player
   StreamSubscription? _playbackStateSubscription;
@@ -173,6 +215,21 @@ class AudioPlayerManager {
   Stream<String> get errorStream => _errorController.stream;
   Stream<double> get volumeStream => _volumeController.stream;
   Stream<Map<String, String>> get metadataStream => _metadataController.stream;
+
+  /// Mensaje fijo mientras la radio no logra sonar por una falla larga
+  /// ('' = sin falla).
+  Stream<String> get outageStream => _outageController.stream;
+  String get outage => _outageController.value;
+
+  /// La falla actual es que el teléfono no tiene internet (entonces no tiene
+  /// sentido sugerir los podcasts, que también lo necesitan).
+  bool get outageIsNoInternet =>
+      _lastNetwork == _noNetwork || _cause == _OutageCause.noInternet;
+
+  /// Aviso escrito por el equipo en Firebase (`app_config/streaming`, campo
+  /// `aviso`), p. ej. "Estamos presentando fallas técnicas". '' = sin aviso.
+  Stream<String> get noticeStream => _noticeController.stream;
+  String get notice => _noticeController.value;
 
   bool get isPlaying => _playingController.value;
   bool get isLoading => _loadingController.value;
@@ -219,6 +276,21 @@ class AudioPlayerManager {
     _diag('URL del stream: por defecto ($_streamUrl)');
   }
 
+  /// Escucha el campo `aviso` de `app_config/streaming` en tiempo real, para
+  /// que el equipo pueda avisar de una falla sin publicar una actualización.
+  void _listenForNotice() {
+    _noticeSubscription ??= _firestore
+        .doc(_firebaseStreamConfigPath)
+        .snapshots()
+        .listen((doc) {
+          final value = doc.data()?['aviso'];
+          final text = value is String ? value.trim() : '';
+          if (text == _noticeController.value) return;
+          _noticeController.add(text);
+          if (text.isNotEmpty) _diag('Aviso de la emisora: $text');
+        }, onError: (Object e) => _log('[AudioPlayerManager] ⚠️ Aviso: $e'));
+  }
+
   /// Aplica [value] como URL del stream si es una URL http/https válida.
   bool _applyStreamUrl(Object? value, String origen) {
     if (value is! String) return false;
@@ -229,7 +301,9 @@ class AudioPlayerManager {
         (uri.scheme == 'https' || uri.scheme == 'http') &&
         uri.host.isNotEmpty;
     if (!isValid) {
-      _log('[AudioPlayerManager] ⚠️ URL inválida en Firebase ($origen): "$url"');
+      _log(
+        '[AudioPlayerManager] ⚠️ URL inválida en Firebase ($origen): "$url"',
+      );
       return false;
     }
     _streamUrl = url;
@@ -261,6 +335,7 @@ class AudioPlayerManager {
 
       _setupPlayerListeners();
       _setupConnectivityListener();
+      _listenForNotice();
 
       _isInitialized = true;
       _isInitializing = false;
@@ -397,6 +472,8 @@ class AudioPlayerManager {
     _userWantsPlayback = true;
     _errorController.add('');
     _isInBufferingState = false;
+    _endOutage();
+    _startHealthChecks();
 
     // Cancelar todos los timers de buffering
     _progressiveBufferingTimer?.cancel();
@@ -456,11 +533,11 @@ class AudioPlayerManager {
     _iosMetadataTimer = null;
   }
 
-  /// Lee el título actual desde el status-json.xsl de Icecast y lo envía al
-  /// reproductor nativo, que actualiza la pantalla de bloqueo y emite el
-  /// evento en metadataStream.
-  Future<void> _pollStreamTitle() async {
-    if (!isPlaying) return;
+  /// Consulta el estado público del servidor Icecast (status-json.xsl).
+  /// Devuelve null si el servidor no respondió; si respondió, `mount` es el
+  /// punto de montaje del stream, o null si no está transmitiendo.
+  /// No envía ningún dato del usuario.
+  Future<({Map? mount})?> _fetchServerStatus() async {
     try {
       final streamUri = Uri.parse(_streamUrl);
       final statusUri = Uri(
@@ -472,25 +549,51 @@ class AudioPlayerManager {
       final response = await http
           .get(statusUri)
           .timeout(const Duration(seconds: 5));
-      if (response.statusCode != 200) return;
+      if (response.statusCode != 200) return null;
 
       final icestats =
           (json.decode(response.body) as Map<String, dynamic>)['icestats'];
-      final source = icestats is Map ? icestats['source'] : null;
+      if (icestats is! Map) return null;
+      final source = icestats['source'];
+
+      bool matches(Map s) =>
+          (s['listenurl'] as String? ?? '').endsWith(streamUri.path);
 
       Map? mount;
       if (source is Map) {
-        mount = source;
-      } else if (source is List && source.isNotEmpty) {
+        if (matches(source)) mount = source;
+      } else if (source is List) {
         for (final s in source) {
-          if (s is Map &&
-              (s['listenurl'] as String? ?? '').endsWith(streamUri.path)) {
+          if (s is Map && matches(s)) {
             mount = s;
             break;
           }
         }
-        mount ??= source.first is Map ? source.first as Map : null;
       }
+      // Tras un reinicio, el servidor puede publicar el punto de montaje
+      // como relleno ("dummy", sin hora de inicio) mientras la emisora aún no
+      // envía su señal. Quien se conecta ahí oye ruido: cuenta como fuera
+      // del aire.
+      if (mount != null &&
+          (mount.containsKey('dummy') ||
+              (mount['stream_start'] == null &&
+                  mount['stream_start_iso8601'] == null))) {
+        mount = null;
+      }
+      return (mount: mount);
+    } catch (e) {
+      _log('[AudioPlayerManager] ⚠️ Estado del servidor: $e');
+      return null;
+    }
+  }
+
+  /// Lee el título actual desde el status-json.xsl de Icecast y lo envía al
+  /// reproductor nativo, que actualiza la pantalla de bloqueo y emite el
+  /// evento en metadataStream.
+  Future<void> _pollStreamTitle() async {
+    if (!isPlaying) return;
+    try {
+      final mount = (await _fetchServerStatus())?.mount;
 
       final streamTitle = (mount?['title'] ?? mount?['yp_currently_playing'])
           ?.toString()
@@ -552,11 +655,238 @@ class AudioPlayerManager {
 
     _playingController.add(false);
     _loadingController.add(false);
-    if (!_isPausedForArticle) {
-      // Pausa del usuario o del sistema: no reconectar.
-      _userWantsPlayback = false;
-      _endAudioSession();
+    if (_isPausedForArticle) return;
+
+    // playing → paused sin pasar por pause() de la app: puede ser una pausa
+    // desde la notificación o los audífonos, o un corte de red (al apagar el
+    // wifi el reproductor falla y queda en pausa sin pasar por "buffering").
+    // El reproductor no avisa cuál fue, así que se espera un momento: si en
+    // ese lapso cambió o se perdió la red, fue un corte y se reconecta.
+    if (_userWantsPlayback && previous == PlaybackState.playing) {
+      final pausedAt = DateTime.now();
+      Timer(const Duration(seconds: 3), () {
+        if (_lastPlaybackState != PlaybackState.paused ||
+            !_userWantsPlayback ||
+            _isReconnecting ||
+            _isPausedForArticle) {
+          return;
+        }
+        final changedAt = _lastNetworkChangeAt;
+        final networkChanged =
+            changedAt != null &&
+            changedAt.isAfter(pausedAt.subtract(const Duration(seconds: 5)));
+        if (networkChanged || _lastNetwork == _noNetwork) {
+          _diag('La radio se detuvo por un cambio de red');
+          _scheduleReconnectionWithDelay();
+        } else {
+          _userPausedExternally();
+        }
+      });
+      return;
     }
+
+    _userPausedExternally();
+  }
+
+  /// Pausa del usuario o del sistema (notificación, audífonos): no reconectar.
+  void _userPausedExternally() {
+    _userWantsPlayback = false;
+    _stopHealthChecks();
+    _endAudioSession();
+  }
+
+  // ========== ESTADO DEL SERVIDOR ==========
+
+  void _startHealthChecks() {
+    // Al abrir una conexión se revisa de inmediato, para anotar qué
+    // transmisión está recibiendo.
+    unawaited(_checkServerHealth());
+    _healthTimer ??= Timer.periodic(
+      _healthInterval,
+      (_) => _checkServerHealth(),
+    );
+  }
+
+  void _stopHealthChecks() {
+    _healthTimer?.cancel();
+    _healthTimer = null;
+  }
+
+  /// Revisa si la emisora está al aire y si la transmisión se reinició desde
+  /// que se abrió la conexión actual. En ese caso la conexión vieja puede
+  /// seguir "sonando" con ruido o silencio aunque el servidor ya esté bien,
+  /// así que se abre una nueva.
+  Future<void> _checkServerHealth() async {
+    if (_healthCheckInFlight) return;
+    if (!_userWantsPlayback || _isPausedForArticle) {
+      _stopHealthChecks();
+      return;
+    }
+    _healthCheckInFlight = true;
+    try {
+      final status = await _fetchServerStatus();
+      if (status == null) return; // el servidor no respondió: no se concluye
+      final mount = status.mount;
+      _setOffAir(mount == null);
+
+      final start = mount == null
+          ? _offAirMarker
+          : '${mount['stream_start_iso8601'] ?? mount['stream_start'] ?? ''}';
+
+      // Solo se compara con una conexión que esté sonando.
+      if (_lastPlaybackState != PlaybackState.playing || _isReconnecting) {
+        return;
+      }
+
+      if (mount == null) {
+        // Suena algo, pero el servidor dice que la emisora no transmite: es
+        // relleno o ruido. Se detiene el audio y se espera a que vuelva.
+        _diag('Sonando sin transmisión real en el servidor; se detiene');
+        _connectedStreamStart = null;
+        _reconnectAttempts = _maxReconnectAttempts;
+        _cause = _OutageCause.offAir;
+        _waitForSlowRetry();
+        return;
+      }
+
+      final known = _connectedStreamStart;
+      if (known == null) {
+        _connectedStreamStart = start;
+        return;
+      }
+      if (known == start) return;
+
+      _diag('La transmisión se reinició en el servidor; conexión nueva');
+      await _refreshConnection();
+    } finally {
+      _healthCheckInFlight = false;
+    }
+  }
+
+  void _setOffAir(bool value) {
+    if (_offAir == value) return;
+    _offAir = value;
+    _diag(
+      value
+          ? 'Servidor: la emisora no está transmitiendo'
+          : 'Servidor: emisora al aire',
+    );
+    if (_outageController.value.isNotEmpty) {
+      _outageController.add(_outageMessage());
+    }
+  }
+
+  /// Abre una conexión nueva sin que el usuario note más que un corte breve.
+  Future<void> _refreshConnection() async {
+    if (!_userWantsPlayback || _isPausedForArticle || _isReconnecting) return;
+    // Mientras dure, los cambios de estado del reproductor no se toman como
+    // una pausa del usuario.
+    _isReconnecting = true;
+    try {
+      await _setStation().timeout(const Duration(seconds: 10));
+      _stationIsFresh = false;
+      await RadioPlayer.play().timeout(_playTimeout);
+    } catch (e) {
+      _diag('Error al abrir conexión nueva: $e');
+    }
+    _attemptWatchdog?.cancel();
+    _attemptWatchdog = Timer(_playTimeout, () {
+      if (!_isReconnecting) return;
+      _isReconnecting = false;
+      _lastReconnectAttempt = null;
+      _handleReconnection();
+    });
+  }
+
+  /// Mensaje según dónde está la falla, para no culpar a la emisora cuando
+  /// el problema es la conexión del teléfono (ni al revés).
+  String _outageMessage() {
+    switch (_lastNetwork == _noNetwork ? _OutageCause.noInternet : _cause) {
+      case _OutageCause.noInternet:
+        return 'Tu teléfono no tiene conexión a internet. '
+            'Revisa el wifi o los datos; la radio vuelve sola cuando '
+            'regrese la conexión.';
+      case _OutageCause.weakConnection:
+        return 'La emisora está al aire, pero tu conexión a internet está '
+            'lenta o inestable. Seguimos intentando; puedes bloquear el '
+            'teléfono y la radio vuelve sola.';
+      case _OutageCause.offAir:
+        return 'La emisora no está transmitiendo en este momento. '
+            'Puedes bloquear el teléfono: la radio vuelve sola apenas '
+            'regrese la señal.';
+      case _OutageCause.serverDown:
+        return 'El servidor de la emisora no responde en este momento. '
+            'Puedes bloquear el teléfono: la radio vuelve sola apenas '
+            'se restablezca.';
+      case _OutageCause.unknown:
+        return 'Reconectando con la emisora…';
+    }
+  }
+
+  /// Averigua dónde está la falla:
+  ///   - el servidor responde y transmite → la conexión del teléfono;
+  ///   - el servidor responde sin transmitir → la emisora está fuera del aire;
+  ///   - el servidor no responde pero internet sí → el servidor;
+  ///   - nada responde → el teléfono no tiene internet.
+  Future<void> _diagnoseOutage() async {
+    final status = await _fetchServerStatus();
+    _OutageCause cause;
+    if (status != null) {
+      _setOffAir(status.mount == null);
+      cause = _offAir ? _OutageCause.offAir : _OutageCause.weakConnection;
+    } else {
+      cause = await _hasInternet()
+          ? _OutageCause.serverDown
+          : _OutageCause.noInternet;
+    }
+    if (cause != _cause) {
+      _cause = cause;
+      _diag('Causa de la falla: ${cause.name}');
+    }
+    if (_outageController.value.isNotEmpty) {
+      _outageController.add(_outageMessage());
+    }
+  }
+
+  /// Muestra el aviso fijo durante los intentos rápidos solo si la causa es
+  /// clara. Una conexión lenta puede ser un corte de segundos: ese aviso
+  /// espera a que se agoten los intentos rápidos.
+  Future<void> _showEarlyDiagnosis() async {
+    await _diagnoseOutage();
+    // _outageStart se borra en cuanto la radio vuelve a sonar de verdad
+    // (_handlePlayingState). No se mira el estado "playing" del reproductor:
+    // al cortarse la red sigue reportándolo unos segundos con el audio que
+    // le quedaba en el búfer.
+    final stillFailing =
+        _userWantsPlayback && !_isPausedForArticle && _outageStart != null;
+    if (!stillFailing) return;
+    final cause = _lastNetwork == _noNetwork ? _OutageCause.noInternet : _cause;
+    if (cause == _OutageCause.noInternet ||
+        cause == _OutageCause.offAir ||
+        cause == _OutageCause.serverDown) {
+      _outageController.add(_outageMessage());
+    }
+  }
+
+  /// Comprueba si hay internet con la misma dirección que usa Android para
+  /// detectar conexión (responde vacío; no se envía ningún dato).
+  Future<bool> _hasInternet() async {
+    try {
+      final response = await http
+          .get(Uri.parse('https://clients3.google.com/generate_204'))
+          .timeout(const Duration(seconds: 5));
+      return response.statusCode == 204 || response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Termina el modo de falla larga (la radio sonó, o el usuario pausó).
+  void _endOutage() {
+    _outageStart = null;
+    _cause = _OutageCause.unknown;
+    _slowRetryDue = false;
+    if (_outageController.value.isNotEmpty) _outageController.add('');
   }
 
   /// Maneja el estado de buffering con inteligencia
@@ -788,6 +1118,7 @@ class AudioPlayerManager {
       logoAssetPath: 'assets/images/icon.png',
     );
     _stationIsFresh = true;
+    _connectedStreamStart = null;
   }
 
   /// Maneja la lógica de reconexión con inteligencia
@@ -826,8 +1157,21 @@ class AudioPlayerManager {
       return;
     }
 
-    if (_reconnectAttempts >= _maxReconnectAttempts) {
+    // Pasados los intentos rápidos, se sigue intentando cada 30 s durante
+    // un rato, con un mensaje fijo en pantalla, antes de rendirse.
+    final outage = _outageStart == null
+        ? Duration.zero
+        : DateTime.now().difference(_outageStart!);
+    if (_reconnectAttempts >= _maxReconnectAttempts && outage < _maxOutage) {
+      if (!_slowRetryDue) {
+        _waitForSlowRetry();
+        return;
+      }
+      _slowRetryDue = false;
+    } else if (_reconnectAttempts >= _maxReconnectAttempts) {
       _log('[AudioPlayerManager] ❌ Máximo de reconexiones alcanzado');
+      _endOutage();
+      _stopHealthChecks();
       _diag(
         'Sin conexión tras $_maxReconnectAttempts intentos; '
         'se reintentará si cambia la red',
@@ -863,7 +1207,22 @@ class AudioPlayerManager {
     _reconnectAttempts++;
     _totalReconnections++;
     _lastReconnectAttempt = DateTime.now();
+    _outageStart ??= DateTime.now();
     _loadingController.add(true);
+
+    // En el primer intento se averigua la causa, para avisar enseguida si
+    // es clara (sin internet, emisora fuera del aire, servidor caído).
+    if (_reconnectAttempts == 1) unawaited(_showEarlyDiagnosis());
+
+    // Intentos lentos: el mensaje fijo ya informa; sin avisos repetidos.
+    if (_reconnectAttempts > _maxReconnectAttempts) {
+      _diag(
+        'Reintento tras falla larga (red: ${_lastNetwork ?? 'desconocida'})',
+      );
+      _reconnectTimer?.cancel();
+      _reconnectTimer = Timer(Duration.zero, () => _attemptConnection());
+      return;
+    }
 
     // Mensaje inteligente basado en salud de red
     String userMessage;
@@ -895,36 +1254,69 @@ class AudioPlayerManager {
         : _reconnectDelay;
 
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(delay, () async {
-      if (!_userWantsPlayback || _isPausedForArticle) {
-        _isReconnecting = false;
+    _reconnectTimer = Timer(delay, _attemptConnection);
+  }
+
+  /// Un intento de reconexión: conexión nueva al stream y play.
+  Future<void> _attemptConnection() async {
+    if (!_userWantsPlayback || _isPausedForArticle) {
+      _isReconnecting = false;
+      return;
+    }
+
+    try {
+      _log('[AudioPlayerManager] 🔄 Abriendo conexión nueva al stream...');
+      await _setStation().timeout(const Duration(seconds: 10));
+      await RadioPlayer.play().timeout(_playTimeout);
+    } catch (e) {
+      _log('[AudioPlayerManager] ❌ Error en reconexión: $e');
+      _diag('Error al reconectar: $e');
+    }
+
+    // El intento solo cuenta como exitoso cuando el reproductor llega a
+    // "playing" (_handlePlayingState). Si no suena a tiempo, se pasa al
+    // siguiente intento en vez de quedarse cargando para siempre.
+    _attemptWatchdog?.cancel();
+    _attemptWatchdog = Timer(_playTimeout, () {
+      if (!_isReconnecting) return;
+      _log('[AudioPlayerManager] ⏱️ El intento no logró sonar a tiempo');
+      _diag(
+        'Intento $_reconnectAttempts sin audio tras '
+        '${_playTimeout.inSeconds} s',
+      );
+      _isReconnecting = false;
+      _lastReconnectAttempt = null;
+      _handleReconnection();
+    });
+  }
+
+  /// Espera [_slowRetryInterval] antes del siguiente intento, con el
+  /// reproductor detenido (para no gastar datos) y un mensaje fijo.
+  void _waitForSlowRetry() {
+    _outageStart ??= DateTime.now();
+    // Mientras se espera, los cambios de estado del reproductor no se toman
+    // como una pausa del usuario.
+    _isReconnecting = true;
+    _attemptWatchdog?.cancel();
+    _errorController.add('');
+    _outageController.add(_outageMessage());
+    _loadingController.add(false);
+    _playingController.add(false);
+    RadioPlayer.pause().catchError((_) {});
+    unawaited(_diagnoseOutage());
+
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(_slowRetryInterval, () async {
+      // Si el servidor dice que la emisora no transmite, se sigue esperando
+      // sin intentar conectar.
+      await _diagnoseOutage();
+      if (!_userWantsPlayback || _isPausedForArticle || !_isReconnecting) {
         return;
       }
-
-      try {
-        _log('[AudioPlayerManager] 🔄 Abriendo conexión nueva al stream...');
-        await _setStation().timeout(const Duration(seconds: 10));
-        await RadioPlayer.play().timeout(_playTimeout);
-      } catch (e) {
-        _log('[AudioPlayerManager] ❌ Error en reconexión: $e');
-        _diag('Error al reconectar: $e');
-      }
-
-      // El intento solo cuenta como exitoso cuando el reproductor llega a
-      // "playing" (_handlePlayingState). Si no suena a tiempo, se pasa al
-      // siguiente intento en vez de quedarse cargando para siempre.
-      _attemptWatchdog?.cancel();
-      _attemptWatchdog = Timer(_playTimeout, () {
-        if (!_isReconnecting) return;
-        _log('[AudioPlayerManager] ⏱️ El intento no logró sonar a tiempo');
-        _diag(
-          'Intento $_reconnectAttempts sin audio tras '
-          '${_playTimeout.inSeconds} s',
-        );
-        _isReconnecting = false;
-        _lastReconnectAttempt = null;
-        _handleReconnection();
-      });
+      _isReconnecting = false;
+      _lastReconnectAttempt = null;
+      _slowRetryDue = !_offAir;
+      _handleReconnection();
     });
   }
 
@@ -967,9 +1359,21 @@ class AudioPlayerManager {
     final previous = _lastNetwork;
     if (network == previous) return;
     _lastNetwork = network;
+    _lastNetworkChangeAt = DateTime.now();
 
     _log('[AudioPlayerManager] 📶 Red: ${previous ?? '-'} → $network');
     _diag('Red: ${previous ?? 'inicio'} → $network');
+
+    // Se fue la red con la radio encendida: se avisa de inmediato (el audio
+    // en búfer puede seguir sonando unos segundos).
+    if (network == _noNetwork &&
+        previous != null &&
+        _userWantsPlayback &&
+        !_isPausedForArticle) {
+      _outageStart ??= DateTime.now();
+      _cause = _OutageCause.noInternet;
+      _outageController.add(_outageMessage());
+    }
 
     // Primera lectura, o se fue la red: se espera a que vuelva.
     if (previous == null || network == _noNetwork) return;
@@ -1060,6 +1464,19 @@ class AudioPlayerManager {
     _log('[AudioPlayerManager] 🟢 App resumida/foreground');
     _diag('App en primer plano');
     _isAppInBackground = false;
+
+    // Si la radio estaba esperando el siguiente reintento lento, al volver a
+    // la app se intenta de inmediato en vez de hacer esperar al usuario.
+    if (_outageController.value.isNotEmpty &&
+        _userWantsPlayback &&
+        !_isPausedForArticle &&
+        _attemptWatchdog?.isActive != true) {
+      _reconnectTimer?.cancel();
+      _isReconnecting = false;
+      _lastReconnectAttempt = null;
+      _slowRetryDue = true;
+      _handleReconnection();
+    }
   }
 
   // ========== MÉTODOS PARA CONTROL DE ARTÍCULOS ==========
@@ -1130,6 +1547,7 @@ class AudioPlayerManager {
       _isReconnecting = false;
       _reconnectAttempts = 0;
       _lastReconnectAttempt = null;
+      _endOutage();
       _loadingController.add(true);
       _errorController.add('');
 
@@ -1180,6 +1598,8 @@ class AudioPlayerManager {
       _attemptWatchdog?.cancel();
       _isReconnecting = false;
       _reconnectAttempts = 0;
+      _endOutage();
+      _stopHealthChecks();
 
       await RadioPlayer.pause();
       _loadingController.add(false);
@@ -1226,10 +1646,14 @@ class AudioPlayerManager {
     _reconnectTimer?.cancel();
     _deferredReconnectTimer?.cancel();
     _attemptWatchdog?.cancel();
+    _stopHealthChecks();
     await _playbackStateSubscription?.cancel();
     await _metadataSubscription?.cancel();
     await _connectivitySubscription?.cancel();
+    await _noticeSubscription?.cancel();
 
+    await _outageController.close();
+    await _noticeController.close();
     await _playingController.close();
     await _loadingController.close();
     await _errorController.close();
@@ -1301,3 +1725,6 @@ class AudioPlayerManager {
     };
   }
 }
+
+/// Dónde está una falla larga de la radio.
+enum _OutageCause { unknown, noInternet, weakConnection, offAir, serverDown }
