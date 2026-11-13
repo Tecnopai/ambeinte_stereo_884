@@ -27,6 +27,13 @@ import UIKit
       binaryMessenger: registrar.messenger()
     )
     channel.setMethodCallHandler { call, result in
+      // Tras una interrupción sin aviso de fin (típico de Siri): indica si otro
+      // audio del sistema sigue sonando, para saber cuándo reanudar la radio.
+      if call.method == "isOtherAudioPlaying" {
+        let session = AVAudioSession.sharedInstance()
+        result(session.isOtherAudioPlaying || session.secondaryAudioShouldBeSilencedHint)
+        return
+      }
       guard call.method == "setExclusivePlayback" else {
         result(FlutterMethodNotImplemented)
         return
@@ -64,6 +71,32 @@ import UIKit
     commandCenter.playCommand.addTarget { _ in
       channel.invokeMethod("remotePlay", arguments: nil)
       return .success
+    }
+
+    // Interrupciones del sistema (Siri, llamadas, notas de voz, alarmas): iOS
+    // pausa el audio y al terminar solo lo reanuda si marca "shouldResume", lo
+    // que Siri a veces no hace. Se avisa a Dart, que decide reanudar la radio.
+    NotificationCenter.default.addObserver(
+      forName: AVAudioSession.interruptionNotification,
+      object: AVAudioSession.sharedInstance(),
+      queue: .main
+    ) { notification in
+      guard let info = notification.userInfo,
+            let typeValue = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+            let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+        return
+      }
+      switch type {
+      case .began:
+        channel.invokeMethod("interruptionBegan", arguments: nil)
+      case .ended:
+        let optionsValue = info[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+        let shouldResume = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+          .contains(.shouldResume)
+        channel.invokeMethod("interruptionEnded", arguments: ["shouldResume": shouldResume])
+      @unknown default:
+        break
+      }
     }
   }
 }

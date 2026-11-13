@@ -47,6 +47,7 @@ class AudioPlayerManager {
       _diag('Pausa desde pantalla de bloqueo');
       // Pausa del usuario: no reconectar.
       _userWantsPlayback = false;
+      _resumeAfterInterruption = false;
       _reconnectTimer?.cancel();
       _deferredReconnectTimer?.cancel();
       _attemptWatchdog?.cancel();
@@ -67,7 +68,83 @@ class AudioPlayerManager {
       // Mismo camino que el botón de play: conexión nueva al stream y
       // vigilancia de la carga con reintentos.
       if (!_isPausedForArticle) await play();
+    } else if (call.method == 'interruptionBegan') {
+      // Siri, llamada, nota de voz...: la pausa que viene no es del usuario.
+      _interruptionActive = true;
+      _resumeAfterInterruption =
+          _userWantsPlayback || _lastPlaybackState == PlaybackState.playing;
+      _diag('Interrupción del sistema (Siri, llamada...)');
+      if (_resumeAfterInterruption) _watchInterruptionEnd();
+    } else if (call.method == 'interruptionEnded') {
+      final args = call.arguments;
+      final shouldResume = args is Map && args['shouldResume'] == true;
+      _diag('Fin de la interrupción (iOS sugiere reanudar: $shouldResume)');
+      await _resumeFromInterruption();
     }
+  }
+
+  /// iOS: hay una interrupción del sistema en curso (Siri, llamada...).
+  bool _interruptionActive = false;
+
+  /// iOS: la radio sonaba cuando empezó la interrupción.
+  bool _resumeAfterInterruption = false;
+
+  Timer? _interruptionWatch;
+
+  /// iOS no garantiza el aviso de fin de una interrupción (Siri a veces no lo
+  /// envía). Mientras dure, se revisa cada segundo si otro audio del sistema
+  /// sigue sonando; cuando ya no, se reanuda. Tras 5 minutos se deja de
+  /// esperar para no reanudar por sorpresa mucho después.
+  void _watchInterruptionEnd() {
+    _interruptionWatch?.cancel();
+    final startedAt = DateTime.now();
+    var quietChecks = 0;
+    _interruptionWatch = Timer.periodic(const Duration(seconds: 1), (
+      timer,
+    ) async {
+      if (!_interruptionActive || !_resumeAfterInterruption) {
+        timer.cancel();
+        return;
+      }
+      if (DateTime.now().difference(startedAt) > const Duration(minutes: 5)) {
+        timer.cancel();
+        _interruptionActive = false;
+        _resumeAfterInterruption = false;
+        _diag('Interrupción larga: no se reanuda automáticamente');
+        _userPausedExternally();
+        return;
+      }
+      bool otherAudio;
+      try {
+        otherAudio =
+            await _audioSessionChannel.invokeMethod<bool>(
+              'isOtherAudioPlaying',
+            ) ??
+            false;
+      } catch (_) {
+        otherAudio = false;
+      }
+      // Siri interrumpe por etapas (escuchar, responder, cerrar) con
+      // silencios cortos entre ellas: se esperan 3 s seguidos sin otro audio
+      // para no reanudar en medio y que Siri vuelva a cortar la radio.
+      quietChecks = otherAudio ? 0 : quietChecks + 1;
+      if (quietChecks >= 3) {
+        timer.cancel();
+        _diag('Fin de la interrupción detectado (sin aviso de iOS)');
+        await _resumeFromInterruption();
+      }
+    });
+  }
+
+  /// Si el usuario estaba escuchando, se reanuda siempre (es una radio), con
+  /// conexión nueva, aunque iOS no lo sugiera.
+  Future<void> _resumeFromInterruption() async {
+    _interruptionWatch?.cancel();
+    _interruptionActive = false;
+    if (!_resumeAfterInterruption || _isPausedForArticle) return;
+    _resumeAfterInterruption = false;
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (!_isPausedForArticle) await play();
   }
 
   // ========== CONSTANTES ==========
@@ -753,6 +830,14 @@ class AudioPlayerManager {
         previous == PlaybackState.unknown ||
         _lastNetwork == _noNetwork;
 
+    // Una pausa causada por Siri o una llamada no es una caída del stream:
+    // la reanudación la maneja la vigilancia de la interrupción.
+    if (_interruptionActive) {
+      _playingController.add(false);
+      _loadingController.add(false);
+      return;
+    }
+
     if (_userWantsPlayback && streamFailed && !_isPausedForArticle) {
       _log(
         '[AudioPlayerManager] ⚠️ El stream se detuvo mientras cargaba - posible error de red',
@@ -778,7 +863,10 @@ class AudioPlayerManager {
         if (_lastPlaybackState != PlaybackState.paused ||
             !_userWantsPlayback ||
             _isReconnecting ||
-            _isPausedForArticle) {
+            _isPausedForArticle ||
+            // iOS: la pausa la causó una interrupción del sistema; se reanuda
+            // al terminar (ver interruptionEnded).
+            _interruptionActive) {
           return;
         }
         final changedAt = _lastNetworkChangeAt;
@@ -795,7 +883,10 @@ class AudioPlayerManager {
       return;
     }
 
-    _userPausedExternally();
+    // Solo es una pausa del usuario si antes estaba sonando. Un "paused" sin
+    // haber sonado lo emite el reproductor al preparar una conexión nueva
+    // (setStation) y no debe apagar la vigilancia de la carga que sigue.
+    if (previous == PlaybackState.playing) _userPausedExternally();
   }
 
   /// Pausa del usuario o del sistema (notificación, audífonos): no reconectar.
@@ -1854,6 +1945,7 @@ class AudioPlayerManager {
       _log('[AudioPlayerManager] ⏸️ Pausando reproducción...');
       _diag('Pausa');
       _userWantsPlayback = false;
+      _resumeAfterInterruption = false;
       _gaveUpWaitingForNetwork = false;
       _reconnectTimer?.cancel();
       _deferredReconnectTimer?.cancel();
