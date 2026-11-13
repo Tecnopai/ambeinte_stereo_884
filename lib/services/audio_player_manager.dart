@@ -860,8 +860,8 @@ class AudioPlayerManager {
     }
   }
 
-  /// Muestra [text] ("Artista - Título" o solo título) en la app, la
-  /// notificación y la pantalla de bloqueo. '' = sin título.
+  /// Muestra [text] tal cual en la app, la notificación y la pantalla de
+  /// bloqueo. '' = sin título.
   void _applyWebTitle(String text) {
     if (text == _webTitle) return;
     _webTitle = text;
@@ -876,9 +876,11 @@ class AudioPlayerManager {
       }
       return;
     }
-    final separator = text.indexOf(' - ');
-    _webArtist = separator > 0 ? text.substring(0, separator).trim() : null;
-    _webSong = separator > 0 ? text.substring(separator + 3).trim() : text;
+    // El texto se muestra completo, sin separar artista y canción: el
+    // programa de emisión no siempre usa el mismo orden (SARA escribe
+    // "Canción - Artista") y separarlo podía dejarlo al revés.
+    _webArtist = null;
+    _webSong = text;
     _metadataController.add({'artist': _webArtist ?? '', 'title': _webSong!});
     RadioPlayer.setCustomMetadata(
       artist: _webArtist,
