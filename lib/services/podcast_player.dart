@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../models/podcast.dart';
 import 'audio_player_manager.dart';
+import 'podcast_service.dart';
 
 /// Progreso guardado de un episodio.
 class EpisodeProgress {
@@ -79,12 +80,12 @@ class PodcastPlayer {
     final player = AudioPlayer();
     player.playerStateStream.listen((state) {
       if (state.processingState == ProcessingState.completed) {
-        _markFinished();
+        _onCompleted();
       }
       if (!state.playing) _saveNow();
     });
     _radioSubscription ??= AudioPlayerManager().playingStream.listen((radio) {
-      if (radio && (_player?.playing ?? false)) pause();
+      if (radio && playing) pause();
     });
     return player;
   }
@@ -94,7 +95,53 @@ class PodcastPlayer {
   Stream<Duration?> get durationStream => _p.durationStream;
   Stream<double> get speedStream => _p.speedStream;
   Stream<Duration> get bufferedPositionStream => _p.bufferedPositionStream;
-  bool get playing => _player?.playing ?? false;
+
+  /// True solo si hay audio sonando (un episodio terminado no cuenta,
+  /// aunque just_audio siga reportando `playing`).
+  bool get playing {
+    final player = _player;
+    return player != null &&
+        player.playing &&
+        player.processingState != ProcessingState.completed;
+  }
+
+  /// Id del episodio cuyo final ya se procesó (el estado "completed" puede
+  /// llegar más de una vez).
+  String? _completedId;
+
+  /// Al terminar un episodio: marcarlo como escuchado y seguir con el
+  /// siguiente no escuchado del mismo podcast (el de abajo en la lista).
+  /// Si no hay más, se cierra el episodio y vuelve la radio en vivo.
+  Future<void> _onCompleted() async {
+    final episode = current.value;
+    if (episode == null || _completedId == episode.id) return;
+    _completedId = episode.id;
+    _markFinished();
+
+    final next = _nextEpisode(episode);
+    if (next != null) {
+      try {
+        await play(next);
+        return;
+      } catch (_) {
+        // Si el siguiente no carga, se sigue como si no hubiera más.
+      }
+    }
+    await stop();
+    await AudioPlayerManager().play();
+  }
+
+  PodcastEpisode? _nextEpisode(PodcastEpisode episode) {
+    final episodes = PodcastService.instance.episodesOf(episode);
+    if (episodes == null) return null;
+    final index = episodes.indexWhere((e) => e.id == episode.id);
+    if (index < 0) return null;
+    final done = progress.value;
+    for (final candidate in episodes.skip(index + 1)) {
+      if (!(done[candidate.id]?.finished ?? false)) return candidate;
+    }
+    return null;
+  }
   Duration get position => _player?.position ?? Duration.zero;
   Duration? get duration => _player?.duration;
   double get speed => _player?.speed ?? 1.0;
@@ -140,11 +187,13 @@ class PodcastPlayer {
       if (_p.processingState == ProcessingState.completed) {
         await _p.seek(Duration.zero);
       }
+      _completedId = null;
       unawaited(_p.play());
       return;
     }
 
     await _saveNow();
+    _completedId = null;
     current.value = episode;
     lastEpisode.value = episode;
 

@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../core/theme/app_colors.dart';
@@ -496,7 +497,11 @@ class _NotesPlayButton extends StatelessWidget {
       builder: (context, current, _) => StreamBuilder(
         stream: player.playerStateStream,
         builder: (context, snap) {
-          final playing = current?.id == episode.id && (snap.data?.playing ?? false);
+          final state = snap.data;
+          final playing =
+              current?.id == episode.id &&
+              (state?.playing ?? false) &&
+              state?.processingState != ProcessingState.completed;
           return FilledButton.icon(
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.primary,

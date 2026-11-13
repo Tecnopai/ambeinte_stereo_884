@@ -174,7 +174,11 @@ class EpisodePlayButton extends StatelessWidget {
             final loading =
                 state?.processingState == ProcessingState.loading ||
                 state?.processingState == ProcessingState.buffering;
-            final playing = state?.playing ?? false;
+            // Un episodio terminado no está "sonando" aunque just_audio
+            // siga reportando playing.
+            final playing =
+                (state?.playing ?? false) &&
+                state?.processingState != ProcessingState.completed;
             if (playing && loading) {
               return _button(context, null, loading: true);
             }

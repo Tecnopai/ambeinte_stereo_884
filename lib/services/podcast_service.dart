@@ -49,6 +49,17 @@ class PodcastService {
   /// Feed RSS encontrado para cada enlace configurado.
   final Map<String, String> _resolvedFeeds = {};
 
+  /// Episodios del podcast al que pertenece [episode] (del más reciente al
+  /// más antiguo), si ese podcast ya está cargado.
+  List<PodcastEpisode>? episodesOf(PodcastEpisode episode) {
+    for (final podcast in _memory.values) {
+      if (podcast.episodes.any((e) => e.id == episode.id)) {
+        return podcast.episodes;
+      }
+    }
+    return null;
+  }
+
   void _diag(String message) {
     debugPrint('[Podcast] $message');
     DiagnosticsLog.instance.add('Podcast: $message');

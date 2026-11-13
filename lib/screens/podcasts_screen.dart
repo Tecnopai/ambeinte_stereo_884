@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/theme/app_colors.dart';
 import '../models/podcast.dart';
@@ -142,7 +143,9 @@ class _PodcastsScreenState extends State<PodcastsScreen>
     final podcast = _podcasts[source.key];
     if (podcast != null) return _PodcastCard(podcast: podcast);
     if (_failed.contains(source.key)) {
+      final host = Uri.tryParse(source.url)?.host.toLowerCase() ?? '';
       return _PodcastCardError(
+        spotifyUrl: host.endsWith('spotify.com') ? source.url : null,
         onRetry: () {
           setState(() => _failed.remove(source.key));
           _watch(source);
@@ -471,10 +474,44 @@ class _PodcastCardSkeleton extends StatelessWidget {
 
 class _PodcastCardError extends StatelessWidget {
   final VoidCallback onRetry;
-  const _PodcastCardError({required this.onRetry});
+
+  /// Si el podcast solo está en Spotify (sin feed público), no se puede oír
+  /// dentro de la app: se ofrece abrirlo en Spotify en vez de reintentar.
+  final String? spotifyUrl;
+
+  const _PodcastCardError({required this.onRetry, this.spotifyUrl});
 
   @override
   Widget build(BuildContext context) {
+    final spotify = spotifyUrl;
+    if (spotify != null) {
+      return Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.podcasts, color: AppColors.textMuted),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Text(
+                'Este podcast solo se puede escuchar en Spotify.',
+                style: TextStyle(color: AppColors.textMuted),
+              ),
+            ),
+            TextButton(
+              onPressed: () => launchUrl(
+                Uri.parse(spotify),
+                mode: LaunchMode.externalApplication,
+              ),
+              child: const Text('Abrir'),
+            ),
+          ],
+        ),
+      );
+    }
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
