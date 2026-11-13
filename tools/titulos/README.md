@@ -22,39 +22,23 @@ dirección web propia. No usa lecturas de Firebase.
    cambiar `CLAVE`.
 2. En Firebase, `app_config/streaming`, agregar el campo de texto
    `titulos_url` con la dirección completa de `titulo.php`.
-3. En el script, en la configuración:
-
-   ```powershell
-   $URL_TITULOS   = "https://TU-DOMINIO/radio/titulo.php"
-   $CLAVE_TITULOS = "LA-MISMA-CLAVE-DEL-PHP"
-   ```
-
-   Agregar esta función debajo de `Enviar-AAzuraCast`:
-
-   ```powershell
-   function Enviar-TituloWeb {
-       param([string]$texto)
-       try {
-           $json  = @{ titulo = $texto } | ConvertTo-Json -Compress
-           $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
-           Invoke-RestMethod -Uri $URL_TITULOS -Method Post -Headers @{ "X-Clave" = $CLAVE_TITULOS } `
-               -ContentType "application/json; charset=utf-8" -Body $bytes -TimeoutSec 8 | Out-Null
-           Write-Host "   OK enviado a la web: '$texto'" -ForegroundColor Cyan
-       } catch {
-           Write-Host "   ERROR al enviar a la web: $($_.Exception.Message)" -ForegroundColor Red
-       }
-   }
-   ```
-
-   Y llamarla solo cuando cambia la canción (no en el reenvío cada 15 s): en
-   el paso `# 2)`, justo después de `$pendientes.RemoveAt(0)`:
-
-   ```powershell
-               Enviar-TituloWeb -texto $item.Titulo
-   ```
-
-4. Comprobar: abrir la dirección de `titulo.php` en el navegador. Antes del
+3. En el computador de emisión, en la misma carpeta:
+   - `convertir_metadata.ps1` (este repositorio; guardado como UTF-8 con BOM).
+   - `config.ps1`: copia de `config.ejemplo.ps1` con la dirección de
+     `titulo.php` y la clave (solo letras y números, mínimo 16). Si se usa
+     AzuraCast (solo con AutoDJ activo), también su URL y clave de API.
+4. Ejecutar `convertir_metadata.ps1`. Al cambiar la canción debe mostrar
+   `OK web: '...'`.
+5. Comprobar: abrir la dirección de `titulo.php` en el navegador. Antes del
    primer envío muestra `{"titulo":"","actualizado":0}`.
 
-No guardar en este repositorio la clave real ni la clave de la API de
-AzuraCast.
+## El script
+
+- Envía a la web solo cuando cambia la canción; si falla, reintenta cada
+  vez más espaciado (máx. 60 s) con el título más reciente.
+- AzuraCast es opcional; si falla 3 veces seguidas se pausa 5 minutos.
+- Revisa la configuración al arrancar (clave inválida, sin destinos).
+- Si la carpeta compartida de SARA no está disponible, avisa y sigue.
+
+`config.ps1` tiene claves: está en `.gitignore` y no se debe compartir ni
+pegar en chats.

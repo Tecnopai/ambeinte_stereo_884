@@ -127,3 +127,6 @@ android/.kotlin/
 
 # Configuración local de Swift Package Manager generada por Xcode
 ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+
+# Claves del actualizador de títulos (nunca al repositorio)
+tools/titulos/config.ps1
