@@ -389,6 +389,18 @@ class AudioPlayerManager {
     );
   }
 
+  /// Tiempo tras un cambio de red en el que una falla de conexión se atribuye
+  /// a ese cambio y no al servidor.
+  static const Duration _networkSettleTime = Duration(seconds: 10);
+
+  /// Si la red del teléfono cambió desde [since] (o poco antes). Mientras la
+  /// red cambia, las conexiones abiertas se cortan aunque el servidor esté bien.
+  bool _networkChangedSince(DateTime since) {
+    final changedAt = _lastNetworkChangeAt;
+    return changedAt != null &&
+        changedAt.isAfter(since.subtract(_networkSettleTime));
+  }
+
   // ========== INICIALIZACIÓN ==========
   Future<void> _initAsync() async {
     if (_isInitialized || _isInitializing) {
@@ -1030,15 +1042,20 @@ class AudioPlayerManager {
   ///   - el servidor no responde pero internet sí → el servidor;
   ///   - nada responde → el teléfono no tiene internet.
   Future<void> _diagnoseOutage() async {
+    final startedAt = DateTime.now();
     final status = await _fetchServerStatus();
     _OutageCause cause;
     if (status != null) {
       _setOffAir(status.mount == null);
       cause = _offAir ? _OutageCause.offAir : _OutageCause.weakConnection;
+    } else if (!await _hasInternet()) {
+      cause = _OutageCause.noInternet;
+    } else if (_networkChangedSince(startedAt)) {
+      // La consulta al servidor se cortó por el cambio de red, no porque el
+      // servidor esté caído.
+      cause = _OutageCause.weakConnection;
     } else {
-      cause = await _hasInternet()
-          ? _OutageCause.serverDown
-          : _OutageCause.noInternet;
+      cause = _OutageCause.serverDown;
     }
     // La revisión tarda unos segundos: si mientras tanto la radio volvió a
     // sonar, el resultado ya no aplica y no debe usarse en la próxima falla.
@@ -1502,7 +1519,10 @@ class AudioPlayerManager {
         'Intento $_reconnectAttempts sin audio tras '
         '${_playTimeout.inSeconds} s',
       );
-      _failuresOnServer++;
+      // Si la red cambió durante el intento, la falla no es del servidor.
+      if (!_networkChangedSince(DateTime.now().subtract(_playTimeout))) {
+        _failuresOnServer++;
+      }
       if (_failuresOnServer >= _failuresBeforeSwitch) {
         _switchToNextServer('no conecta');
       }
