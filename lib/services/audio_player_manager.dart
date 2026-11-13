@@ -239,8 +239,13 @@ class AudioPlayerManager {
   // ========== GETTER PARA CONTROL DE ARTÍCULOS ==========
   bool get isPausedForArticle => _isPausedForArticle;
 
-  /// Carga la URL del streaming desde Firestore (`app_config/streaming`,
-  /// campo `stream_url`). Orden de prioridad:
+  /// Carga la URL del streaming desde Firestore (`app_config/streaming`).
+  /// Campos:
+  ///   - `stream_urls` (lista, opcional): servidores en orden de preferencia;
+  ///     si uno falla, la app pasa al siguiente.
+  ///   - `stream_url` (texto): servidor único; lo usan también las versiones
+  ///     anteriores de la app. Se usa si `stream_urls` no existe.
+  /// Orden de prioridad:
   ///   1. Servidor de Firestore (máx. 5 s).
   ///   2. Caché local de Firestore: la última URL descargada con éxito
   ///      (sirve sin internet estable o si el servidor tarda).
@@ -256,7 +261,7 @@ class AudioPlayerManager {
       final doc = await docRef
           .get(const GetOptions(source: Source.server))
           .timeout(const Duration(seconds: 5));
-      if (_applyStreamUrl(doc.data()?['stream_url'], 'servidor')) return;
+      if (_applyStreamConfig(doc.data(), 'servidor')) return;
     } catch (e) {
       _log('[AudioPlayerManager] ⚠️ Firestore (servidor) no disponible: $e');
     }
@@ -266,7 +271,7 @@ class AudioPlayerManager {
       final cached = await docRef
           .get(const GetOptions(source: Source.cache))
           .timeout(const Duration(seconds: 2));
-      if (_applyStreamUrl(cached.data()?['stream_url'], 'caché')) return;
+      if (_applyStreamConfig(cached.data(), 'caché')) return;
     } catch (e) {
       _log('[AudioPlayerManager] ⚠️ Sin URL en caché: $e');
     }
@@ -283,40 +288,95 @@ class AudioPlayerManager {
         .doc(_firebaseStreamConfigPath)
         .snapshots()
         .listen((doc) {
-          // Se acepta el nombre del campo con espacios o mayúsculas
-          // ("aviso ", "Aviso"): en la consola de Firebase no se notan.
-          Object? value;
-          doc.data()?.forEach((key, v) {
-            if (key.trim().toLowerCase() == 'aviso') value = v;
-          });
-          final found = value;
-          final text = found is String ? found.trim() : '';
+          final value = _field(doc.data(), 'aviso');
+          final text = value is String ? value.trim() : '';
           if (text == _noticeController.value) return;
           _noticeController.add(text);
           if (text.isNotEmpty) _diag('Aviso de la emisora: $text');
         }, onError: (Object e) => _log('[AudioPlayerManager] ⚠️ Aviso: $e'));
   }
 
-  /// Aplica [value] como URL del stream si es una URL http/https válida.
-  bool _applyStreamUrl(Object? value, String origen) {
-    if (value is! String) return false;
+  /// Valor del campo [name] de [data], aunque en Firebase el nombre tenga
+  /// espacios o mayúsculas ("aviso ", "Stream_urls"): en la consola no se
+  /// notan.
+  static Object? _field(Map<String, dynamic>? data, String name) {
+    if (data == null) return null;
+    for (final entry in data.entries) {
+      if (entry.key.trim().toLowerCase() == name) return entry.value;
+    }
+    return null;
+  }
+
+  /// [value] limpio si es una URL http/https válida; si no, null.
+  static String? _validUrl(Object? value) {
+    if (value is! String) return null;
     final url = value.trim();
     final uri = Uri.tryParse(url);
     final isValid =
         uri != null &&
         (uri.scheme == 'https' || uri.scheme == 'http') &&
         uri.host.isNotEmpty;
-    if (!isValid) {
-      _log(
-        '[AudioPlayerManager] ⚠️ URL inválida en Firebase ($origen): "$url"',
-      );
+    return isValid ? url : null;
+  }
+
+  /// Aplica los servidores de [data] (`stream_urls` o, si no hay, `stream_url`).
+  /// Solo se aceptan URLs http/https válidas, para que un valor mal escrito en
+  /// Firebase no deje la app sin audio.
+  bool _applyStreamConfig(Map<String, dynamic>? data, String origen) {
+    final urls = <String>[];
+    final list = _field(data, 'stream_urls');
+    if (list is List) {
+      for (final value in list) {
+        final url = _validUrl(value);
+        if (url != null && !urls.contains(url)) urls.add(url);
+      }
+    }
+    if (urls.isEmpty) {
+      final url = _validUrl(_field(data, 'stream_url'));
+      if (url != null) urls.add(url);
+    }
+    if (urls.isEmpty) {
+      _log('[AudioPlayerManager] ⚠️ Sin URL válida en Firebase ($origen)');
       return false;
     }
-    _streamUrl = url;
+    _streamUrls = urls;
+    _serverIndex = 0;
+    _streamUrl = urls.first;
     _isStreamUrlLoaded = true;
-    _log('[AudioPlayerManager] ✅ URL cargada desde Firebase ($origen): $url');
-    _diag('URL del stream: $origen ($url)');
+    _log('[AudioPlayerManager] ✅ URL cargada desde Firebase ($origen): $urls');
+    _diag(
+      'URL del stream: $origen (${urls.first})'
+      '${urls.length > 1 ? ' + ${urls.length - 1} de respaldo' : ''}',
+    );
     return true;
+  }
+
+  // ========== SERVIDORES DE RESPALDO ==========
+
+  /// Servidores configurados en Firebase, en orden de preferencia.
+  List<String> _streamUrls = const [];
+  int _serverIndex = 0;
+
+  /// Intentos seguidos que no lograron sonar con el servidor actual.
+  int _failuresOnServer = 0;
+  static const int _failuresBeforeSwitch = 2;
+
+  bool get _hasBackupServers => _streamUrls.length > 1;
+
+  /// Pasa al siguiente servidor de la lista (y vuelve al primero al final).
+  /// La próxima conexión ya usa el nuevo.
+  void _switchToNextServer(String reason) {
+    if (!_hasBackupServers) return;
+    _serverIndex = (_serverIndex + 1) % _streamUrls.length;
+    _streamUrl = _streamUrls[_serverIndex];
+    _failuresOnServer = 0;
+    _offAir = false;
+    _connectedStreamStart = null;
+    _stationIsFresh = false;
+    _diag(
+      'Cambio al servidor ${_serverIndex + 1} de ${_streamUrls.length} '
+      '($reason): $_streamUrl',
+    );
   }
 
   // ========== INICIALIZACIÓN ==========
@@ -474,6 +534,7 @@ class AudioPlayerManager {
     _playingController.add(true);
     _loadingController.add(false);
     _reconnectAttempts = 0;
+    _failuresOnServer = 0;
     _isReconnecting = false;
     _userWantsPlayback = true;
     _errorController.add('');
@@ -749,6 +810,14 @@ class AudioPlayerManager {
         // relleno o ruido. Se detiene el audio y se espera a que vuelva.
         _diag('Sonando sin transmisión real en el servidor; se detiene');
         _connectedStreamStart = null;
+        if (_hasBackupServers) {
+          // Hay otro servidor: se pasa a ese de inmediato.
+          _switchToNextServer('fuera del aire');
+          _outageStart ??= DateTime.now();
+          _reconnectAttempts = 0;
+          _handleReconnection();
+          return;
+        }
         _reconnectAttempts = _maxReconnectAttempts;
         _cause = _OutageCause.offAir;
         _waitForSlowRetry();
@@ -851,6 +920,15 @@ class AudioPlayerManager {
     if (cause != _cause) {
       _cause = cause;
       _diag('Causa de la falla: ${cause.name}');
+    }
+    // La falla es del servidor (no del teléfono): si hay otro, se usa ese en
+    // el próximo intento.
+    if (_hasBackupServers &&
+        (cause == _OutageCause.offAir || cause == _OutageCause.serverDown)) {
+      _switchToNextServer(
+        cause == _OutageCause.offAir ? 'fuera del aire' : 'no responde',
+      );
+      _cause = _OutageCause.unknown;
     }
     if (_outageController.value.isNotEmpty) {
       _outageController.add(_outageMessage());
@@ -1001,8 +1079,7 @@ class AudioPlayerManager {
     _progressiveBufferingTimer?.cancel();
 
     int checkCount = 0;
-    final maxChecks =
-        timeout.inSeconds ~/ _progressiveBufferingCheck.inSeconds;
+    final maxChecks = timeout.inSeconds ~/ _progressiveBufferingCheck.inSeconds;
 
     _progressiveBufferingTimer = Timer.periodic(_progressiveBufferingCheck, (
       timer,
@@ -1296,6 +1373,10 @@ class AudioPlayerManager {
         'Intento $_reconnectAttempts sin audio tras '
         '${_playTimeout.inSeconds} s',
       );
+      _failuresOnServer++;
+      if (_failuresOnServer >= _failuresBeforeSwitch) {
+        _switchToNextServer('no conecta');
+      }
       _isReconnecting = false;
       _lastReconnectAttempt = null;
       _handleReconnection();
