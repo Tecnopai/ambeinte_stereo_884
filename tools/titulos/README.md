@@ -36,7 +36,11 @@ dirección web propia. No usa lecturas de Firebase.
 
 - Envía a la web solo cuando cambia la canción; si falla, reintenta cada
   vez más espaciado (máx. 60 s) con el título más reciente.
-- AzuraCast es opcional; si falla 3 veces seguidas se pausa 5 minutos.
+- Servidores de streaming opcionales: AzuraCast (API, con AutoDJ) e
+  Icecast/Shoutcast directo (`/admin/metadata`). Se pueden dejar
+  configurados aunque hoy no acepten títulos: si uno falla 3 veces seguidas
+  se pausa 5 minutos y vuelve a probar, así que empieza a funcionar solo al
+  encender el AutoDJ, cambiar de servidor o cuando el proveedor lo habilite.
 - Revisa la configuración al arrancar (clave inválida, sin destinos).
 - Si la carpeta compartida de SARA no está disponible, avisa y sigue.
 

@@ -1,8 +1,15 @@
 ﻿# convertir_metadata.ps1 - Publica el titulo que suena en Ambiente Stereo 88.4
 #
 # Lee el titulo que escribe SARA en un archivo, aplica los reemplazos y lo envia a:
-#   1. La web (titulo.php)  -> lo leen la app y el reproductor de WordPress  [principal]
-#   2. AzuraCast (API)      -> solo sirve si el AutoDJ esta activo            [opcional]
+#   1. La web (titulo.php)    -> lo leen la app y el reproductor de WordPress  [principal]
+#   2. AzuraCast (API)        -> sirve cuando el AutoDJ esta activo             [opcional]
+#   3. Icecast/Shoutcast      -> el titulo viaja dentro de la senal, si el
+#      (directo por URL)         servidor lo acepta                            [opcional]
+#
+# Los destinos opcionales se dejan configurados aunque hoy no acepten titulos:
+# si uno falla 3 veces seguidas se pausa 5 minutos y vuelve a probar, asi que
+# empieza a funcionar solo cuando el servidor lo permita (AutoDJ encendido,
+# otro servidor, o el proveedor lo habilita).
 #
 # Las claves NO van en este archivo: van en config.ps1, en la misma carpeta
 # (copiar config.ejemplo.ps1 como config.ps1 y llenarlo).
@@ -24,6 +31,14 @@ $CLAVE_TITULOS      = ""    # la misma clave de titulo.php (solo letras y numero
 $URL_AZURACAST      = ""    # vacio = no enviar a AzuraCast
 $API_KEY            = ""
 $REENVIO_AZURACAST  = 15    # AzuraCast necesita reenvio periodico (0 = no reenviar)
+
+$URL_ICECAST        = ""    # p. ej. https://servidor:puerto/admin/metadata (vacio = no)
+$MOUNT_ICECAST      = "/radio.mp3"
+$USUARIO_ICECAST    = "source"
+$CLAVE_ICECAST      = ""    # la contrasena de la fuente (la del Comrex)
+$REENVIO_ICECAST    = 60    # se reenvia por si la fuente se reconecta y lo pierde
+
+$PAUSA_TRAS_FALLOS  = 5     # minutos de pausa de un destino tras 3 fallos seguidos
 
 # === REEMPLAZOS ===
 # Si el titulo CONTIENE la palabra de la izquierda (palabra completa, sin importar
@@ -168,22 +183,40 @@ function Enviar-AAzuraCast {
     }
 }
 
+# --- Envio directo a Icecast/Shoutcast (opcional) ----------------------
+function Enviar-Icecast {
+    param([string]$texto)
+    try {
+        $par = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$($USUARIO_ICECAST):$($CLAVE_ICECAST)"))
+        $url = "$($URL_ICECAST)?mount=$([Uri]::EscapeDataString($MOUNT_ICECAST))&mode=updinfo&charset=UTF-8&song=$([Uri]::EscapeDataString($texto))"
+        $r = Invoke-WebRequest -Uri $url -Headers @{ Authorization = "Basic $par" } -UseBasicParsing -TimeoutSec 8
+        # Icecast responde 200 aunque rechace el titulo: lo dice en el mensaje.
+        if ($r.Content -match 'will not accept|<return>0</return>') { return $false }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
 # === REVISAR CONFIGURACION ===
 $URL_TITULOS   = $URL_TITULOS.Trim()
 $CLAVE_TITULOS = $CLAVE_TITULOS.Trim()
 $URL_AZURACAST = $URL_AZURACAST.Trim()
 $API_KEY       = $API_KEY.Trim()
+$URL_ICECAST   = $URL_ICECAST.Trim()
+$CLAVE_ICECAST = $CLAVE_ICECAST.Trim()
 
 $usarWeb       = $URL_TITULOS -ne ""
 $usarAzuraCast = ($URL_AZURACAST -ne "") -and ($API_KEY -ne "")
+$usarIcecast   = ($URL_ICECAST -ne "") -and ($CLAVE_ICECAST -ne "")
 
 if ($usarWeb -and $CLAVE_TITULOS -notmatch '^[A-Za-z0-9]{16,}$') {
     Write-Host "ERROR: CLAVE_TITULOS debe tener solo letras y numeros (minimo 16)." -ForegroundColor Red
     Write-Host "       Los simbolos y tildes no viajan bien. Use la misma en titulo.php." -ForegroundColor Red
     exit 1
 }
-if (-not $usarWeb -and -not $usarAzuraCast) {
-    Write-Host "ERROR: no hay ningun destino configurado (URL_TITULOS o URL_AZURACAST)." -ForegroundColor Red
+if (-not $usarWeb -and -not $usarAzuraCast -and -not $usarIcecast) {
+    Write-Host "ERROR: no hay ningun destino configurado (URL_TITULOS, URL_AZURACAST o URL_ICECAST)." -ForegroundColor Red
     exit 1
 }
 
@@ -193,6 +226,7 @@ Write-Host "=============================================================" -Fore
 Write-Host "Archivo vigilado: $ARCHIVO_ORIGINAL"
 Write-Host ("Web (app):        " + $(if ($usarWeb) { $URL_TITULOS } else { "desactivado" }))
 Write-Host ("AzuraCast:        " + $(if ($usarAzuraCast) { $URL_AZURACAST } else { "desactivado" }))
+Write-Host ("Icecast directo:  " + $(if ($usarIcecast) { "$URL_ICECAST ($MOUNT_ICECAST)" } else { "desactivado" }))
 Write-Host "Reemplazos:       $($REEMPLAZOS.Count) reglas"
 Write-Host "Retardo de envio: $RETARDO_ENVIO s"
 Write-Host "Ctrl+C para detener"
@@ -208,11 +242,24 @@ $webPendiente    = $null
 $webProximo      = [datetime]::MinValue
 $webFallos       = 0
 
-# AzuraCast: si falla varias veces seguidas se pausa un rato (p. ej. AutoDJ apagado).
-$azTitulo        = ""
-$azUltimoEnvio   = [datetime]::MinValue
-$azFallos        = 0
-$azPausaHasta    = [datetime]::MinValue
+# Servidores de streaming (opcionales). Cada uno lleva su propio estado: si falla
+# 3 veces seguidas se pausa $PAUSA_TRAS_FALLOS minutos y luego vuelve a probar.
+function Nuevo-Destino {
+    param([string]$nombre, [scriptblock]$enviar, [int]$reenvio)
+    return @{
+        Nombre     = $nombre
+        Enviar     = $enviar
+        Reenvio    = $reenvio
+        Titulo     = ""
+        Ultimo     = [datetime]::MinValue
+        Fallos     = 0
+        PausaHasta = [datetime]::MinValue
+        Funciona   = $null      # $null = aun no se sabe
+    }
+}
+$destinos = @()
+if ($usarAzuraCast) { $destinos += Nuevo-Destino 'AzuraCast' { param($t) Enviar-AAzuraCast -texto $t } $REENVIO_AZURACAST }
+if ($usarIcecast)   { $destinos += Nuevo-Destino 'Icecast'   { param($t) Enviar-Icecast -texto $t }   $REENVIO_ICECAST }
 
 try {
     while ($true) {
@@ -250,9 +297,9 @@ try {
                 $webProximo   = [datetime]::MinValue
                 $webFallos    = 0
             }
-            if ($usarAzuraCast) {
-                $azTitulo      = $titulo
-                $azUltimoEnvio = [datetime]::MinValue   # enviar ya
+            foreach ($d in $destinos) {
+                $d.Titulo = $titulo
+                $d.Ultimo = [datetime]::MinValue   # enviar ya
             }
         }
 
@@ -269,23 +316,32 @@ try {
             }
         }
 
-        # 4) AzuraCast: enviar al cambiar y reenviar periodicamente
-        if ($usarAzuraCast -and $azTitulo -and (Get-Date) -ge $azPausaHasta) {
-            $toca = ($azUltimoEnvio -eq [datetime]::MinValue) -or
-                    ($REENVIO_AZURACAST -gt 0 -and ((Get-Date) - $azUltimoEnvio).TotalSeconds -ge $REENVIO_AZURACAST)
-            if ($toca) {
-                $esNuevo = $azUltimoEnvio -eq [datetime]::MinValue
-                $azUltimoEnvio = Get-Date
-                if (Enviar-AAzuraCast -texto $azTitulo) {
-                    if ($esNuevo) { Log "OK AzuraCast: '$azTitulo'" 'Cyan' }
-                    $azFallos = 0
-                } else {
-                    $azFallos++
-                    if ($azFallos -ge 3) {
-                        Log "AzuraCast no acepta titulos (3 fallos; ¿AutoDJ apagado?). Pausa de 5 min." 'DarkYellow'
-                        $azPausaHasta = (Get-Date).AddMinutes(5)
-                        $azFallos = 0
+        # 4) Servidores de streaming: enviar al cambiar y reenviar periodicamente
+        foreach ($d in $destinos) {
+            if (-not $d.Titulo -or (Get-Date) -lt $d.PausaHasta) { continue }
+            $esNuevo = $d.Ultimo -eq [datetime]::MinValue
+            $toca = $esNuevo -or
+                    ($d.Reenvio -gt 0 -and ((Get-Date) - $d.Ultimo).TotalSeconds -ge $d.Reenvio)
+            if (-not $toca) { continue }
+
+            $d.Ultimo = Get-Date
+            if (& $d.Enviar $d.Titulo) {
+                if ($d.Funciona -ne $true) {
+                    Log "$($d.Nombre) acepta los titulos" 'Green'
+                    $d.Funciona = $true
+                }
+                if ($esNuevo) { Log "OK $($d.Nombre): '$($d.Titulo)'" 'Cyan' }
+                $d.Fallos = 0
+            } else {
+                $d.Fallos++
+                if ($d.Fallos -ge 3) {
+                    # Se avisa una sola vez; luego se sigue probando en silencio.
+                    if ($d.Funciona -ne $false) {
+                        Log "$($d.Nombre) no acepta titulos por ahora. Se vuelve a probar cada $PAUSA_TRAS_FALLOS min." 'DarkYellow'
+                        $d.Funciona = $false
                     }
+                    $d.PausaHasta = (Get-Date).AddMinutes($PAUSA_TRAS_FALLOS)
+                    $d.Fallos = 0
                 }
             }
         }
