@@ -845,6 +845,9 @@ class AudioPlayerManager {
           ? _OutageCause.serverDown
           : _OutageCause.noInternet;
     }
+    // La revisión tarda unos segundos: si mientras tanto la radio volvió a
+    // sonar, el resultado ya no aplica y no debe usarse en la próxima falla.
+    if (_outageStart == null) return;
     if (cause != _cause) {
       _cause = cause;
       _diag('Causa de la falla: ${cause.name}');
