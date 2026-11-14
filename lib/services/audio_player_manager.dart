@@ -431,6 +431,8 @@ class AudioPlayerManager {
     }
     _streamUrls = urls;
     _serverIndex = 0;
+    _triedServers.clear();
+    _statusPageCache.clear();
     _streamUrl = urls.first;
     _isStreamUrlLoaded = true;
     _streamHasTitles = false;
@@ -455,11 +457,122 @@ class AudioPlayerManager {
 
   bool get _hasBackupServers => _streamUrls.length > 1;
 
-  /// Pasa al siguiente servidor de la lista (y vuelve al primero al final).
-  /// La próxima conexión ya usa el nuevo.
-  void _switchToNextServer(String reason) {
-    if (!_hasBackupServers) return;
-    _serverIndex = (_serverIndex + 1) % _streamUrls.length;
+  /// Servidores ya probados en la falla actual: no se vuelve a ellos hasta la
+  /// próxima espera de 30 s, para no dar vueltas entre servidores.
+  final Set<int> _triedServers = {};
+
+  bool _choosingServer = false;
+
+  /// Busca el mejor servidor para la próxima conexión: revisa a la vez la
+  /// página de estado de los que no se han probado en esta falla y elige,
+  /// en el orden de Firebase, el primero que transmite. Si ninguno lo
+  /// confirma, el primero que no se sabe (se juzgará por el audio). Los que
+  /// están fuera del aire o caídos se saltan. Devuelve false si no hay a
+  /// cuál cambiar.
+  Future<bool> _switchToBestServer(String reason) async {
+    if (!_hasBackupServers || _choosingServer) return false;
+    _triedServers.add(_serverIndex);
+    final candidates = [
+      for (var i = 0; i < _streamUrls.length; i++)
+        if (!_triedServers.contains(i)) i,
+    ];
+    if (candidates.isEmpty) {
+      _diag('Ya se probaron todos los servidores; se espera');
+      return false;
+    }
+    _choosingServer = true;
+    try {
+      final from = _serverIndex;
+      final statuses = await Future.wait(
+        candidates.map((i) => _fetchStatusOf(_streamUrls[i])),
+      );
+      // Mientras se revisaba pudo cambiar el servidor (otra revisión) o
+      // volver el audio: entonces ya no aplica.
+      if (_serverIndex != from || _outageStart == null) return false;
+      int? pick;
+      for (final wanted in [_ServerState.live, _ServerState.unknown]) {
+        for (var k = 0; k < candidates.length && pick == null; k++) {
+          if (statuses[k].state == wanted) pick = candidates[k];
+        }
+        if (pick != null) break;
+      }
+      final summary = [
+        for (var k = 0; k < candidates.length; k++)
+          '${candidates[k] + 1}: ${statuses[k].state.name}',
+      ].join(', ');
+      if (pick == null) {
+        // Ninguno disponible ahora; se marcan como probados.
+        _triedServers.addAll(candidates);
+        _diag('Ningún otro servidor disponible ($summary)');
+        return false;
+      }
+      _diag('Servidores revisados: $summary');
+      _useServer(pick, reason);
+      _triedServers.add(pick);
+      return true;
+    } finally {
+      _choosingServer = false;
+    }
+  }
+
+  // ---------- Vuelta al servidor principal ----------
+
+  /// Cada cuánto se revisa el principal mientras suena un respaldo.
+  static const Duration _primaryCheckInterval = Duration(minutes: 2);
+
+  /// Lecturas seguidas en que el principal debe transmitir para volver a él
+  /// (evita volver durante un reinicio de la señal y tener que salir otra vez).
+  static const int _primaryLiveChecksToReturn = 2;
+
+  Timer? _primaryCheckTimer;
+  int _primaryLiveChecks = 0;
+
+  /// Mientras suena un servidor de respaldo, revisa solo la página de estado
+  /// del principal (sin tocar el audio) y vuelve a él cuando confirma que
+  /// transmite.
+  void _startPrimaryChecks() {
+    if (_serverIndex == 0 || _streamUrls.isEmpty) {
+      _stopPrimaryChecks();
+      return;
+    }
+    _primaryCheckTimer ??= Timer.periodic(
+      _primaryCheckInterval,
+      (_) => _checkPrimaryServer(),
+    );
+  }
+
+  void _stopPrimaryChecks() {
+    _primaryCheckTimer?.cancel();
+    _primaryCheckTimer = null;
+    _primaryLiveChecks = 0;
+  }
+
+  Future<void> _checkPrimaryServer() async {
+    if (_serverIndex == 0 ||
+        !_userWantsPlayback ||
+        _isPausedForArticle ||
+        _isReconnecting ||
+        _lastPlaybackState != PlaybackState.playing) {
+      if (_serverIndex == 0) _stopPrimaryChecks();
+      return;
+    }
+    final status = await _fetchStatusOf(_streamUrls.first);
+    if (status.state != _ServerState.live) {
+      _primaryLiveChecks = 0;
+      return;
+    }
+    _primaryLiveChecks++;
+    if (_primaryLiveChecks < _primaryLiveChecksToReturn) return;
+    if (_serverIndex == 0 || _isReconnecting) return;
+    _stopPrimaryChecks();
+    _useServer(0, 'el principal transmite de nuevo');
+    await _refreshConnection();
+  }
+
+  /// Usa el servidor [index] desde la próxima conexión.
+  void _useServer(int index, String reason) {
+    if (index == _serverIndex || index >= _streamUrls.length) return;
+    _serverIndex = index;
     _streamUrl = _streamUrls[_serverIndex];
     _failuresOnServer = 0;
     _offAir = false;
@@ -720,58 +833,120 @@ class AudioPlayerManager {
     _iosMetadataTimer = null;
   }
 
-  /// Consulta el estado público del servidor Icecast (status-json.xsl).
-  /// Devuelve null si el servidor no respondió; si respondió, `mount` es el
-  /// punto de montaje del stream, o null si no está transmitiendo.
-  /// No envía ningún dato del usuario.
-  Future<({Map? mount})?> _fetchServerStatus() async {
+  /// Dónde se encontró la página de estado de cada servidor (por URL del
+  /// stream), para no buscarla cada vez.
+  final Map<String, Uri> _statusPageCache = {};
+
+  /// Estado del servidor actual. Ver [_fetchStatusOf].
+  Future<_ServerStatus> _fetchServerStatus() => _fetchStatusOf(_streamUrl);
+
+  /// Consulta la página pública de estado de Icecast (status-json.xsl) del
+  /// servidor de [streamUrl]. No envía ningún dato del usuario.
+  ///
+  /// Cada servidor la publica en un lugar distinto (AzuraCast y los proxies
+  /// la tienen junto al stream, no en la raíz), así que se busca primero al
+  /// lado de la dirección del stream y después en la raíz, y se recuerda
+  /// dónde estaba. Si no se puede leer, el resultado es "no se sabe" y la
+  /// app se guía solo por el audio.
+  Future<_ServerStatus> _fetchStatusOf(String streamUrl) async {
+    final Uri streamUri;
     try {
-      final streamUri = Uri.parse(_streamUrl);
-      final statusUri = Uri(
-        scheme: streamUri.scheme,
-        host: streamUri.host,
-        port: streamUri.port,
-        path: '/status-json.xsl',
-      );
-      final response = await http
-          .get(statusUri)
-          .timeout(const Duration(seconds: 5));
-      if (response.statusCode != 200) return null;
-
-      final icestats =
-          (json.decode(response.body) as Map<String, dynamic>)['icestats'];
-      if (icestats is! Map) return null;
-      final source = icestats['source'];
-
-      bool matches(Map s) =>
-          (s['listenurl'] as String? ?? '').endsWith(streamUri.path);
-
-      Map? mount;
-      if (source is Map) {
-        if (matches(source)) mount = source;
-      } else if (source is List) {
-        for (final s in source) {
-          if (s is Map && matches(s)) {
-            mount = s;
-            break;
-          }
-        }
-      }
-      // Tras un reinicio, el servidor puede publicar el punto de montaje
-      // como relleno ("dummy", sin hora de inicio) mientras la emisora aún no
-      // envía su señal. Quien se conecta ahí oye ruido: cuenta como fuera
-      // del aire.
-      if (mount != null &&
-          (mount.containsKey('dummy') ||
-              (mount['stream_start'] == null &&
-                  mount['stream_start_iso8601'] == null))) {
-        mount = null;
-      }
-      return (mount: mount);
-    } catch (e) {
-      _log('[AudioPlayerManager] ⚠️ Estado del servidor: $e');
-      return null;
+      streamUri = Uri.parse(streamUrl);
+    } catch (_) {
+      return const _ServerStatus(_ServerState.unknown);
     }
+    final cached = _statusPageCache[streamUrl];
+    final candidates = cached != null
+        ? [cached]
+        : _statusPageCandidates(streamUri);
+
+    var answered = false; // el servidor respondió algo, aunque no sirva
+    for (final statusUri in candidates) {
+      try {
+        final response = await http
+            .get(statusUri)
+            .timeout(const Duration(seconds: 5));
+        answered = true;
+        if (response.statusCode != 200) continue;
+        final decoded = json.decode(utf8.decode(response.bodyBytes));
+        final icestats = decoded is Map ? decoded['icestats'] : null;
+        if (icestats is! Map) continue;
+        _statusPageCache[streamUrl] = statusUri;
+        return _readIcestats(icestats, streamUri);
+      } catch (e) {
+        if (e is FormatException) answered = true;
+        _log('[AudioPlayerManager] ⚠️ Estado del servidor ($statusUri): $e');
+      }
+    }
+    // Si la página recordada dejó de funcionar, se vuelve a buscar la próxima.
+    if (cached != null) _statusPageCache.remove(streamUrl);
+    return _ServerStatus(answered ? _ServerState.unknown : _ServerState.down);
+  }
+
+  /// Lugares probables de la página de estado: junto al stream
+  /// (`/listen/estacion/stream` → `/listen/estacion/status-json.xsl`) y en la
+  /// raíz del servidor.
+  static List<Uri> _statusPageCandidates(Uri streamUri) {
+    final segments = streamUri.pathSegments.where((s) => s.isNotEmpty).toList();
+    final root = streamUri.replace(
+      path: '/status-json.xsl',
+      query: null,
+      fragment: null,
+    );
+    if (segments.length <= 1) return [root];
+    final sibling = streamUri.replace(
+      pathSegments: [
+        ...segments.sublist(0, segments.length - 1),
+        'status-json.xsl',
+      ],
+      query: null,
+      fragment: null,
+    );
+    return [sibling, root];
+  }
+
+  /// Interpreta el contenido de status-json.xsl.
+  static _ServerStatus _readIcestats(Map icestats, Uri streamUri) {
+    final source = icestats['source'];
+    final sources = source is List
+        ? source.whereType<Map>().toList()
+        : source is Map
+        ? [source]
+        : <Map>[];
+
+    // Sin ningún punto de montaje activo: la emisora no está enviando señal.
+    if (sources.isEmpty) return const _ServerStatus(_ServerState.offAir);
+
+    // El punto de montaje se reconoce por su nombre final (/stream,
+    // /radio.mp3): detrás de un proxy la dirección completa es otra.
+    final mountName = streamUri.pathSegments.isEmpty
+        ? ''
+        : streamUri.pathSegments.last;
+    Map? mount;
+    for (final s in sources) {
+      final listenUrl = Uri.tryParse('${s['listenurl'] ?? ''}');
+      final name = listenUrl == null || listenUrl.pathSegments.isEmpty
+          ? ''
+          : listenUrl.pathSegments.last;
+      if (name == mountName) {
+        mount = s;
+        break;
+      }
+    }
+    // Un solo punto de montaje con otro nombre (p. ej. un proxy que lo
+    // renombra): es el de la emisora.
+    if (mount == null && sources.length == 1) mount = sources.first;
+    // Varios y ninguno coincide: no se sabe cuál es.
+    if (mount == null) return const _ServerStatus(_ServerState.unknown);
+
+    // Sin hora de inicio = relleno: tras un reinicio el servidor publica el
+    // punto de montaje sin señal real y quien se conecta oye ruido. (No se
+    // mira el campo "dummy": Icecast 2.4.4 lo incluye siempre, vacío.)
+    final start = mount['stream_start_iso8601'] ?? mount['stream_start'];
+    if (start == null || '$start'.trim().isEmpty) {
+      return const _ServerStatus(_ServerState.offAir);
+    }
+    return _ServerStatus(_ServerState.live, mount: mount);
   }
 
   /// Lee el título actual desde el status-json.xsl de Icecast y lo envía al
@@ -780,7 +955,7 @@ class AudioPlayerManager {
   Future<void> _pollStreamTitle() async {
     if (!isPlaying) return;
     try {
-      final mount = (await _fetchServerStatus())?.mount;
+      final mount = (await _fetchServerStatus()).mount;
 
       final streamTitle = (mount?['title'] ?? mount?['yp_currently_playing'])
           ?.toString()
@@ -1006,10 +1181,12 @@ class AudioPlayerManager {
       _healthInterval,
       (_) => _checkServerHealth(),
     );
+    _startPrimaryChecks();
   }
 
   void _stopHealthChecks() {
     _stopWebTitles();
+    _stopPrimaryChecks();
     _healthTimer?.cancel();
     _healthTimer = null;
   }
@@ -1027,9 +1204,14 @@ class AudioPlayerManager {
     _healthCheckInFlight = true;
     try {
       final status = await _fetchServerStatus();
-      if (status == null) return; // el servidor no respondió: no se concluye
+      // Si no responde o su página no se entiende, no se concluye nada: se
+      // confía en el audio.
+      if (status.state == _ServerState.down ||
+          status.state == _ServerState.unknown) {
+        return;
+      }
       final mount = status.mount;
-      _setOffAir(mount == null);
+      _setOffAir(status.state == _ServerState.offAir);
 
       final start = mount == null
           ? _offAirMarker
@@ -1040,15 +1222,15 @@ class AudioPlayerManager {
         return;
       }
 
-      if (mount == null) {
+      if (status.state == _ServerState.offAir) {
         // Suena algo, pero el servidor dice que la emisora no transmite: es
-        // relleno o ruido. Se detiene el audio y se espera a que vuelva.
+        // relleno o ruido. Se detiene el audio y se busca otro servidor que
+        // sí transmita; si no hay, se espera a que vuelva.
         _diag('Sonando sin transmisión real en el servidor; se detiene');
         _connectedStreamStart = null;
-        if (_hasBackupServers) {
-          // Hay otro servidor: se pasa a ese de inmediato.
-          _switchToNextServer('fuera del aire');
-          _outageStart ??= DateTime.now();
+        _outageStart ??= DateTime.now();
+        _triedServers.add(_serverIndex);
+        if (await _switchToBestServer('fuera del aire')) {
           _reconnectAttempts = 0;
           _handleReconnection();
           return;
@@ -1142,9 +1324,15 @@ class AudioPlayerManager {
     final startedAt = DateTime.now();
     final status = await _fetchServerStatus();
     _OutageCause cause;
-    if (status != null) {
-      _setOffAir(status.mount == null);
+    if (status.state == _ServerState.live ||
+        status.state == _ServerState.offAir) {
+      _setOffAir(status.state == _ServerState.offAir);
       cause = _offAir ? _OutageCause.offAir : _OutageCause.weakConnection;
+    } else if (status.state == _ServerState.unknown) {
+      // El servidor responde (no está caído) pero no dice si transmite: no
+      // se culpa a nadie, y los intentos fallidos dirán si hay que cambiar
+      // de servidor.
+      cause = _OutageCause.unknown;
     } else if (!await _hasInternet()) {
       cause = _OutageCause.noInternet;
     } else if (_networkChangedSince(startedAt)) {
@@ -1161,14 +1349,32 @@ class AudioPlayerManager {
       _cause = cause;
       _diag('Causa de la falla: ${cause.name}');
     }
-    // La falla es del servidor (no del teléfono): si hay otro, se usa ese en
-    // el próximo intento.
-    if (_hasBackupServers &&
-        (cause == _OutageCause.offAir || cause == _OutageCause.serverDown)) {
-      _switchToNextServer(
+    // La falla es del servidor (no del teléfono): si otro transmite, se usa
+    // ese en el próximo intento.
+    if (cause == _OutageCause.offAir || cause == _OutageCause.serverDown) {
+      _triedServers.add(_serverIndex);
+      final switched = await _switchToBestServer(
         cause == _OutageCause.offAir ? 'fuera del aire' : 'no responde',
       );
-      _cause = _OutageCause.unknown;
+      if (switched) {
+        _cause = _OutageCause.unknown;
+        // El intento en curso usa el servidor malo: se pasa al nuevo ya, sin
+        // esperar a que se agote.
+        if (_isReconnecting &&
+            _lastPlaybackState != PlaybackState.playing &&
+            _userWantsPlayback &&
+            !_isPausedForArticle) {
+          _attemptWatchdog?.cancel();
+          _reconnectTimer?.cancel();
+          _isReconnecting = false;
+          _lastReconnectAttempt = null;
+          // Si estaba en la espera de 30 s, se intenta ya con el nuevo.
+          if (_reconnectAttempts >= _maxReconnectAttempts) {
+            _slowRetryDue = true;
+          }
+          _handleReconnection();
+        }
+      }
     }
     if (_outageController.value.isNotEmpty) {
       _outageController.add(_outageMessage());
@@ -1211,6 +1417,7 @@ class AudioPlayerManager {
   /// Termina el modo de falla larga (la radio sonó, o el usuario pausó).
   void _endOutage() {
     _outageStart = null;
+    _triedServers.clear();
     _cause = _OutageCause.unknown;
     _slowRetryDue = false;
     if (_outageController.value.isNotEmpty) _outageController.add('');
@@ -1621,19 +1828,24 @@ class AudioPlayerManager {
     // "playing" (_handlePlayingState). Si no suena a tiempo, se pasa al
     // siguiente intento en vez de quedarse cargando para siempre.
     _attemptWatchdog?.cancel();
-    _attemptWatchdog = Timer(_playTimeout, () {
+    _attemptWatchdog = Timer(_playTimeout, () async {
       if (!_isReconnecting) return;
       _log('[AudioPlayerManager] ⏱️ El intento no logró sonar a tiempo');
       _diag(
         'Intento $_reconnectAttempts sin audio tras '
         '${_playTimeout.inSeconds} s',
       );
-      // Si la red cambió durante el intento, la falla no es del servidor.
-      if (!_networkChangedSince(DateTime.now().subtract(_playTimeout))) {
-        _failuresOnServer++;
-      }
+      // Solo cuenta contra el servidor si el teléfono tenía red e internet y
+      // la red no cambió durante el intento.
+      final phoneProblem =
+          _lastNetwork == _noNetwork ||
+          _cause == _OutageCause.noInternet ||
+          _networkChangedSince(DateTime.now().subtract(_playTimeout));
+      if (!phoneProblem) _failuresOnServer++;
       if (_failuresOnServer >= _failuresBeforeSwitch) {
-        _switchToNextServer('no conecta');
+        _failuresOnServer = 0;
+        await _switchToBestServer('no conecta');
+        if (!_isReconnecting) return;
       }
       _isReconnecting = false;
       _lastReconnectAttempt = null;
@@ -1660,6 +1872,8 @@ class AudioPlayerManager {
     _reconnectTimer = Timer(_slowRetryInterval, () async {
       // Si el servidor dice que la emisora no transmite, se sigue esperando
       // sin intentar conectar.
+      // Pasada la espera, se puede volver a probar cada servidor.
+      _triedServers.clear();
       await _diagnoseOutage();
       if (!_userWantsPlayback || _isPausedForArticle || !_isReconnecting) {
         return;
@@ -1710,7 +1924,8 @@ class AudioPlayerManager {
     final previous = _lastNetwork;
     if (network == previous) return;
     _lastNetwork = network;
-    _lastNetworkChangeAt = DateTime.now();
+    // La primera lectura al abrir la app no es un cambio de red.
+    if (previous != null) _lastNetworkChangeAt = DateTime.now();
 
     _log('[AudioPlayerManager] 📶 Red: ${previous ?? '-'} → $network');
     _diag('Red: ${previous ?? 'inicio'} → $network');
@@ -2082,3 +2297,27 @@ class AudioPlayerManager {
 
 /// Dónde está una falla larga de la radio.
 enum _OutageCause { unknown, noInternet, weakConnection, offAir, serverDown }
+
+/// Lo que dice la página de estado de un servidor.
+enum _ServerState {
+  /// Transmite la señal de la emisora.
+  live,
+
+  /// Responde, pero sin señal real (sin punto de montaje o con relleno).
+  offAir,
+
+  /// No responde (ni la página de estado).
+  down,
+
+  /// Responde, pero su página de estado no existe o no se entiende: se juzga
+  /// solo por el audio.
+  unknown,
+}
+
+class _ServerStatus {
+  const _ServerStatus(this.state, {this.mount});
+  final _ServerState state;
+
+  /// Datos del punto de montaje del stream (solo si [state] es live).
+  final Map? mount;
+}
