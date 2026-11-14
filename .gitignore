@@ -130,3 +130,6 @@ ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
 
 # Claves del actualizador de títulos (nunca al repositorio)
 tools/titulos/config.ps1
+
+# Notas locales de Claude (la guía está en Google Drive, no en el repo)
+CLAUDE.local.md
