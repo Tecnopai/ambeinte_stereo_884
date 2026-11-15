@@ -27,6 +27,8 @@ $RETARDO_ENVIO      = 1     # segundos entre detectar un titulo y enviarlo
 
 $URL_TITULOS        = ""    # direccion completa de titulo.php
 $CLAVE_TITULOS      = ""    # la misma clave de titulo.php (solo letras y numeros)
+$REENVIO_WEB        = 60    # segundos: reenvia el titulo a la web aunque no cambie
+                            # (senal de vida para el aviso de Google; 0 = solo al cambiar)
 
 $URL_AZURACAST      = ""    # vacio = no enviar a AzuraCast
 $API_KEY            = ""
@@ -148,13 +150,13 @@ function Codigo-HTTP {
 
 # --- Envio a la web (titulo.php) ---------------------------------------
 function Enviar-TituloWeb {
-    param([string]$texto)
+    param([string]$texto, [switch]$silencioso)
     try {
         $json  = @{ titulo = $texto } | ConvertTo-Json -Compress
         $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
         Invoke-RestMethod -Uri $URL_TITULOS -Method Post -Headers @{ "X-Clave" = $CLAVE_TITULOS } `
             -ContentType "application/json; charset=utf-8" -Body $bytes -TimeoutSec 8 | Out-Null
-        Log "OK web: '$texto'" 'Cyan'
+        if (-not $silencioso) { Log "OK web: '$texto'" 'Cyan' }
         return $true
     } catch {
         $codigo = Codigo-HTTP $_
@@ -241,6 +243,9 @@ $archivoFallando = $false
 $webPendiente    = $null
 $webProximo      = [datetime]::MinValue
 $webFallos       = 0
+# Ultimo titulo que llego a la web y cuando, para el reenvio periodico ($REENVIO_WEB).
+$webUltimo       = $null
+$webUltimoEnvio  = [datetime]::MinValue
 
 # Servidores de streaming (opcionales). Cada uno lleva su propio estado: si falla
 # 3 veces seguidas se pausa $PAUSA_TRAS_FALLOS minutos y luego vuelve a probar.
@@ -306,13 +311,32 @@ try {
         # 3) Web: enviar (o reintentar) el titulo pendiente
         if ($usarWeb -and $webPendiente -and (Get-Date) -ge $webProximo) {
             if (Enviar-TituloWeb -texto $webPendiente) {
-                $webPendiente = $null
-                $webFallos    = 0
+                $webUltimo      = $webPendiente
+                $webUltimoEnvio = Get-Date
+                $webPendiente   = $null
+                $webFallos      = 0
             } else {
                 $webFallos++
                 $espera = [Math]::Min(60, 5 * $webFallos)
                 $webProximo = (Get-Date).AddSeconds($espera)
                 Log "  se reintenta en $espera s" 'DarkGray'
+            }
+        }
+
+        # 3b) Web: reenvio periodico del ultimo titulo, aunque no cambie. Sirve de
+        #     senal de vida: el registro de oyentes (Google) avisa si titulo.php
+        #     deja de actualizarse. No escribe en la consola si sale bien.
+        if ($usarWeb -and -not $webPendiente -and $REENVIO_WEB -gt 0 -and $webUltimo -and
+            ((Get-Date) - $webUltimoEnvio).TotalSeconds -ge $REENVIO_WEB -and
+            (Get-Date) -ge $webProximo) {
+            if (Enviar-TituloWeb -texto $webUltimo -silencioso) {
+                $webUltimoEnvio = Get-Date
+                $webFallos      = 0
+            } else {
+                $webFallos++
+                $espera = [Math]::Min(60, 5 * $webFallos)
+                $webProximo = (Get-Date).AddSeconds($espera)
+                Log "  reenvio web fallido; se reintenta en $espera s" 'DarkGray'
             }
         }
 
