@@ -63,19 +63,36 @@ class RadioAlarmState {
   const RadioAlarmState(this.config, this.next, this.canSchedule);
 }
 
-/// Despertador con la radio (solo Android, no TV). Todo el trabajo lo hace la
-/// parte nativa (RadioAlarm.java / AlarmService.java), que funciona aunque la
-/// app esté cerrada. Desde aquí se configura y se le pasan las direcciones de
-/// los servidores y el audio de respaldo. Nada sale del teléfono.
+/// Despertador con la radio (Android sin TV, e iPhone). Todo el trabajo lo
+/// hace la parte nativa, que funciona aunque la app esté cerrada. Desde aquí
+/// se configura y se le pasan las direcciones de los servidores y el audio de
+/// respaldo. Nada sale del teléfono.
+/// - Android (RadioAlarm.java / AlarmService.java): a la hora pone la emisora.
+/// - iPhone (RadioAlarmIOS.swift): Apple no deja que una app empiece a sonar
+///   sola. Con iOS 26+ suena una alarma como la del reloj (AlarmKit); antes,
+///   una notificación. En los dos casos el botón "Escuchar la radio" abre la
+///   app y pone la emisora.
 class RadioAlarm {
-  RadioAlarm._();
+  RadioAlarm._() {
+    if (Platform.isIOS) {
+      // "Escuchar la radio" tocado con la app ya abierta.
+      _channel.setMethodCallHandler((call) async {
+        if (call.method == 'keepListeningNow') await handleKeepListening();
+      });
+    }
+  }
   static final RadioAlarm instance = RadioAlarm._();
 
   static const _channel = MethodChannel(
     'com.miltonbass.ambientestereo884/alarm',
   );
 
-  static bool get supported => Platform.isAndroid && !Tv.isTv;
+  static bool get supported =>
+      (Platform.isAndroid && !Tv.isTv) || Platform.isIOS;
+
+  /// En iPhone el sonido es el de la alarma del sistema: sin volumen propio,
+  /// sin 5 minutos más y sin aviso de otras alarmas.
+  static bool get isIOS => Platform.isIOS;
 
   Future<RadioAlarmState> load() async {
     final m = Map<String, dynamic>.from(

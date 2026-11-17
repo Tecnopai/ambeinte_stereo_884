@@ -6,8 +6,9 @@ import '../core/theme/app_colors.dart';
 import '../services/radio_alarm.dart';
 
 /// Despertador con la radio: hora, días y encendido. Se guarda al cambiar
-/// cualquier cosa. A la hora, el teléfono pone la emisora aunque la app esté
-/// cerrada (Android).
+/// cualquier cosa. A la hora, en Android el teléfono pone la emisora aunque la
+/// app esté cerrada; en iPhone suena una alarma con el botón "Escuchar la
+/// radio" (ver RadioAlarm).
 class AlarmScreen extends StatefulWidget {
   const AlarmScreen({super.key});
 
@@ -76,7 +77,8 @@ class _AlarmScreenState extends State<AlarmScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  /// Sonando la prueba (se apaga sola a los 30 s en Android).
+  /// Sonando la prueba (se apaga sola a los 30 s en Android; en iPhone suena
+  /// a los 5 s como una alarma y se apaga desde ella o con "Detener").
   bool _testing = false;
   Timer? _testTimer;
 
@@ -202,8 +204,11 @@ class _AlarmScreenState extends State<AlarmScreen> with WidgetsBindingObserver {
                       : 'Los días marcados.',
                   style: const TextStyle(color: AppColors.textMuted),
                 ),
-                const SizedBox(height: 24),
-                _buildVolume(s.config),
+                // En iPhone suena con el volumen de alarma del sistema.
+                if (!RadioAlarm.isIOS) ...[
+                  const SizedBox(height: 24),
+                  _buildVolume(s.config),
+                ],
                 const SizedBox(height: 20),
                 // Escuchar el despertador 30 s (volumen, y comprobar que el
                 // teléfono lo deja sonar). "Detener" solo mientras suena.
@@ -211,7 +216,11 @@ class _AlarmScreenState extends State<AlarmScreen> with WidgetsBindingObserver {
                   OutlinedButton.icon(
                     onPressed: _startTest,
                     icon: const Icon(Icons.play_circle_outline),
-                    label: const Text('Escuchar cómo sonará'),
+                    label: Text(
+                      RadioAlarm.isIOS
+                          ? 'Probar (suena en 5 segundos)'
+                          : 'Escuchar cómo sonará',
+                    ),
                   )
                 else
                   FilledButton.icon(
@@ -223,12 +232,22 @@ class _AlarmScreenState extends State<AlarmScreen> with WidgetsBindingObserver {
                     label: const Text('Detener'),
                   ),
                 const SizedBox(height: 20),
-                const Text(
-                  'A la hora, el teléfono pone Ambiente Stereo aunque la app '
-                  'esté cerrada, con el volumen de alarma y subiendo de a poco. '
-                  'Si no hay internet, suena un tono para que no te quedes '
-                  'dormido. Desde el aviso puedes apagarlo o pedir 5 minutos más.',
-                  style: TextStyle(color: AppColors.textMuted, height: 1.45),
+                Text(
+                  RadioAlarm.isIOS
+                      ? 'A la hora suena una alarma como la del reloj del '
+                            'iPhone, aunque esté en silencio. Toca "Escuchar la '
+                            'radio" para poner Ambiente Stereo, o "Apagar". '
+                            'Apple no permite que una app empiece a sonar sola, '
+                            'por eso la radio se pone con ese botón. Para probar, '
+                            'toca "Probar" y bloquea el teléfono.'
+                      : 'A la hora, el teléfono pone Ambiente Stereo aunque la app '
+                            'esté cerrada, con el volumen de alarma y subiendo de a poco. '
+                            'Si no hay internet, suena un tono para que no te quedes '
+                            'dormido. Desde el aviso puedes apagarlo o pedir 5 minutos más.',
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    height: 1.45,
+                  ),
                 ),
               ],
             ),
@@ -429,16 +448,20 @@ class _AlarmScreenState extends State<AlarmScreen> with WidgetsBindingObserver {
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Para que el despertador suene a la hora exacta, Android pide '
-            'activar "Alarmas y recordatorios" para esta app.',
-            style: TextStyle(color: AppColors.textMuted, height: 1.4),
+          Text(
+            RadioAlarm.isIOS
+                ? 'Para que el despertador suene, activa "Alarmas" (o '
+                      '"Notificaciones") en los Ajustes del iPhone para '
+                      'Ambiente Stereo.'
+                : 'Para que el despertador suene a la hora exacta, Android pide '
+                      'activar "Alarmas y recordatorios" para esta app.',
+            style: const TextStyle(color: AppColors.textMuted, height: 1.4),
           ),
           const SizedBox(height: 10),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
             onPressed: _alarm.openPermissionSettings,
-            child: const Text('Activar permiso'),
+            child: Text(RadioAlarm.isIOS ? 'Abrir Ajustes' : 'Activar permiso'),
           ),
         ],
       ),
