@@ -10,6 +10,8 @@ import '../widgets/live_indicator.dart';
 import '../core/theme/app_colors.dart';
 import 'article_detail_screen.dart';
 import '../utils/responsive_helper.dart';
+import '../utils/tv.dart';
+
 // Se omite la importación de 'news_list_screen.dart' ya que CategoryNewsScreen está en este archivo.
 
 /// Pantalla principal de noticias mejorada con Radio Hits
@@ -259,8 +261,10 @@ class _NewsScreenState extends State<NewsScreen>
               _buildRadioHitsTab(responsive),
             ],
           ),
-          // MiniPlayer flotante si la reproducción de audio está activa
-          if (_isPlaying)
+          // MiniPlayer flotante si la reproducción de audio está activa. En
+          // TV no se muestra: tapa las tarjetas y la radio se controla desde
+          // "Radio" en el menú.
+          if (_isPlaying && !Tv.isTv)
             Positioned(
               bottom: 16,
               left: 16,
@@ -443,7 +447,8 @@ class _NewsScreenState extends State<NewsScreen>
                 bottom: bottomPadding,
               ),
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: responsive.gridColumns,
+                // En TV, 3 columnas: tarjetas más pequeñas, más noticias.
+                crossAxisCount: Tv.isTv ? 3 : responsive.gridColumns,
                 crossAxisSpacing: padding,
                 mainAxisSpacing: padding,
                 // Proporción ajustada (altura/ancho) para prevenir overflow en el texto.

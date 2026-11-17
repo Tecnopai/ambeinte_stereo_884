@@ -3,6 +3,7 @@ import 'package:volume_controller/volume_controller.dart';
 import '../services/audio_player_manager.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
+import '../utils/tv.dart';
 
 /// Mini reproductor flotante que aparece en la parte inferior de la pantalla.
 /// Muestra controles de reproducción, volumen y estado de la transmisión.
@@ -151,6 +152,9 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    // En TV no se muestra: tapa el contenido y la radio se controla desde
+    // "Radio" en el menú (y el volumen, con el control del televisor).
+    if (Tv.isTv) return const SizedBox.shrink();
     final responsive = ResponsiveHelper(context);
 
     // Definición de tamaños responsivos para el contenedor principal
@@ -727,7 +731,9 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
                   // Estilización del Slider
                   data: SliderThemeData(
                     activeTrackColor: AppColors.primary,
-                    inactiveTrackColor: AppColors.textSecondary.withValues(alpha: 0.2),
+                    inactiveTrackColor: AppColors.textSecondary.withValues(
+                      alpha: 0.2,
+                    ),
                     thumbColor: AppColors.primary,
                     overlayColor: AppColors.primary.withValues(alpha: 0.2),
                     trackHeight: trackHeight,

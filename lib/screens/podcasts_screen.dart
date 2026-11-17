@@ -10,6 +10,7 @@ import '../services/podcast_service.dart';
 import '../utils/responsive_helper.dart';
 import '../widgets/podcast_widgets.dart';
 import 'podcast_detail_screen.dart';
+import '../utils/tv.dart';
 
 /// Pestaña "Podcast": lista de podcasts y "Continuar escuchando".
 class PodcastsScreen extends StatefulWidget {
@@ -58,14 +59,16 @@ class _PodcastsScreenState extends State<PodcastsScreen>
   void _watch(PodcastSource source) {
     _failed.remove(source.key);
     _subscriptions.add(
-      _service.watch(source).listen(
-        (podcast) {
-          if (mounted) setState(() => _podcasts[source.key] = podcast);
-        },
-        onError: (_) {
-          if (mounted) setState(() => _failed.add(source.key));
-        },
-      ),
+      _service
+          .watch(source)
+          .listen(
+            (podcast) {
+              if (mounted) setState(() => _podcasts[source.key] = podcast);
+            },
+            onError: (_) {
+              if (mounted) setState(() => _failed.add(source.key));
+            },
+          ),
     );
   }
 
@@ -291,7 +294,9 @@ class _PodcastCard extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.12),
+            ),
           ),
           child: Column(
             children: [
@@ -364,10 +369,7 @@ class _PodcastCard extends StatelessWidget {
                 ),
               ),
               if (latest != null) ...[
-                Divider(
-                  height: 1,
-                  color: Colors.white.withValues(alpha: 0.06),
-                ),
+                Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
                   child: Row(
@@ -502,10 +504,12 @@ class _PodcastCardError extends StatelessWidget {
               ),
             ),
             TextButton(
-              onPressed: () => launchUrl(
-                Uri.parse(spotify),
-                mode: LaunchMode.externalApplication,
-              ),
+              onPressed: () => Tv.isTv
+                  ? Tv.openLink(context, Uri.parse(spotify))
+                  : launchUrl(
+                      Uri.parse(spotify),
+                      mode: LaunchMode.externalApplication,
+                    ),
               child: const Text('Abrir'),
             ),
           ],

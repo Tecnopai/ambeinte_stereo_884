@@ -6,6 +6,7 @@ import 'package:just_audio/just_audio.dart';
 import '../models/article.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
+import '../utils/tv.dart';
 import '../services/audio_player_manager.dart';
 import '../services/podcast_player.dart';
 import '../widgets/mini_player.dart';
@@ -188,6 +189,8 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
 
     // Es crucial liberar los recursos del reproductor de audio al salir.
     _audioPlayer?.dispose();
+    _tvScrollController.dispose();
+    _tvScrollNode.dispose();
     super.dispose();
   }
 
@@ -282,9 +285,10 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Título y contenido scrolleable
+                    // Título y contenido scrolleable. En TV se mueve con las
+                    // flechas arriba/abajo del control remoto.
                     Expanded(
-                      child: SingleChildScrollView(
+                      child: _tvScroll(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -326,7 +330,8 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                             if (_isInitialized && !_hasError)
                               const SizedBox(height: 20),
 
-                            // Contenido resumido
+                            // Contenido resumido (completo en TV, donde no
+                            // hay navegador para "Ver completo").
                             Text(
                               widget.article.content,
                               style: TextStyle(
@@ -334,40 +339,44 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                                 color: Colors.grey[300],
                                 height: 1.6,
                               ),
-                              maxLines: 8,
-                              overflow: TextOverflow.ellipsis,
+                              maxLines: Tv.isTv ? null : 8,
+                              overflow: Tv.isTv
+                                  ? TextOverflow.visible
+                                  : TextOverflow.ellipsis,
                             ),
                           ],
                         ),
                       ),
                     ),
 
-                    const SizedBox(height: 20),
+                    if (!Tv.isTv) const SizedBox(height: 20),
 
-                    // Botón grande para ver completo
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _launchUrl(widget.article.link),
-                        icon: const Icon(Icons.open_in_browser, size: 28),
-                        label: Text(
-                          'VER COMPLETO',
-                          style: TextStyle(
-                            fontSize: responsive.buttonText,
-                            fontWeight: FontWeight.bold,
+                    // Botón grande para ver completo (abre el navegador; no
+                    // en TV).
+                    if (!Tv.isTv)
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _launchUrl(widget.article.link),
+                          icon: const Icon(Icons.open_in_browser, size: 28),
+                          label: Text(
+                            'VER COMPLETO',
+                            style: TextStyle(
+                              fontSize: responsive.buttonText,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(double.infinity, 70),
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 70),
+                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -375,6 +384,63 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  final ScrollController _tvScrollController = ScrollController();
+  final FocusNode _tvScrollNode = FocusNode(
+    debugLabel: 'texto del artículo (TV)',
+    skipTraversal: true,
+  );
+
+  /// Texto desplazable. En TV, las flechas arriba/abajo mueven el texto
+  /// mientras quede por leer; al llegar al final, la flecha pasa a los
+  /// botones (por ejemplo, el audio del artículo).
+  Widget _tvScroll({required Widget child}) {
+    final scroll = SingleChildScrollView(
+      controller: Tv.isTv ? _tvScrollController : null,
+      child: child,
+    );
+    if (!Tv.isTv) return scroll;
+    // El área del texto empieza seleccionada (sin marca visible) para que
+    // las flechas lo muevan. Las teclas de los botones de adentro (audio)
+    // también pasan por aquí.
+    return Focus(
+      focusNode: _tvScrollNode,
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+          return KeyEventResult.ignored;
+        }
+        if (!_tvScrollController.hasClients) return KeyEventResult.ignored;
+        final pos = _tvScrollController.position;
+        final onText = FocusManager.instance.primaryFocus == _tvScrollNode;
+        double? target;
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          if (pos.pixels < pos.maxScrollExtent) {
+            target = (pos.pixels + 160).clamp(0, pos.maxScrollExtent);
+          } else if (onText) {
+            // Se terminó el texto: la flecha pasa al primer botón (audio).
+            final first = _tvScrollNode.descendants
+                .where((n) => n.canRequestFocus && !n.skipTraversal)
+                .firstOrNull;
+            first?.requestFocus();
+            return KeyEventResult.handled;
+          }
+        } else if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+            onText &&
+            pos.pixels > 0) {
+          target = (pos.pixels - 160).clamp(0, pos.maxScrollExtent);
+        }
+        if (target == null) return KeyEventResult.ignored;
+        _tvScrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+        );
+        return KeyEventResult.handled;
+      },
+      child: scroll,
     );
   }
 
@@ -1258,6 +1324,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
 
   /// Método para lanzar URLs - AÑADIDO PARA SOLUCIONAR ERROR
   Future<void> _launchUrl(String url) async {
+    if (Tv.isTv) return Tv.openLink(context, Uri.parse(url));
     try {
       final uri = Uri.parse(url);
       if (await canLaunchUrl(uri)) {

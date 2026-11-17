@@ -11,6 +11,7 @@ import '../widgets/live_indicator.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
 import 'report_problem_screen.dart';
+import '../utils/tv.dart';
 
 /// Pantalla "Acerca de" que muestra información sobre la aplicación y la emisora.
 ///
@@ -309,6 +310,7 @@ class _AboutScreenState extends State<AboutScreen> {
   /// Abre la URL en el navegador externo del sistema para evitar problemas de compatibilidad.
   Future<void> _launchUrl(String url) async {
     final uri = Uri.parse(url);
+    if (Tv.isTv) return Tv.openLink(context, uri);
     if (await canLaunchUrl(uri)) {
       // Usar externalApplication es preferible para abrir enlaces web.
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -680,6 +682,7 @@ class _AboutScreenState extends State<AboutScreen> {
     );
 
     return _buildButton(responsive, 'Soporte app', Icons.email, () async {
+      if (Tv.isTv) return Tv.openLink(context, emailUri);
       if (await canLaunchUrl(emailUri)) {
         await launchUrl(emailUri);
       }

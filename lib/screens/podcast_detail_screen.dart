@@ -10,6 +10,7 @@ import '../services/podcast_player.dart';
 import '../services/podcast_service.dart';
 import '../widgets/podcast_widgets.dart';
 import 'podcast_player_screen.dart';
+import '../utils/tv.dart';
 
 /// Detalle de un podcast: encabezado, buscador y lista de episodios.
 class PodcastDetailScreen extends StatefulWidget {
@@ -52,8 +53,7 @@ class _PodcastDetailScreenState extends State<PodcastDetailScreen> {
   }
 
   void _onScroll() {
-    if (_scroll.position.extentAfter < 600 &&
-        _visible < _filtered.length) {
+    if (_scroll.position.extentAfter < 600 && _visible < _filtered.length) {
       setState(() => _visible += _pageSize);
     }
   }
@@ -133,9 +133,7 @@ class _PodcastDetailScreenState extends State<PodcastDetailScreen> {
             const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.all(24),
-                child: Center(
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
               ),
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -199,20 +197,26 @@ class _PodcastDetailScreenState extends State<PodcastDetailScreen> {
                   ),
                   icon: const Icon(Icons.open_in_new_rounded, size: 18),
                   label: Text(_externalLabel(podcast.source.externalUrl!)),
-                  onPressed: () => launchUrl(
-                    Uri.parse(podcast.source.externalUrl!),
-                    mode: LaunchMode.externalApplication,
-                  ),
+                  onPressed: () => Tv.isTv
+                      ? Tv.openLink(
+                          context,
+                          Uri.parse(podcast.source.externalUrl!),
+                        )
+                      : launchUrl(
+                          Uri.parse(podcast.source.externalUrl!),
+                          mode: LaunchMode.externalApplication,
+                        ),
                 ),
               ],
             ],
           ),
           if (podcast.description.isNotEmpty) ...[
             const SizedBox(height: 16),
-            GestureDetector(
-              onTap: () => setState(
-                () => _descriptionExpanded = !_descriptionExpanded,
-              ),
+            // InkWell (no GestureDetector) para poder abrirlo con el
+            // control remoto en TV.
+            InkWell(
+              onTap: () =>
+                  setState(() => _descriptionExpanded = !_descriptionExpanded),
               child: AnimatedSize(
                 duration: const Duration(milliseconds: 200),
                 alignment: Alignment.topCenter,
