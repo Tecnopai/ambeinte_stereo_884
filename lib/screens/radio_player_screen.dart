@@ -6,6 +6,7 @@ import '../widgets/volume_control.dart';
 import '../widgets/sound_waves.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
+import '../utils/tv.dart';
 import '../utils/cache_manager.dart';
 import 'report_problem_screen.dart';
 
@@ -213,6 +214,22 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     final responsive = ResponsiveHelper(context);
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
+
+    if (Tv.isTv) {
+      return Scaffold(
+        body: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
+          child: Column(
+            children: [
+              _buildNotices(),
+              Expanded(child: _buildTvLayout()),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -591,6 +608,143 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                     automotive: 170.0,
                   ),
                   child: VolumeControl(audioManager: _audioManager),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Pantalla de la radio para televisor: disco grande, nombre y canción en
+  /// letras grandes y el botón de play, que queda seleccionado al abrir para
+  /// que OK pause o reanude. Sin control de volumen: en el televisor se usa el
+  /// del control remoto.
+  Widget _buildTvLayout() {
+    final artist = _currentMetadata['artist'] ?? '';
+    final title = _currentMetadata['title'] ?? '';
+    final song = !_isPlaying || _isLoading || title.isEmpty
+        ? ''
+        : (artist.isEmpty || artist == 'Desconocido')
+        ? title
+        : '$artist — $title';
+
+    final String status;
+    final Color statusColor;
+    if (_isLoading) {
+      status = 'CONECTANDO…';
+      statusColor = AppColors.warning;
+    } else if (_isPlaying) {
+      status = 'EN VIVO';
+      statusColor = AppColors.liveIndicator;
+    } else {
+      status = 'EN PAUSA';
+      statusColor = AppColors.textMuted;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 24),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 260,
+            height: 260,
+            child: AnimatedDisc(isPlaying: _isPlaying),
+          ),
+          const SizedBox(width: 56),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  child: Text(
+                    status,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Ambiente Stereo 88.4 FM',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 34,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  song.isNotEmpty ? song : 'La radio que sí quieres',
+                  style: TextStyle(
+                    color: AppColors.textPrimary.withValues(alpha: 0.75),
+                    fontSize: 19,
+                    fontStyle: song.isNotEmpty
+                        ? FontStyle.italic
+                        : FontStyle.normal,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 28),
+                Row(
+                  children: [
+                    TvFocusable(
+                      autofocus: true,
+                      onPressed: _togglePlayback,
+                      borderRadius: BorderRadius.circular(60),
+                      focusScale: 1.1,
+                      child: Container(
+                        width: 96,
+                        height: 96,
+                        margin: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: AppColors.buttonGradient,
+                        ),
+                        child: Center(
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 36,
+                                  height: 36,
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.textPrimary,
+                                    strokeWidth: 3.5,
+                                  ),
+                                )
+                              : Icon(
+                                  _isPlaying ? Icons.pause : Icons.play_arrow,
+                                  color: AppColors.textPrimary,
+                                  size: 52,
+                                ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    Text(
+                      _isPlaying ? 'OK para pausar' : 'OK para escuchar',
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

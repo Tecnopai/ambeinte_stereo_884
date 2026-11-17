@@ -8,6 +8,7 @@ import 'podcasts_screen.dart';
 import 'about_screen.dart';
 import 'report_problem_screen.dart';
 import '../utils/responsive_helper.dart';
+import '../utils/tv.dart';
 import '../utils/version_checker.dart';
 import '../core/theme/app_colors.dart';
 import '../widgets/podcast_widgets.dart';
@@ -108,6 +109,9 @@ class _MainScreenState extends State<MainScreen> {
   /// {inheritdoc}
   @override
   void dispose() {
+    for (final n in _tvMenuNodes) {
+      n.dispose();
+    }
     _pageController.dispose();
     super.dispose();
   }
@@ -135,6 +139,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     final responsive = ResponsiveHelper(context);
+    if (Tv.isTv) return _buildTvLayout();
     // Determina si se debe usar NavigationRail o BottomNavigationBar
     final useNavigationRail = responsive.useNavigationRail;
 
@@ -179,6 +184,169 @@ class _MainScreenState extends State<MainScreen> {
                 _buildBottomNavigationBar(responsive),
               ],
             ),
+    );
+  }
+
+  // ========== TELEVISOR ==========
+
+  /// Interfaz para televisor: menú lateral grande manejado con el control
+  /// remoto (flechas y OK) y el contenido a la derecha. La flecha izquierda
+  /// lleva al menú y la derecha vuelve al contenido.
+  Widget _buildTvLayout() {
+    return Scaffold(
+      body: Row(
+        children: [
+          Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
+            onKeyEvent: _onTvMenuKey,
+            child: FocusTraversalGroup(child: _buildTvMenu()),
+          ),
+          Expanded(
+            child: Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onKeyEvent: _onTvContentKey,
+              child: PageView(
+                controller: _pageController,
+                onPageChanged: _onPageChanged,
+                // Las páginas cambian solo desde el menú.
+                physics: const NeverScrollableScrollPhysics(),
+                children: _screens,
+              ),
+            ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: const PodcastMiniPlayer(
+        margin: EdgeInsets.fromLTRB(16, 8, 16, 12),
+      ),
+    );
+  }
+
+  /// Un nodo de foco por opción del menú de TV.
+  late final List<FocusNode> _tvMenuNodes = List.generate(
+    4,
+    (i) => FocusNode(debugLabel: 'menu TV $i'),
+  );
+
+  /// Al salir del contenido hacia la izquierda, el foco va a la sección
+  /// actual del menú (no a la opción que quede más cerca en la pantalla).
+  KeyEventResult _onTvContentKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.arrowLeft) {
+      return KeyEventResult.ignored;
+    }
+    final current = FocusManager.instance.primaryFocus;
+    if (current == null) return KeyEventResult.ignored;
+    current.focusInDirection(TraversalDirection.left);
+    final now = FocusManager.instance.primaryFocus;
+    if (now == current || _tvMenuNodes.contains(now)) {
+      _tvMenuNodes[_currentIndex].requestFocus();
+    }
+    return KeyEventResult.handled;
+  }
+
+  /// En el menú, arriba en la primera opción y abajo en la última no hacen
+  /// nada (antes el foco saltaba al contenido).
+  KeyEventResult _onTvMenuKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final current = FocusManager.instance.primaryFocus;
+    final atTop =
+        event.logicalKey == LogicalKeyboardKey.arrowUp &&
+        current == _tvMenuNodes.first;
+    final atBottom =
+        event.logicalKey == LogicalKeyboardKey.arrowDown &&
+        current == _tvMenuNodes.last;
+    return atTop || atBottom ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
+  Widget _buildTvMenu() {
+    return Container(
+      width: 230,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          right: BorderSide(color: AppColors.primary.withValues(alpha: 0.18)),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 28, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/images/icon.png',
+                  width: 44,
+                  height: 44,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Ambiente\nStereo 88.4',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    height: 1.15,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+          for (var i = 0; i < _navigationItems.length; i++) ...[
+            _buildTvMenuItem(i),
+            const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTvMenuItem(int index) {
+    final item = _navigationItems[index];
+    final selected = _currentIndex == index;
+    final color = selected ? AppColors.primary : AppColors.textMuted;
+    return TvFocusable(
+      focusNode: _tvMenuNodes[index],
+      onPressed: () => _onTabTapped(index),
+      borderRadius: BorderRadius.circular(14),
+      focusScale: 1.04,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: selected
+              ? AppColors.primary.withValues(alpha: 0.12)
+              : Colors.transparent,
+        ),
+        child: Row(
+          children: [
+            _withBadge(
+              item,
+              Icon(
+                selected ? item.selectedIcon : item.icon,
+                color: color,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Text(
+              item.label,
+              style: TextStyle(
+                color: selected ? AppColors.textPrimary : color,
+                fontSize: 17,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
