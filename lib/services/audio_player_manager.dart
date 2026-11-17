@@ -315,6 +315,10 @@ class AudioPlayerManager {
   String get notice => _noticeController.value;
 
   bool get isPlaying => _playingController.value;
+
+  /// El usuario quiere oír la radio (aunque en este momento esté
+  /// reconectando). False si la pausó.
+  bool get wantsPlayback => _userWantsPlayback;
   bool get isLoading => _loadingController.value;
   double get volume => _volumeController.value;
   bool get isInitialized => _isInitialized;

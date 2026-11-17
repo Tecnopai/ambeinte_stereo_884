@@ -142,6 +142,7 @@ class PodcastPlayer {
     }
     return null;
   }
+
   Duration get position => _player?.position ?? Duration.zero;
   Duration? get duration => _player?.duration;
   double get speed => _player?.speed ?? 1.0;
@@ -243,6 +244,10 @@ class PodcastPlayer {
   }
 
   Future<void> setSpeed(double speed) async => _player?.setSpeed(speed);
+
+  /// Volumen del reproductor (0 a 1), sin tocar el del teléfono. Lo usa el
+  /// apagado programado para bajar suave.
+  Future<void> setVolume(double volume) async => _player?.setVolume(volume);
 
   /// Detiene y descarga el episodio (botón cerrar del mini reproductor).
   Future<void> stop() async {

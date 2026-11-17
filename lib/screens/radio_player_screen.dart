@@ -4,6 +4,7 @@ import '../services/audio_player_manager.dart';
 import '../widgets/animated_disc.dart';
 import '../widgets/volume_control.dart';
 import '../widgets/sound_waves.dart';
+import '../widgets/sleep_timer_button.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
 import '../utils/tv.dart';
@@ -459,6 +460,9 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
             child: VolumeControl(audioManager: _audioManager),
           ),
 
+          SizedBox(height: responsive.spacing(12)),
+          const SleepTimerButton(),
+
           SizedBox(height: responsive.spacing(20)),
         ],
       ),
@@ -609,6 +613,8 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                   ),
                   child: VolumeControl(audioManager: _audioManager),
                 ),
+                SizedBox(height: responsive.spacing(6)),
+                const SleepTimerButton(fontSize: 13),
               ],
             ),
           ),
@@ -746,6 +752,8 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                const SleepTimerButton(fontSize: 16),
               ],
             ),
           ),
