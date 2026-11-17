@@ -749,9 +749,10 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
                         _volume = value;
                       });
                       widget.audioManager.setVolume(value);
-                      // Nota: No es necesario usar VolumeController.setVolume aquí
-                      // porque VolumeController.instance.addListener ya actualiza
-                      // _volume cuando el usuario usa los botones físicos.
+                      // Cambia el volumen del teléfono de verdad (antes solo
+                      // se movía la barra y el sonido no cambiaba).
+                      VolumeController.instance.showSystemUI = false;
+                      VolumeController.instance.setVolume(value);
                     },
                     min: 0.0,
                     max: 1.0,
