@@ -60,6 +60,7 @@ dependencies:
   flutter_cache_manager: ^3.3.0 # Gestión avanzada de caché de archivos.
   connectivity_plus: ^7.3.2 # Detecta cambios de red (wifi/datos) para reconectar el stream.
   device_info_plus: ^12.4.0 # Modelo y versión del sistema para el reporte de problemas (solo local).
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   # --------------------------------------------------------------------------
