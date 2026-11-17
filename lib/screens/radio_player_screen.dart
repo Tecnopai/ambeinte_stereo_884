@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/audio_player_manager.dart';
 import '../widgets/animated_disc.dart';
-import '../widgets/volume_control.dart';
 import '../widgets/sound_waves.dart';
 import '../widgets/sleep_timer_button.dart';
 import '../core/theme/app_colors.dart';
@@ -445,22 +444,9 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
             ),
           ),
 
-          SizedBox(height: responsive.spacing(25)),
-
-          // Control de volumen
-          SizedBox(
-            width: responsive.getValue(
-              smallPhone: 250.0,
-              phone: 280.0,
-              largePhone: 320.0,
-              tablet: 400.0,
-              desktop: 500.0,
-              automotive: 320.0,
-            ),
-            child: VolumeControl(audioManager: _audioManager),
-          ),
-
-          SizedBox(height: responsive.spacing(12)),
+          // Sin barra de volumen: se usan los botones del teléfono. En su
+          // lugar, el apagado programado queda a la vista.
+          SizedBox(height: responsive.spacing(20)),
           const SleepTimerButton(),
 
           SizedBox(height: responsive.spacing(20)),
@@ -601,19 +587,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                     automotive: 28.0,
                   ),
                 ),
-                SizedBox(height: responsive.spacing(8)),
-                SizedBox(
-                  width: responsive.getValue(
-                    smallPhone: 140.0,
-                    phone: 160.0,
-                    largePhone: 170.0,
-                    tablet: 180.0,
-                    desktop: 200.0,
-                    automotive: 170.0,
-                  ),
-                  child: VolumeControl(audioManager: _audioManager),
-                ),
-                SizedBox(height: responsive.spacing(6)),
+                SizedBox(height: responsive.spacing(10)),
                 const SleepTimerButton(fontSize: 13),
               ],
             ),
