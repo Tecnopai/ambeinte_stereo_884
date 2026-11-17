@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'core/app.dart';
 import 'services/diagnostics_log.dart';
+import 'utils/tv.dart';
 import 'package:logger/logger.dart';
 
 /// Instancia global del logger para uso en toda la aplicación.
@@ -22,6 +23,9 @@ void main() async {
   // Registro de diagnóstico local (solo en el teléfono, ver DiagnosticsLog).
   // No se espera: si tarda, los eventos se guardan cuando termine de cargar.
   DiagnosticsLog.instance.init();
+
+  // ¿Televisor? Cambia la interfaz para usarla con el control remoto.
+  await Tv.init();
 
   try {
     // Configurar orientaciones permitidas para la aplicación (vertical y horizontal).
