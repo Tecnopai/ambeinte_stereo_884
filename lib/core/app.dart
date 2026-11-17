@@ -115,7 +115,16 @@ class _AmbientStereoAppState extends State<AmbientStereoApp>
       home: const SplashScreen(),
 
       builder: (context, widget) => ResponsiveBreakpoints.builder(
-        child: ClampingScrollWrapper.builder(context, widget!),
+        // En TV, modo "con flechas": las barras (volumen, tiempo) se mueven
+        // con izquierda/derecha y arriba/abajo pasan a otro botón.
+        child: Tv.isTv
+            ? MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(navigationMode: NavigationMode.directional),
+                child: ClampingScrollWrapper.builder(context, widget!),
+              )
+            : ClampingScrollWrapper.builder(context, widget!),
         breakpoints: [
           const Breakpoint(start: 0, end: 450, name: MOBILE),
           const Breakpoint(start: 451, end: 800, name: TABLET),
