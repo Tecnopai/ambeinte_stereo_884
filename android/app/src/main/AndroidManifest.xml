@@ -50,6 +50,9 @@
     <!-- ================================================================== -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <!-- El permiso ACCESS_WIFI_STATE haría el wifi obligatorio: hay
+         televisores que solo se conectan por cable. La app funciona igual. -->
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
 
     <application
         android:label="Ambientestereo884.fm"
