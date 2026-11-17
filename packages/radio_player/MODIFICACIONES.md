@@ -13,5 +13,10 @@ reserva de audio en Android. Se quitaron la app de ejemplo y las pruebas.
     cortas del internet móvil no vuelvan a cortar el audio;
   - reserva máxima de 60 s.
 
+- `setVolume(volume)` (Dart, `RadioPlayerPlugin.kt`, `RadioPlayerPlugin.swift`
+  y `RadioPlayerService.swift`): volumen del reproductor de 0 a 1, sin tocar el
+  volumen del teléfono. Lo usa el apagado programado para bajar suave. En iOS
+  falta probarlo en la Mac.
+
 Al actualizar a una versión nueva de `radio_player`, volver a aplicar estos
 cambios o comprobar si la versión nueva ya permite configurarlo.

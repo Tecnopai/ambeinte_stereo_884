@@ -76,6 +76,14 @@ class RadioPlayer {
     await _methodChannel.invokeMethod('pause');
   }
 
+  /// Modificación local: volumen del reproductor, de 0 a 1, sin tocar el
+  /// volumen del teléfono (ver MODIFICACIONES.md).
+  static Future<void> setVolume(double volume) async {
+    await _methodChannel.invokeMethod('setVolume', <String, dynamic>{
+      'volume': volume,
+    });
+  }
+
   /// Stops playback, removes notification, readies player for a new station.
   static Future<void> reset() async {
     await _methodChannel.invokeMethod('reset');

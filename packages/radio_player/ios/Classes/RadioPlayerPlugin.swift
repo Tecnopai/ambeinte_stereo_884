@@ -69,6 +69,14 @@ public class RadioPlayerPlugin: NSObject, FlutterPlugin {
                 player.reset()
                 result(nil)
 
+            // Modificación local: volumen del reproductor (0 a 1), sin tocar el
+            // volumen del teléfono. Lo usa el apagado programado.
+            case "setVolume":
+                let args = call.arguments as? [String: Any]
+                let volume = (args?["volume"] as? Double) ?? 1.0
+                player.setVolume(Float(min(max(volume, 0), 1)))
+                result(nil)
+
             case "setCustomMetadata":
                 let args = call.arguments as! [String: String?]
                 let artist = args["artist"] as? String

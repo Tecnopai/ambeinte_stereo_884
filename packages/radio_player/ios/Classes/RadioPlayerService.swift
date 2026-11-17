@@ -171,6 +171,11 @@ class RadioPlayerService: NSObject {
     }
 
     /// Pauses playback.
+    /// Modificación local: volumen del reproductor (0 a 1).
+    func setVolume(_ volume: Float) {
+        player.volume = volume
+    }
+
     func pause() {
         player.pause()
     }

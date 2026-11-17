@@ -106,6 +106,14 @@ class RadioPlayerPlugin: FlutterPlugin, MethodChannel.MethodCallHandler {
                     result.success(null)
                 }
 
+                // Modificación local: volumen del reproductor (0 a 1), sin tocar
+                // el volumen del teléfono. Lo usa el apagado programado.
+                "setVolume" -> {
+                    val volume = (call.argument<Double>("volume") ?: 1.0).toFloat()
+                    controller.volume = volume.coerceIn(0f, 1f)
+                    result.success(null)
+                }
+
                 "setCustomMetadata" -> {
                     val artist = call.argument<String>("artist")
                     val title = call.argument<String>("title")
