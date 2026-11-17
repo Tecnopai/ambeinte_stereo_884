@@ -19,6 +19,11 @@ import UIKit
     // volumen y al volver a primer plano. Con esa opción iOS no trata a la app como
     // "Now Playing" y oculta los controles de la pantalla de bloqueo. Este canal
     // permite a Dart restaurar la sesión de reproducción exclusiva.
+    // Despertador con la radio (RadioAlarmIOS.swift): mismo canal que Android.
+    if let alarmRegistrar = engineBridge.pluginRegistry.registrar(forPlugin: "RadioAlarmIOS") {
+      RadioAlarmIOS.shared.register(messenger: alarmRegistrar.messenger())
+    }
+
     guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AudioSessionFix") else {
       return
     }
