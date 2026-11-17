@@ -78,6 +78,10 @@ dependencies {
     // Librerías Android
     implementation("androidx.media:media:1.7.0")
     implementation("androidx.core:core-ktx:1.12.0")
+
+    // Despertador con la radio (AlarmService): el mismo reproductor que ya
+    // usa radio_player, en la misma versión.
+    implementation("androidx.media3:media3-exoplayer:1.6.1")
 }
 
 flutter {
