@@ -9,6 +9,7 @@ import 'package:rxdart/rxdart.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'diagnostics_log.dart';
+import 'radio_alarm.dart';
 
 /// Gestor centralizado del reproductor de audio usando radio_player
 /// Implementa el patrón Singleton para mantener una única instancia
@@ -441,6 +442,14 @@ class AudioPlayerManager {
     _isStreamUrlLoaded = true;
     _streamHasTitles = false;
     _titlesUrl = _validUrl(_field(data, 'titulos_url'));
+    // El despertador pone la radio por su cuenta (sin la app abierta): se le
+    // pasan los servidores y el audio de respaldo opcional.
+    unawaited(RadioAlarm.instance.syncStreams(urls));
+    unawaited(
+      RadioAlarm.instance.updateFallbackAudio(
+        _validUrl(_field(data, 'audio_despertador')),
+      ),
+    );
     _log('[AudioPlayerManager] ✅ URL cargada desde Firebase ($origen): $urls');
     _diag(
       'URL del stream: $origen (${urls.first})'
@@ -639,7 +648,13 @@ class AudioPlayerManager {
 
       if (_autoPlay) {
         _log('[AudioPlayerManager] 🎵 Auto-iniciando reproducción...');
-        Future.delayed(const Duration(milliseconds: 500), () {
+        Future.delayed(const Duration(milliseconds: 500), () async {
+          // Si el despertador está sonando, no se pone la radio también
+          // (sonaba doble): la pantalla muestra el aviso para elegir.
+          if (await RadioAlarm.instance.isRinging()) {
+            _diag('No se inicia la radio: el despertador está sonando');
+            return;
+          }
           play();
         });
       }

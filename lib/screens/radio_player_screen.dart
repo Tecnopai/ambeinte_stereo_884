@@ -4,6 +4,9 @@ import '../services/audio_player_manager.dart';
 import '../widgets/animated_disc.dart';
 import '../widgets/sound_waves.dart';
 import '../widgets/sleep_timer_button.dart';
+import '../services/radio_alarm.dart';
+import 'alarm_screen.dart';
+import '../widgets/alarm_ringing_banner.dart';
 import '../core/theme/app_colors.dart';
 import '../utils/responsive_helper.dart';
 import '../utils/tv.dart';
@@ -267,6 +270,8 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
         decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
         child: Column(
           children: [
+            // Mientras suena el despertador: Apagar / 5 min / Seguir escuchando.
+            const AlarmRingingBanner(),
             _buildNotices(),
             // ✅ Layout diferente para landscape vs portrait
             Expanded(
@@ -447,7 +452,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
           // Sin barra de volumen: se usan los botones del teléfono. En su
           // lugar, el apagado programado queda a la vista.
           SizedBox(height: responsive.spacing(20)),
-          const SleepTimerButton(),
+          _buildTimeButtons(14),
 
           SizedBox(height: responsive.spacing(20)),
         ],
@@ -588,12 +593,33 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                   ),
                 ),
                 SizedBox(height: responsive.spacing(10)),
-                const SleepTimerButton(fontSize: 13),
+                _buildTimeButtons(13),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// "Apagar en…" y, en Android, "Despertador".
+  Widget _buildTimeButtons(double fontSize) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 4,
+      children: [
+        SleepTimerButton(fontSize: fontSize),
+        if (RadioAlarm.supported)
+          TextButton.icon(
+            onPressed: () => AlarmScreen.open(context),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.textPrimary.withValues(alpha: 0.75),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            ),
+            icon: Icon(Icons.alarm, size: fontSize + 6),
+            label: Text('Despertador', style: TextStyle(fontSize: fontSize)),
+          ),
+      ],
     );
   }
 
