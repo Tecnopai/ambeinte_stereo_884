@@ -32,6 +32,15 @@ class Tv {
     }
   }
 
+  /// Pide al televisor que no ponga el protector de pantalla ni se apague
+  /// (mientras suena el audio). Sin efecto fuera de TV.
+  static Future<void> keepScreenOn(bool on) async {
+    if (!isTv) return;
+    try {
+      await _channel.invokeMethod<void>('keepScreenOn', on);
+    } catch (_) {}
+  }
+
   /// Abre un enlace en TV. Muchos televisores no tienen navegador ni correo:
   /// si no hay con qué abrirlo, muestra la dirección para abrirla en el
   /// celular. (En teléfonos no se usa: cada pantalla abre sus enlaces.)

@@ -9,6 +9,7 @@ import 'about_screen.dart';
 import 'report_problem_screen.dart';
 import '../utils/responsive_helper.dart';
 import '../utils/tv.dart';
+import '../widgets/tv_idle_guard.dart';
 import '../utils/version_checker.dart';
 import '../core/theme/app_colors.dart';
 import '../widgets/podcast_widgets.dart';
@@ -193,6 +194,10 @@ class _MainScreenState extends State<MainScreen> {
   /// remoto (flechas y OK) y el contenido a la derecha. La flecha izquierda
   /// lleva al menú y la derecha vuelve al contenido.
   Widget _buildTvLayout() {
+    return TvIdleGuard(child: _buildTvScaffold());
+  }
+
+  Widget _buildTvScaffold() {
     return Scaffold(
       body: Row(
         children: [

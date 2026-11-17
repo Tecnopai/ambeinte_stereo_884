@@ -4,6 +4,7 @@ import android.app.UiModeManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 
@@ -23,6 +24,18 @@ public class MainActivity extends FlutterActivity {
                 .setMethodCallHandler((call, result) -> {
                     if ("isTv".equals(call.method)) {
                         result.success(isTv());
+                    } else if ("keepScreenOn".equals(call.method)) {
+                        // En TV, mientras suena el audio, que el televisor no
+                        // ponga el protector de pantalla ni se apague.
+                        boolean on = Boolean.TRUE.equals(call.arguments);
+                        runOnUiThread(() -> {
+                            if (on) {
+                                getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                            } else {
+                                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                            }
+                        });
+                        result.success(null);
                     } else {
                         result.notImplemented();
                     }
