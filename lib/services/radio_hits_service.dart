@@ -78,21 +78,25 @@ class RadioHitsService {
 
       for (int i = 0; i < allParagraphs.length; i++) {
         final p = allParagraphs[i];
-        // Busca el texto fuerte (título/posición) dentro del párrafo.
-        final strong = p.querySelector('strong, b');
-
-        if (strong == null) {
+        // Solo párrafos con negrita (los puestos del ranking).
+        if (p.querySelector('strong, b') == null) {
           continue;
         }
 
-        final titleText = strong.text.trim();
-        if (titleText.isEmpty) {
+        // Se lee por líneas (cada <br> es un salto), sin depender de cómo
+        // quedó la negrita: a veces el número y la canción quedan en
+        // negritas separadas ("<strong>1.</strong> <strong>Decidido</strong>")
+        // y antes ese puesto se perdía.
+        //   línea 1: "1. Decidido"  → puesto y canción
+        //   resto:   "Luis Santiago" → artista
+        final lines = _lines(p);
+        if (lines.isEmpty) {
           continue;
         }
 
         // Expresión regular para parsear la posición y el título:
         // Ejemplo: "1. Título de la Canción" -> grupo(1)=1, grupo(2)=Título de la Canción
-        final match = RegExp(r'^(\d+)[\.\-\)\s]+(.+)').firstMatch(titleText);
+        final match = RegExp(r'^(\d+)[\.\-\)\s]+(.+)').firstMatch(lines.first);
         if (match == null) {
           continue;
         }
@@ -105,9 +109,7 @@ class RadioHitsService {
         }
 
         String artist = 'Artista Desconocido';
-        final fullText = p.text.trim();
-        // El artista se asume que es el texto restante en el párrafo después del título fuerte (strong).
-        final artistText = fullText.replaceFirst(titleText, '').trim();
+        final artistText = lines.skip(1).join(' ').trim();
 
         if (artistText.isNotEmpty) {
           artist = artistText;
@@ -151,6 +153,27 @@ class RadioHitsService {
       return [];
     }
   }
+
+  /// Texto del párrafo separado por líneas (cada <br> es un salto), sin
+  /// líneas vacías ni espacios invisibles.
+  static List<String> _lines(dom.Element p) {
+    final html = p.innerHtml.replaceAll(
+      RegExp(r'<br\s*/?>', caseSensitive: false),
+      '\n',
+    );
+    final text = html_parser.parseFragment(html).text ?? '';
+    return text
+        .split('\n')
+        .map(
+          (l) => l.replaceAll('​', '').replaceAll(RegExp(r'\s+'), ' ').trim(),
+        )
+        .where((l) => l.isNotEmpty)
+        .toList();
+  }
+
+  /// Para pruebas: lee el ranking de un HTML ya descargado.
+  static List<RadioHit> parseHtml(String html) =>
+      RadioHitsService()._parseRadioHits(html_parser.parse(html));
 
   /// Limpia y estandariza la URL de la imagen para garantizar que sea absoluta y use HTTPS.
   String? _cleanImageUrl(String? imageUrl) {
