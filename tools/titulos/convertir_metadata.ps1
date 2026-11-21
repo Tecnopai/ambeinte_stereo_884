@@ -30,6 +30,19 @@ $CLAVE_TITULOS      = ""    # la misma clave de titulo.php (solo letras y numero
 $REENVIO_WEB        = 60    # segundos: reenvia el titulo a la web aunque no cambie
                             # (senal de vida para el aviso de Google; 0 = solo al cambiar)
 
+# --- Deteccion de silencio: escucha el stream publico, como un oyente ---
+# Cada $INTERVALO_MEDICION s graba $SEGUNDOS_MUESTRA s con ffmpeg y mide el
+# volumen maximo. Si esta por debajo de $UMBRAL_SILENCIO_DB, es silencio (SARA
+# detenido, consola apagada, Comrex sin audio...). El resultado viaja a
+# titulo.php con el titulo y el registro de oyentes avisa por Telegram.
+$MEDIR_SILENCIO      = $true      # $false = no medir
+$FFMPEG              = "ffmpeg"   # o la ruta completa, p. ej. C:\ffmpeg\bin\ffmpeg.exe
+$URL_STREAM_SILENCIO = ""         # vacio = servidores de Firebase (stream_urls), en orden
+$SEGUNDOS_MUESTRA    = 10
+$INTERVALO_MEDICION  = 60
+$UMBRAL_SILENCIO_DB  = -50
+$FIRESTORE_STREAMING = "https://firestore.googleapis.com/v1/projects/as884-b3934/databases/(default)/documents/app_config/streaming"
+
 $URL_AZURACAST      = ""    # vacio = no enviar a AzuraCast
 $API_KEY            = ""
 $REENVIO_AZURACAST  = 15    # AzuraCast necesita reenvio periodico (0 = no reenviar)
@@ -152,7 +165,15 @@ function Codigo-HTTP {
 function Enviar-TituloWeb {
     param([string]$texto, [switch]$silencioso)
     try {
-        $json  = @{ titulo = $texto } | ConvertTo-Json -Compress
+        $cuerpo = @{ titulo = $texto }
+        if ($medirSilencio) {
+            # Estado del audio del stream (ver "5) Silencio" en el bucle).
+            $cuerpo.audio        = $audioEstado
+            $cuerpo.audio_nivel  = $audioNivel
+            $cuerpo.audio_hace   = if ($audioMedido -eq [datetime]::MinValue) { -1 } else { [int]((Get-Date) - $audioMedido).TotalSeconds }
+            $cuerpo.silencio_seg = if ($silencioDesde) { [int]((Get-Date) - $silencioDesde).TotalSeconds } else { 0 }
+        }
+        $json  = $cuerpo | ConvertTo-Json -Compress
         $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
         Invoke-RestMethod -Uri $URL_TITULOS -Method Post -Headers @{ "X-Clave" = $CLAVE_TITULOS } `
             -ContentType "application/json; charset=utf-8" -Body $bytes -TimeoutSec 8 | Out-Null
@@ -200,6 +221,64 @@ function Enviar-Icecast {
     }
 }
 
+# --- Deteccion de silencio -------------------------------------------
+# Servidores donde medir: el de config.ps1 o los de Firebase, en orden.
+function Obtener-StreamsMedicion {
+    if ($URL_STREAM_SILENCIO.Trim() -ne "") { return @($URL_STREAM_SILENCIO.Trim()) }
+    try {
+        $doc = Invoke-RestMethod -Uri $FIRESTORE_STREAMING -TimeoutSec 10
+        $lista = @()
+        foreach ($p in $doc.fields.PSObject.Properties) {
+            if ((($p.Name -replace '[\s_]', '').ToLower()) -eq 'streamurls' -and $p.Value.arrayValue.values) {
+                foreach ($v in $p.Value.arrayValue.values) {
+                    if ($v.stringValue) { $lista += $v.stringValue.Trim() }
+                }
+            }
+        }
+        if ($lista.Count -eq 0) {
+            foreach ($p in $doc.fields.PSObject.Properties) {
+                if ((($p.Name -replace '[\s_]', '').ToLower()) -eq 'streamurl' -and $p.Value.stringValue) {
+                    $lista += $p.Value.stringValue.Trim()
+                }
+            }
+        }
+        return $lista
+    } catch {
+        return @()
+    }
+}
+
+# Lanza ffmpeg en segundo plano: graba la muestra y escribe el volumen en un
+# archivo temporal. No frena el envio de titulos.
+function Iniciar-Medicion {
+    param([string]$url)
+    $archivo = Join-Path $env:TEMP ("ambiente_nivel_" + [guid]::NewGuid().ToString('N') + ".txt")
+    $argumentos = @('-hide_banner', '-nostats', '-rw_timeout', '15000000',
+        '-t', "$SEGUNDOS_MUESTRA", '-i', "`"$url`"",
+        '-af', 'volumedetect', '-f', 'null', 'NUL')
+    $proc = Start-Process -FilePath $FFMPEG -ArgumentList $argumentos `
+        -RedirectStandardError $archivo -WindowStyle Hidden -PassThru
+    return @{ Proceso = $proc; Archivo = $archivo; Inicio = Get-Date; Url = $url }
+}
+
+# Volumen maximo en dB de la muestra, o $null si no se pudo escuchar.
+function Leer-Medicion {
+    param($medicion)
+    $nivel = $null
+    try {
+        $texto = Get-Content -Path $medicion.Archivo -Raw -ErrorAction Stop
+        $m = [regex]::Match($texto, 'max_volume:\s*(-?inf|-?[\d\.]+)\s*dB')
+        if ($m.Success) {
+            $v = $m.Groups[1].Value
+            $nivel = if ($v -like '*inf') { -200.0 } else {
+                [double]::Parse($v, [Globalization.CultureInfo]::InvariantCulture)
+            }
+        }
+    } catch {}
+    Remove-Item -Path $medicion.Archivo -ErrorAction SilentlyContinue
+    return $nivel
+}
+
 # === REVISAR CONFIGURACION ===
 $URL_TITULOS   = $URL_TITULOS.Trim()
 $CLAVE_TITULOS = $CLAVE_TITULOS.Trim()
@@ -229,6 +308,13 @@ Write-Host "Archivo vigilado: $ARCHIVO_ORIGINAL"
 Write-Host ("Web (app):        " + $(if ($usarWeb) { $URL_TITULOS } else { "desactivado" }))
 Write-Host ("AzuraCast:        " + $(if ($usarAzuraCast) { $URL_AZURACAST } else { "desactivado" }))
 Write-Host ("Icecast directo:  " + $(if ($usarIcecast) { "$URL_ICECAST ($MOUNT_ICECAST)" } else { "desactivado" }))
+$medirSilencio = $MEDIR_SILENCIO -and $usarWeb
+if ($medirSilencio -and -not (Get-Command $FFMPEG -ErrorAction SilentlyContinue)) {
+    Write-Host "AVISO: no se encontro ffmpeg ($FFMPEG): no se medira el silencio." -ForegroundColor Yellow
+    Write-Host "       Instalar con: winget install Gyan.FFmpeg (y abrir una ventana nueva)" -ForegroundColor Yellow
+    $medirSilencio = $false
+}
+Write-Host ("Silencio:         " + $(if ($medirSilencio) { "se mide cada $INTERVALO_MEDICION s ($SEGUNDOS_MUESTRA s de audio)" } else { "desactivado" }))
 Write-Host "Reemplazos:       $($REEMPLAZOS.Count) reglas"
 Write-Host "Retardo de envio: $RETARDO_ENVIO s"
 Write-Host "Ctrl+C para detener"
@@ -246,6 +332,17 @@ $webFallos       = 0
 # Ultimo titulo que llego a la web y cuando, para el reenvio periodico ($REENVIO_WEB).
 $webUltimo       = $null
 $webUltimoEnvio  = [datetime]::MinValue
+
+# Silencio: ultima medicion del stream y desde cuando hay silencio.
+$audioEstado     = 'sin_dato'   # ok | silencio | sin_dato
+$audioNivel      = $null
+$audioMedido     = [datetime]::MinValue
+$silencioDesde   = $null
+$medicion        = $null
+$proximaMedicion = [datetime]::MinValue
+$streamsMedir    = @()
+$streamsLeidos   = [datetime]::MinValue
+$indiceStream    = 0
 
 # Servidores de streaming (opcionales). Cada uno lleva su propio estado: si falla
 # 3 veces seguidas se pausa $PAUSA_TRAS_FALLOS minutos y luego vuelve a probar.
@@ -367,6 +464,59 @@ try {
                     $d.PausaHasta = (Get-Date).AddMinutes($PAUSA_TRAS_FALLOS)
                     $d.Fallos = 0
                 }
+            }
+        }
+
+        # 5) Silencio: medir el stream publico cada $INTERVALO_MEDICION segundos
+        if ($medirSilencio) {
+            if ($medicion -and $medicion.Proceso.HasExited) {
+                $nivel = Leer-Medicion $medicion
+                $audioMedido = Get-Date
+                if ($null -eq $nivel) {
+                    # No se pudo escuchar: no se juzga; la proxima vez, otro servidor.
+                    $audioEstado = 'sin_dato'
+                    $audioNivel  = $null
+                    $indiceStream++
+                } elseif ($nivel -lt $UMBRAL_SILENCIO_DB) {
+                    if ($null -eq $silencioDesde) {
+                        $silencioDesde = $medicion.Inicio
+                        Log "SILENCIO en la emision (volumen maximo $nivel dB)" 'Red'
+                    }
+                    $audioEstado = 'silencio'
+                    $audioNivel  = $nivel
+                } else {
+                    if ($silencioDesde) { Log "Volvio el audio (volumen maximo $nivel dB)" 'Green' }
+                    $audioEstado   = 'ok'
+                    $audioNivel    = $nivel
+                    $silencioDesde = $null
+                }
+                $medicion = $null
+            } elseif ($medicion -and ((Get-Date) - $medicion.Inicio).TotalSeconds -gt ($SEGUNDOS_MUESTRA + 30)) {
+                # ffmpeg trabado: se corta y cuenta como "sin dato".
+                try { $medicion.Proceso.Kill() } catch {}
+                Remove-Item -Path $medicion.Archivo -ErrorAction SilentlyContinue
+                $medicion    = $null
+                $audioEstado = 'sin_dato'
+                $audioMedido = Get-Date
+                $indiceStream++
+            }
+            if (-not $medicion -and (Get-Date) -ge $proximaMedicion) {
+                if ($streamsMedir.Count -eq 0 -or ((Get-Date) - $streamsLeidos).TotalMinutes -ge 30) {
+                    $nuevos = @(Obtener-StreamsMedicion)
+                    if ($nuevos.Count -gt 0) { $streamsMedir = $nuevos }
+                    $streamsLeidos = Get-Date
+                }
+                if ($streamsMedir.Count -gt 0) {
+                    $url = $streamsMedir[$indiceStream % $streamsMedir.Count]
+                    try {
+                        $medicion = Iniciar-Medicion -url $url
+                    } catch {
+                        Log "ERROR al iniciar ffmpeg: $($_.Exception.Message)" 'Red'
+                        $audioEstado = 'sin_dato'
+                        $audioMedido = Get-Date
+                    }
+                }
+                $proximaMedicion = (Get-Date).AddSeconds($INTERVALO_MEDICION)
             }
         }
     }

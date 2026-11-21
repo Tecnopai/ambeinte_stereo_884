@@ -24,10 +24,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $datos  = json_decode(file_get_contents('php://input'), true);
     $titulo = mb_substr(trim((string)($datos['titulo'] ?? '')), 0, 200);
-    file_put_contents(ARCHIVO, json_encode(
-        ['titulo' => $titulo, 'actualizado' => time()],
-        JSON_UNESCAPED_UNICODE
-    ), LOCK_EX);
+    $registro = ['titulo' => $titulo, 'actualizado' => time()];
+
+    // Estado del audio que mide el computador de emision escuchando el stream
+    // publico (opcional). Lo usa el registro de oyentes para avisar por
+    // Telegram si la emisora esta en silencio. Las horas se pasan a la hora
+    // de este servidor para no depender del reloj del computador.
+    if (isset($datos['audio'])) {
+        $audio = in_array($datos['audio'], ['ok', 'silencio', 'sin_dato'], true)
+            ? $datos['audio'] : 'sin_dato';
+        $hace = (int)($datos['audio_hace'] ?? -1);
+        $segundosSilencio = max(0, (int)($datos['silencio_seg'] ?? 0));
+        $registro['audio']          = $audio;
+        $registro['audio_nivel']    = is_numeric($datos['audio_nivel'] ?? null)
+            ? round((float)$datos['audio_nivel'], 1) : null;
+        $registro['audio_medido']   = $hace < 0 ? 0 : time() - min($hace, 86400);
+        $registro['silencio_desde'] = ($audio === 'silencio' && $segundosSilencio > 0)
+            ? time() - $segundosSilencio : 0;
+    }
+
+    file_put_contents(ARCHIVO, json_encode($registro, JSON_UNESCAPED_UNICODE), LOCK_EX);
     echo '{"ok":true}';
     exit;
 }
