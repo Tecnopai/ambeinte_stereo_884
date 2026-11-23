@@ -51,10 +51,33 @@ dirección web propia. No usa lecturas de Firebase.
 - Revisa la configuración al arrancar (clave inválida, sin destinos).
 - Si la carpeta compartida de SARA no está disponible, avisa y sigue.
 
+## Aviso de silencio
+
+Los servidores pueden seguir "transmitiendo" aunque la emisora esté muda
+(SARA detenido, consola apagada, Comrex sin audio). Para detectarlo, el
+script escucha el stream público como un oyente:
+
+- Cada `$INTERVALO_MEDICION` s (60) lanza ffmpeg en segundo plano, graba
+  `$SEGUNDOS_MUESTRA` s (10) y mide el volumen máximo. Por debajo de
+  `$UMBRAL_SILENCIO_DB` (-50 dB) cuenta como silencio. No frena los títulos.
+- Mide en los servidores de Firebase (`stream_urls`), en orden; si uno no
+  responde, la próxima vez prueba el siguiente. `$URL_STREAM_SILENCIO` fija
+  uno.
+- El resultado viaja con cada envío a `titulo.php`, que guarda `audio`
+  (`ok`, `silencio` o `sin_dato`), `audio_nivel`, `audio_medido` y
+  `silencio_desde` con la hora del hosting. La app ignora esos campos.
+- Requiere ffmpeg: `winget install Gyan.FFmpeg` y abrir una ventana nueva. Al
+  arrancar, el script debe decir `Silencio: se mide cada 60 s`. Si no lo
+  encuentra, lo avisa y sigue sin medir. Con otra ruta: `$FFMPEG` en
+  `config.ps1`. `$MEDIR_SILENCIO = $false` lo apaga.
+
+El registro de oyentes avisa por Telegram tras 2 minutos de silencio, cuando
+vuelve el audio y si pasan 10 minutos sin poder medir.
+
 ## Aviso si el computador de emisión se cae
 
 El registro de oyentes de la emisora (Google Sheets + Apps Script, fuera de
-este repositorio) revisa `titulo.php` cada minuto. Si `actualizado` lleva 5
+este repositorio) revisa `titulo.php` cada minuto. Si `actualizado` lleva 3
 minutos sin cambiar, avisa por Telegram que el computador de emisión, el
 script de títulos o el internet de las instalaciones dejó de funcionar, y otra
 vez cuando vuelve. Depende del reenvío cada minuto: con `$REENVIO_WEB = 0`
