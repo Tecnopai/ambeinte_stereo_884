@@ -828,6 +828,17 @@ class AudioPlayerManager {
           _diag('El servidor envía los títulos en la señal');
         }
 
+        // Con el título de la web al día, ese manda: se vuelve a poner por
+        // si el reproductor puso el de la señal en la notificación o en la
+        // pantalla de bloqueo.
+        if (_webTitleFresh && _webSong != null) {
+          RadioPlayer.setCustomMetadata(
+            artist: _webArtist,
+            title: _webSong,
+          ).catchError((Object e) => _log('[AudioPlayerManager] ⚠️ $e'));
+          return;
+        }
+
         final data = {
           'artist': metadata.artist ?? 'Desconocido',
           'title': metadata.title ?? 'Sin título',
@@ -1062,7 +1073,9 @@ class AudioPlayerManager {
   /// reproductor nativo, que actualiza la pantalla de bloqueo y emite el
   /// evento en metadataStream.
   Future<void> _pollStreamTitle() async {
-    if (!isPlaying) return;
+    // Con el título de la web al día no hace falta (y el del servidor puede
+    // ser un texto fijo).
+    if (!isPlaying || _webTitleFresh) return;
     try {
       final mount = (await _fetchServerStatus()).mount;
 
@@ -1198,6 +1211,11 @@ class AudioPlayerManager {
 
   String? _titlesUrl;
   bool _streamHasTitles = false;
+
+  /// El título de la web está al día (menos de [_webTitleMaxAge]). Mientras
+  /// lo esté, manda sobre el que traiga la señal: algunos servidores (Kombi
+  /// con el Comrex como Streamer/DJ) envían un texto fijo, no la canción.
+  bool _webTitleFresh = false;
   Timer? _webTitleTimer;
   String _webTitle = '';
   String? _webArtist;
@@ -1216,7 +1234,7 @@ class AudioPlayerManager {
 
   Future<void> _pollWebTitle() async {
     final url = _titlesUrl;
-    if (url == null || _streamHasTitles || !isPlaying) return;
+    if (url == null || !isPlaying) return;
     try {
       final response = await http
           .get(Uri.parse(url))
@@ -1246,8 +1264,20 @@ class AudioPlayerManager {
               ) <=
               _webTitleMaxAge;
 
-      if (_streamHasTitles || !isPlaying) return;
-      _applyWebTitle(fresh ? text : '');
+      if (!isPlaying) return;
+      _webTitleFresh = fresh && text.isNotEmpty;
+      if (_webTitleFresh) {
+        _applyWebTitle(text);
+      } else if (_streamHasTitles) {
+        // Sin título de la web al día: quedan los de la señal. Se olvida el
+        // de la web para que la próxima metadata de la señal se muestre.
+        _webTitle = '';
+        _webArtist = null;
+        _webSong = null;
+        _lastPolledTitle = null;
+      } else {
+        _applyWebTitle('');
+      }
     } catch (e) {
       _log('[AudioPlayerManager] ⚠️ Títulos web: $e');
     }
@@ -1977,6 +2007,14 @@ class AudioPlayerManager {
     _stationUrl = url;
     _stationIsFresh = true;
     _connectedStreamStart = null;
+    // La conexión nueva pone el nombre de la emisora: se devuelve el título
+    // de la web si está al día (no cambió, así que no se volvería a enviar).
+    if (_webTitleFresh && _webSong != null) {
+      RadioPlayer.setCustomMetadata(
+        artist: _webArtist,
+        title: _webSong,
+      ).catchError((Object e) => _log('[AudioPlayerManager] ⚠️ $e'));
+    }
   }
 
   /// Maneja la lógica de reconexión con inteligencia
