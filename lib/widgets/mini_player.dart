@@ -49,6 +49,12 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
       vsync: this,
     );
 
+    // Al terminar de esconderse se redibuja para quitarlo del todo (ver
+    // build): si no, el borde quedaba asomado como un cuadro vacío.
+    _slideController.addStatusListener((_) {
+      if (mounted) setState(() {});
+    });
+
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 1), // Comienza fuera de pantalla (abajo)
       end: Offset.zero, // Termina en posición normal
@@ -155,6 +161,11 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
     // En TV no se muestra: tapa el contenido y la radio se controla desde
     // "Radio" en el menú (y el volumen, con el control del televisor).
     if (Tv.isTv) return const SizedBox.shrink();
+    // Escondido del todo cuando la radio no suena (si no, quedaba asomando
+    // el borde: el mini reproductor está a unos píxeles del borde inferior).
+    if (!_isPlaying && _slideController.isDismissed) {
+      return const SizedBox.shrink();
+    }
     final responsive = ResponsiveHelper(context);
 
     // Definición de tamaños responsivos para el contenedor principal

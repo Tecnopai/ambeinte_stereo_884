@@ -342,6 +342,13 @@ class Article {
         .replaceAll('&lt;', '<') // Menor que
         .replaceAll('&gt;', '>') // Mayor que
         .replaceAll('[&hellip;]', '...') // Elipsis de WordPress
+        // WordPress deja varias líneas vacías entre bloques: se dejan los
+        // párrafos separados por una sola línea en blanco.
+        .replaceAll('\r', '')
+        .split('\n')
+        .map((line) => line.trim())
+        .join('\n')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
         .trim();
   }
 

@@ -708,6 +708,16 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
 
                     SizedBox(height: responsive.spacing(24)),
 
+                    // Mientras se prepara el audio (puede tardar), se avisa
+                    // en vez de no mostrar nada.
+                    if (widget.article.audioUrl != null &&
+                        widget.article.audioUrl!.isNotEmpty &&
+                        !_isInitialized &&
+                        !_hasError) ...[
+                      _buildAudioLoading(responsive, borderRadius),
+                      SizedBox(height: responsive.spacing(24)),
+                    ],
+
                     // Reproductor de audio estándar
                     if (widget.article.audioUrl != null &&
                         _isInitialized &&
@@ -726,10 +736,12 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                     if (widget.article.audioUrl != null && _hasError)
                       SizedBox(height: responsive.spacing(24)),
 
-                    // Contenido
-                    _buildContentCard(responsive, borderRadius),
-
-                    SizedBox(height: responsive.spacing(32)),
+                    // Contenido (hay artículos que solo traen audio: sin
+                    // texto no se dibuja el cuadro, que quedaba vacío).
+                    if (_hasText) ...[
+                      _buildContentCard(responsive, borderRadius),
+                      SizedBox(height: responsive.spacing(32)),
+                    ],
 
                     // Botones de acción (Fila para desktop/tablet, columna para móvil)
                     if (responsive.isDesktop || responsive.isLargeTablet)
@@ -756,6 +768,40 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                 },
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// Cuadro "Cargando audio…" mientras se prepara el audio del artículo.
+  Widget _buildAudioLoading(ResponsiveHelper responsive, double borderRadius) {
+    return Container(
+      padding: EdgeInsets.all(
+        responsive.getValue(phone: 16.0, tablet: 20.0, desktop: 24.0),
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Text(
+            'Cargando audio…',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: responsive.getValue(phone: 15.0, tablet: 16.0),
+            ),
+          ),
         ],
       ),
     );
@@ -1179,6 +1225,10 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   }
 
   /// Tarjeta principal que contiene el texto del artículo.
+  /// El artículo tiene texto (sin contar espacios ni caracteres invisibles).
+  bool get _hasText =>
+      widget.article.content.replaceAll(RegExp(r'[\s ​‌‍﻿]'), '').isNotEmpty;
+
   Widget _buildContentCard(ResponsiveHelper responsive, double borderRadius) {
     final cardPadding = responsive.getValue(
       phone: 18.0,
