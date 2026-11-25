@@ -77,6 +77,16 @@ public class RadioPlayerPlugin: NSObject, FlutterPlugin {
                 player.setVolume(Float(min(max(volume, 0), 1)))
                 result(nil)
 
+            // Modificación local: modo conexión lenta (más reserva) y consulta
+            // del audio guardado por delante, en ms.
+            case "setSlowMode":
+                let args = call.arguments as? [String: Any]
+                player.slowMode = (args?["enabled"] as? Bool) ?? false
+                result(nil)
+
+            case "bufferedAhead":
+                result(player.bufferedAheadMs())
+
             case "setCustomMetadata":
                 let args = call.arguments as! [String: String?]
                 let artist = args["artist"] as? String

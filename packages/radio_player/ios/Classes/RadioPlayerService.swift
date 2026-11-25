@@ -24,6 +24,13 @@ class RadioPlayerService: NSObject {
     var parseStreamMetadata: Bool = true
     var lookupOnlineArtwork: Bool = false
 
+    /// Modificación local: modo conexión lenta. Pide a AVPlayer que guarde
+    /// 10 s de audio por delante (0 = lo decide el sistema). Se aplica al
+    /// audio actual y a cada conexión nueva.
+    var slowMode: Bool = false {
+        didSet { player?.currentItem?.preferredForwardBufferDuration = slowMode ? 10 : 0 }
+    }
+
     /// Initialization
     override init() {
         super.init()
@@ -102,6 +109,7 @@ class RadioPlayerService: NSObject {
 
         // Create and set the new player item.
         let playerItem = AVPlayerItem(url: URL(string: streamUrl)!)
+        playerItem.preferredForwardBufferDuration = slowMode ? 10 : 0
         player.replaceCurrentItem(with: playerItem)
 
         // Set metadata handler.
@@ -174,6 +182,17 @@ class RadioPlayerService: NSObject {
     /// Modificación local: volumen del reproductor (0 a 1).
     func setVolume(_ volume: Float) {
         player.volume = volume
+    }
+
+    /// Modificación local: audio guardado por delante, en ms (-1 si no hay
+    /// conexión). Es el final del último tramo cargado menos la posición
+    /// actual; la app lo usa para no reconectar mientras siga llegando audio.
+    func bufferedAheadMs() -> Int {
+        guard let item = player.currentItem else { return -1 }
+        guard let last = item.loadedTimeRanges.last?.timeRangeValue else { return 0 }
+        let ahead = CMTimeGetSeconds(CMTimeRangeGetEnd(last)) - CMTimeGetSeconds(item.currentTime())
+        guard ahead.isFinite else { return 0 }
+        return max(0, Int(ahead * 1000))
     }
 
     func pause() {

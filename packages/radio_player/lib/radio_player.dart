@@ -86,21 +86,21 @@ class RadioPlayer {
 
   /// Modificación local: modo conexión lenta. Con [enabled], el reproductor
   /// junta más audio antes de sonar, para cortarse menos cuando el internet
-  /// no alcanza. Solo Android; en iOS no hace nada (ver MODIFICACIONES.md).
+  /// no alcanza. Android e iOS (ver MODIFICACIONES.md).
   static Future<void> setSlowMode(bool enabled) async {
     try {
       await _methodChannel.invokeMethod('setSlowMode', <String, dynamic>{
         'enabled': enabled,
       });
     } on MissingPluginException {
-      // iOS todavía no lo implementa.
+      // Plataforma sin el cambio local: sigue como antes.
     } on PlatformException {
-      // Idem.
+      // Igual que arriba.
     }
   }
 
   /// Modificación local: audio guardado por delante, o null si la
-  /// plataforma no lo informa (iOS por ahora).
+  /// plataforma no lo informa.
   static Future<Duration?> bufferedAhead() async {
     try {
       final ms = await _methodChannel.invokeMethod<int>('bufferedAhead');

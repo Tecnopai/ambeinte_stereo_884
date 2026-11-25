@@ -27,8 +27,13 @@ reserva de audio en Android. Se quitaron la app de ejemplo y las pruebas.
   - `bufferedAhead()` devuelve el audio guardado por delante
     (`totalBufferedDuration`), para que la app sepa si sigue llegando audio
     aunque sea lento y no reconecte tirando la reserva.
-  - iOS: pendiente (en la Mac). Hoy la parte de Dart devuelve null / no hace
-    nada si la plataforma no lo implementa, y la app sigue como antes.
+  - iOS (`RadioPlayerPlugin.swift`, `RadioPlayerService.swift`):
+    `setSlowMode` pone `preferredForwardBufferDuration` = 10 s en el audio
+    actual y en cada conexión nueva (0 = automático al desactivar), con
+    `automaticallyWaitsToMinimizeStalling` activo como siempre. AVPlayer
+    lo toma como sugerencia: no garantiza esperar 10 s antes de sonar como
+    Android. `bufferedAhead` = final del último `loadedTimeRanges` menos
+    `currentTime()`, en ms (-1 sin conexión).
 
 Al actualizar a una versión nueva de `radio_player`, volver a aplicar estos
 cambios o comprobar si la versión nueva ya permite configurarlo.
