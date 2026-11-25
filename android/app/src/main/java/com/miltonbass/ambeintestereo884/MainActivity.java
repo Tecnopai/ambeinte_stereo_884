@@ -17,6 +17,7 @@ import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.view.WindowCompat;
 
 import java.util.HashMap;
 import java.util.List;
@@ -73,6 +74,10 @@ public class MainActivity extends FlutterActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // De borde a borde en todas las versiones (en Android 15 es
+        // obligatorio): la app dibuja detrás de las barras del sistema y
+        // Flutter deja el espacio de cada barra con SafeArea / el Scaffold.
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         handleAlarmIntent(getIntent());
     }
 

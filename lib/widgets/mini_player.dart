@@ -202,43 +202,52 @@ class _MiniPlayerState extends State<MiniPlayer> with TickerProviderStateMixin {
       automotive: 2.5,
     );
 
-    return SlideTransition(
-      position: _slideAnimation, // Aplica la animación de deslizamiento
-      child: Container(
-        // Altura mínima y máxima para dar espacio al slider de volumen
-        constraints: BoxConstraints(minHeight: minHeight, maxHeight: maxHeight),
-        decoration: BoxDecoration(
-          // Gradiente semi-transparente para integrarse con el fondo y destacar
-          gradient: LinearGradient(
-            colors: [
-              AppColors.surface.withValues(alpha: 0.95),
-              AppColors.background.withValues(alpha: 0.95),
+    // De borde a borde: en horizontal la barra de botones de Android queda al
+    // costado; SafeArea deja ese espacio (y el de abajo si no lo dejó el
+    // Scaffold) para que no tape el mini reproductor.
+    return SafeArea(
+      top: false,
+      child: SlideTransition(
+        position: _slideAnimation, // Aplica la animación de deslizamiento
+        child: Container(
+          // Altura mínima y máxima para dar espacio al slider de volumen
+          constraints: BoxConstraints(
+            minHeight: minHeight,
+            maxHeight: maxHeight,
+          ),
+          decoration: BoxDecoration(
+            // Gradiente semi-transparente para integrarse con el fondo y destacar
+            gradient: LinearGradient(
+              colors: [
+                AppColors.surface.withValues(alpha: 0.95),
+                AppColors.background.withValues(alpha: 0.95),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(borderRadius),
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.3),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: shadowBlur,
+                spreadRadius: shadowSpread,
+              ),
             ],
           ),
-          borderRadius: BorderRadius.circular(borderRadius),
-          border: Border.all(
-            color: AppColors.primary.withValues(alpha: 0.3),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: shadowBlur,
-              spreadRadius: shadowSpread,
-            ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          // IntrinsicHeight asegura que la columna ocupe solo el espacio necesario
-          child: IntrinsicHeight(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildMainControls(responsive),
-                // Muestra el slider de volumen solo si el estado local lo permite
-                if (_showVolumeSlider) _buildVolumeSlider(responsive),
-              ],
+          child: Material(
+            color: Colors.transparent,
+            // IntrinsicHeight asegura que la columna ocupe solo el espacio necesario
+            child: IntrinsicHeight(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildMainControls(responsive),
+                  // Muestra el slider de volumen solo si el estado local lo permite
+                  if (_showVolumeSlider) _buildVolumeSlider(responsive),
+                ],
+              ),
             ),
           ),
         ),

@@ -36,15 +36,19 @@ void main() async {
       DeviceOrientation.landscapeRight,
     ]);
 
-    // Configurar barra de estado del sistema (notch, hora, batería, etc.).
+    // De borde a borde (Google lo pide desde Android 15): la app se dibuja
+    // detrás de la barra de estado y de la de navegación, que quedan
+    // transparentes con iconos claros. El espacio de cada barra lo dejan
+    // SafeArea y el Scaffold.
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
-        // Color transparente para la barra de estado.
         statusBarColor: Colors.transparent,
-        // Brillo del contenido detrás de la barra de estado (normalmente oscuro).
         statusBarBrightness: Brightness.dark,
-        // Color de los iconos de la barra de estado (claro/blanco).
         statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarContrastEnforced: false,
       ),
     );
 
