@@ -235,11 +235,11 @@ class _AlarmScreenState extends State<AlarmScreen> with WidgetsBindingObserver {
                 Text(
                   RadioAlarm.isIOS
                       ? 'A la hora suena una alarma como la del reloj del '
-                            'iPhone, aunque esté en silencio. Toca "Escuchar la '
+                            '$_equipo, aunque esté en silencio. Toca "Escuchar la '
                             'radio" para poner Ambiente Stereo, o "Apagar". '
                             'Apple no permite que una app empiece a sonar sola, '
                             'por eso la radio se pone con ese botón. Para probar, '
-                            'toca "Probar" y bloquea el teléfono.'
+                            'toca "Probar" y bloquea el $_equipo.'
                       : 'A la hora, el teléfono pone Ambiente Stereo aunque la app '
                             'esté cerrada, con el volumen de alarma y subiendo de a poco. '
                             'Si no hay internet, suena un tono para que no te quedes '
@@ -386,6 +386,13 @@ class _AlarmScreenState extends State<AlarmScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// Nombre del equipo para los textos: "iPhone" o "iPad" en iOS (pantalla
+  /// de tableta = iPad) y "teléfono" en Android.
+  String get _equipo {
+    if (!RadioAlarm.isIOS) return 'teléfono';
+    return MediaQuery.sizeOf(context).shortestSide >= 600 ? 'iPad' : 'iPhone';
+  }
+
   /// Aviso para no tener también una alarma del reloj del teléfono a la misma
   /// hora (sonarían las dos). Si se detecta una cerca, el aviso es más fuerte.
   Widget _buildOtherAlarmNotice() {
@@ -413,10 +420,10 @@ class _AlarmScreenState extends State<AlarmScreen> with WidgetsBindingObserver {
             child: Text(
               clash && other != null
                   ? 'Tienes otra alarma a las ${_time(other.hour, other.minute)} '
-                        'en otra app del teléfono (por ejemplo, el reloj). '
+                        'en otra app del $_equipo (por ejemplo, el reloj). '
                         'Desactívala para que no suenen las dos al tiempo.'
                   : 'Usa solo este despertador. Si también tienes una alarma '
-                        'del reloj del teléfono a la misma hora, desactívala '
+                        'del reloj del $_equipo a la misma hora, desactívala '
                         'para que no suenen las dos al tiempo.',
               style: TextStyle(
                 color: clash ? AppColors.textPrimary : AppColors.textMuted,
@@ -451,7 +458,7 @@ class _AlarmScreenState extends State<AlarmScreen> with WidgetsBindingObserver {
           Text(
             RadioAlarm.isIOS
                 ? 'Para que el despertador suene, activa "Alarmas" (o '
-                      '"Notificaciones") en los Ajustes del iPhone para '
+                      '"Notificaciones") en los Ajustes del $_equipo para '
                       'Ambiente Stereo.'
                 : 'Para que el despertador suene a la hora exacta, Android pide '
                       'activar "Alarmas y recordatorios" para esta app.',
