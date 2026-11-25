@@ -22,6 +22,8 @@ import androidx.media3.common.Metadata
 import androidx.media3.common.MediaMetadata
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.LoadControl
+import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.extractor.metadata.icy.IcyInfo
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -44,7 +46,39 @@ class RadioPlayerService : MediaSessionService(), Player.Listener {
         const val CUSTOM_COMMAND_SET_CUSTOM_METADATA = "com.cheebeez.radio_player.SET_CUSTOM_METADATA"
         const val CUSTOM_COMMAND_RESET = "com.cheebeez.radio_player.RESET"
         const val CUSTOM_COMMAND_SET_NAVIGATION_CONTROLS = "com.cheebeez.radio_player.SET_NAVIGATION_CONTROLS"
+
+        // Modificación local (ver MODIFICACIONES.md): modo conexión lenta.
+        // Mientras está activo, el reproductor junta SLOW_START_MS de audio
+        // antes de sonar (al arrancar y tras un corte), para sonar en tramos
+        // más largos cuando el internet no alcanza. Lo activa la app.
+        @Volatile var slowMode: Boolean = false
+        const val SLOW_START_MS = 10_000L
+
+        // Servicio en marcha, para consultar la reserva desde el plugin.
+        @Volatile var instance: RadioPlayerService? = null
     }
+
+    /// Reserva de audio: usa los valores normales y, en modo conexión lenta,
+    /// exige SLOW_START_MS de audio guardado antes de empezar a sonar.
+    private class RadioLoadControl(
+        minBufferMs: Int, maxBufferMs: Int, startMs: Int, afterRebufferMs: Int
+    ) : DefaultLoadControl(
+        DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE),
+        minBufferMs, maxBufferMs, startMs, afterRebufferMs,
+        DefaultLoadControl.DEFAULT_TARGET_BUFFER_BYTES,
+        /* prioritizeTimeOverSizeThresholds = */ true,
+        DefaultLoadControl.DEFAULT_BACK_BUFFER_DURATION_MS,
+        DefaultLoadControl.DEFAULT_RETAIN_BACK_BUFFER_FROM_KEYFRAME
+    ) {
+        override fun shouldStartPlayback(parameters: LoadControl.Parameters): Boolean {
+            if (!slowMode) return super.shouldStartPlayback(parameters)
+            return parameters.bufferedDurationUs >= SLOW_START_MS * 1000
+        }
+    }
+
+    /// Segundos de audio guardados por delante (en ms), o -1 sin reproductor.
+    fun bufferedAheadMs(): Long =
+        if (::player.isInitialized) player.totalBufferedDuration else -1L
 
     var metadataArtwork: ByteArray? = null
     var parseStreamMetadata: Boolean = true
@@ -68,6 +102,7 @@ class RadioPlayerService : MediaSessionService(), Player.Listener {
 
     /// Releases resources when the service is destroyed.
     override fun onDestroy() {
+        if (instance === this) instance = null
         mediaSession?.run {
             player.removeListener(this@RadioPlayerService)
             player.release()
@@ -103,16 +138,13 @@ class RadioPlayerService : MediaSessionService(), Player.Listener {
         // Reserva de audio (modificación local, ver MODIFICACIONES.md).
         // Arranque rápido (2.5 s), pero tras un corte se juntan 8 s antes
         // de seguir sonando, para que las fallas cortas del internet móvil
-        // no vuelvan a cortar el audio.
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                /* minBufferMs = */ 30_000,
-                /* maxBufferMs = */ 60_000,
-                /* bufferForPlaybackMs = */ 2_500,
-                /* bufferForPlaybackAfterRebufferMs = */ 8_000
-            )
-            .setPrioritizeTimeOverSizeThresholds(true)
-            .build()
+        // no vuelvan a cortar el audio. En modo conexión lenta, 10 s siempre.
+        val loadControl = RadioLoadControl(
+            /* minBufferMs = */ 30_000,
+            /* maxBufferMs = */ 60_000,
+            /* startMs = */ 2_500,
+            /* afterRebufferMs = */ 8_000
+        )
 
         // Create ExoPlayer instance.
         player = ExoPlayer.Builder(this).setLoadControl(loadControl).build().apply {
@@ -123,6 +155,7 @@ class RadioPlayerService : MediaSessionService(), Player.Listener {
         }
 
         customForwardingPlayer = CustomForwardingPlayer(player)
+        instance = this
 
         // PendingIntent to launch the app's UI when the notification is clicked.
         val activityIntent = packageManager?.getLaunchIntentForPackage(packageName)?.let {

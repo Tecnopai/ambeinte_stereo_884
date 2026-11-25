@@ -108,6 +108,17 @@ class RadioPlayerPlugin: FlutterPlugin, MethodChannel.MethodCallHandler {
 
                 // Modificación local: volumen del reproductor (0 a 1), sin tocar
                 // el volumen del teléfono. Lo usa el apagado programado.
+                // Modificación local: modo conexión lenta (más reserva antes
+                // de sonar) y consulta de la reserva guardada, en ms.
+                "setSlowMode" -> {
+                    RadioPlayerService.slowMode = call.argument<Boolean>("enabled") ?: false
+                    result.success(null)
+                }
+
+                "bufferedAhead" -> {
+                    result.success(RadioPlayerService.instance?.bufferedAheadMs() ?: -1L)
+                }
+
                 "setVolume" -> {
                     val volume = (call.argument<Double>("volume") ?: 1.0).toFloat()
                     controller.volume = volume.coerceIn(0f, 1f)

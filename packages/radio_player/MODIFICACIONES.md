@@ -18,5 +18,17 @@ reserva de audio en Android. Se quitaron la app de ejemplo y las pruebas.
   volumen del teléfono. Lo usa el apagado programado para bajar suave. En iOS
   falta probarlo en la Mac.
 
+- Modo conexión lenta (`setSlowMode(enabled)` y `bufferedAhead()`, Dart y
+  Android: `RadioPlayerPlugin.kt`, `RadioPlayerService.kt`):
+  - el control de reserva es `RadioLoadControl`, una subclase de
+    `DefaultLoadControl` con los mismos valores de arriba; con
+    `slowMode` activo exige 10 s de audio guardado antes de sonar (al
+    arrancar y tras un corte);
+  - `bufferedAhead()` devuelve el audio guardado por delante
+    (`totalBufferedDuration`), para que la app sepa si sigue llegando audio
+    aunque sea lento y no reconecte tirando la reserva.
+  - iOS: pendiente (en la Mac). Hoy la parte de Dart devuelve null / no hace
+    nada si la plataforma no lo implementa, y la app sigue como antes.
+
 Al actualizar a una versión nueva de `radio_player`, volver a aplicar estos
 cambios o comprobar si la versión nueva ya permite configurarlo.
