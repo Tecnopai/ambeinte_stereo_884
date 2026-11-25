@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/theme/app_colors.dart';
 import '../services/diagnostics_log.dart';
@@ -13,8 +14,8 @@ const String supportEmail = 'tecnologia@iglesiacristianapai.org';
 /// Pantalla para que el usuario envíe, si quiere, el registro de diagnóstico.
 ///
 /// Muestra exactamente lo que se va a enviar. Nada sale del teléfono hasta que
-/// el usuario pulsa "Enviar reporte" y elige con qué app compartirlo (correo,
-/// WhatsApp...).
+/// el usuario pulsa "Enviar reporte" (abre su correo con todo listo) o
+/// "Enviar por WhatsApp u otra app", y lo envía él mismo.
 class ReportProblemScreen extends StatefulWidget {
   const ReportProblemScreen({super.key});
 
@@ -100,12 +101,43 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
       return;
     }
 
+    // Se abre el correo con el destinatario, el asunto y el reporte ya
+    // escritos (con "compartir", el campo "Para" quedaba vacío). Si no hay
+    // app de correo, se usa el menú de compartir.
+    final mail = Uri.parse(
+      'mailto:$supportEmail'
+      '?subject=${Uri.encodeComponent(_mailSubject)}'
+      '&body=${Uri.encodeComponent(report)}',
+    );
+    var opened = false;
+    try {
+      opened = await launchUrl(mail, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      opened = false;
+    }
+    if (opened || !buttonContext.mounted) return;
+    await _share(buttonContext, report);
+  }
+
+  static const String _mailSubject =
+      'Reporte de problema - App Ambiente Stereo 88.4';
+
+  /// Segunda opción: el menú de compartir (WhatsApp u otra app).
+  Future<void> _shareReport(BuildContext buttonContext) async {
+    final report = await DiagnosticsLog.instance.buildReport(
+      description: _descriptionController.text,
+    );
+    if (!buttonContext.mounted) return;
+    await _share(buttonContext, report);
+  }
+
+  Future<void> _share(BuildContext buttonContext, String report) async {
     // En iPad el menú de compartir necesita saber desde dónde se abre.
     final box = buttonContext.findRenderObject() as RenderBox?;
     await SharePlus.instance.share(
       ShareParams(
         text: 'Para: $supportEmail\n\n$report',
-        subject: 'Reporte de problema - App Ambiente Stereo 88.4',
+        subject: _mailSubject,
         sharePositionOrigin: box == null
             ? null
             : box.localToGlobal(Offset.zero) & box.size,
@@ -291,6 +323,21 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                 ),
               ),
             ),
+            if (!Tv.isTv)
+              Builder(
+                builder: (shareContext) => Center(
+                  child: TextButton.icon(
+                    onPressed: _preview == null
+                        ? null
+                        : () => _shareReport(shareContext),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
+                    ),
+                    icon: const Icon(Icons.share_rounded, size: 18),
+                    label: const Text('Enviar por WhatsApp u otra app'),
+                  ),
+                ),
+              ),
             const SizedBox(height: 16),
             // El detalle técnico queda oculto: quien quiera revisarlo antes
             // de enviarlo, lo abre.
