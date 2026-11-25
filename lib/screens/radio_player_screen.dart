@@ -306,7 +306,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
               final outage = (outageSnap.data ?? '').isNotEmpty
                   ? outageSnap.data!
                   : (slowSnap.data == true
-                        ? AudioPlayerManager.slowConnectionMessage
+                        ? _audioManager.slowConnectionMessage
                         : '');
               if (notice.isEmpty && outage.isEmpty) {
                 return const SizedBox.shrink();
@@ -329,8 +329,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                           actionLabel:
                               widget.onOpenPodcasts == null ||
                                   _audioManager.outageIsNoInternet ||
-                                  outage ==
-                                      AudioPlayerManager.slowConnectionMessage
+                                  outage == _audioManager.slowConnectionMessage
                               ? null
                               : 'Mientras tanto, escucha nuestros podcasts',
                           onAction: widget.onOpenPodcasts,

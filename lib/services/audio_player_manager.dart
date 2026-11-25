@@ -304,6 +304,23 @@ class AudioPlayerManager {
   static const Duration _slowExitAfter = Duration(minutes: 3);
   static const Duration _slowMaxWait = Duration(seconds: 60);
 
+  // Señal liviana (`stream_url_liviano` en Firebase, p. ej. 32 kbps): en
+  // modo conexión lenta se usa si transmite, para que suene sin cortes.
+  // Cada cierto tiempo se prueba volver a la normal; si se corta de nuevo,
+  // se vuelve a la liviana y la próxima prueba espera el doble.
+  String? _lightUrl;
+  bool _onLight = false;
+  Timer? _lightRetryTimer;
+  DateTime? _lightTrialAt;
+  static const Duration _lightRetryFirst = Duration(minutes: 10);
+  static const Duration _lightRetryMax = Duration(minutes: 30);
+  Duration _lightRetryDelay = _lightRetryFirst;
+
+  /// Dirección de la conexión abierta. Si la app decide pasar a la señal
+  /// liviana mientras un intento ya conectaba con otra, al sonar se abre la
+  /// conexión correcta.
+  String? _stationUrl;
+
   /// Inicio de la última conexión (play o reconexión), para no reiniciarla
   /// si el usuario toca Play varias veces mientras carga.
   DateTime? _connectStartedAt;
@@ -337,9 +354,11 @@ class AudioPlayerManager {
   /// True mientras la app está en modo conexión lenta (aviso fijo).
   Stream<bool> get slowConnectionStream => _slowModeController.stream;
   bool get slowConnection => _slowModeController.value;
-  static const String slowConnectionMessage =
-      'Tu conexión a internet está lenta. La radio puede cortarse; estamos '
-      'guardando más audio para que suene seguido.';
+  String get slowConnectionMessage => _onLight
+      ? 'Tu conexión a internet está lenta. Pasamos a una señal más liviana, '
+            'con menor calidad de sonido, para evitar cortes.'
+      : 'Tu conexión a internet está lenta. La radio puede cortarse; estamos '
+            'guardando más audio para que suene seguido.';
 
   /// Aviso escrito por el equipo en Firebase (`app_config/streaming`, campo
   /// `aviso`), p. ej. "Estamos presentando fallas técnicas". '' = sin aviso.
@@ -414,6 +433,9 @@ class AudioPlayerManager {
             if (titlesUrl == null) _applyWebTitle('');
           }
 
+          // La señal liviana también (sin cortar lo que suena).
+          _lightUrl = _validUrl(_field(doc.data(), 'stream_url_liviano'));
+
           final value = _field(doc.data(), 'aviso');
           final text = value is String ? value.trim() : '';
           if (text == _noticeController.value) return;
@@ -473,6 +495,7 @@ class AudioPlayerManager {
     _isStreamUrlLoaded = true;
     _streamHasTitles = false;
     _titlesUrl = _validUrl(_field(data, 'titulos_url'));
+    _lightUrl = _validUrl(_field(data, 'stream_url_liviano'));
     // El despertador pone la radio por su cuenta (sin la app abierta): se le
     // pasan los servidores y el audio de respaldo opcional.
     unawaited(RadioAlarm.instance.syncStreams(urls));
@@ -575,6 +598,9 @@ class AudioPlayerManager {
   /// del principal (sin tocar el audio) y vuelve a él cuando confirma que
   /// transmite.
   void _startPrimaryChecks() {
+    // En la señal liviana no se vuelve al principal (sacaría al oyente de
+    // ella); la vuelta la decide la prueba de la señal normal.
+    if (_onLight) return;
     if (_serverIndex == 0 || _streamUrls.isEmpty) {
       _stopPrimaryChecks();
       return;
@@ -593,6 +619,7 @@ class AudioPlayerManager {
 
   Future<void> _checkPrimaryServer() async {
     if (_serverIndex == 0 ||
+        _onLight ||
         !_userWantsPlayback ||
         _isPausedForArticle ||
         _isReconnecting ||
@@ -616,6 +643,11 @@ class AudioPlayerManager {
   /// Usa el servidor [index] desde la próxima conexión.
   void _useServer(int index, String reason) {
     if (index == _serverIndex || index >= _streamUrls.length) return;
+    if (_onLight) {
+      _onLight = false;
+      _lightRetryTimer?.cancel();
+      _slowModeController.add(_slowMode);
+    }
     _serverIndex = index;
     _streamUrl = _streamUrls[_serverIndex];
     _failuresOnServer = 0;
@@ -842,7 +874,16 @@ class AudioPlayerManager {
     _onBufferingResolved();
 
     // En modo conexión lenta: si suena un rato largo sin cortes, se sale.
-    if (_slowMode) {
+    // Se decidió pasar a la señal liviana mientras un intento conectaba con
+    // otra dirección: ahora que suena, se abre la conexión a la liviana.
+    if (_onLight && _stationUrl != null && _stationUrl != _streamUrl) {
+      _diag('Señal liviana: se abre la conexión (sonaba otra)');
+      unawaited(_refreshConnection());
+    }
+
+    // En la señal liviana no hay cortes: la salida la decide la prueba de
+    // la señal normal (_scheduleLightRetry), no este temporizador.
+    if (_slowMode && !_onLight) {
       _slowModeExitTimer?.cancel();
       _slowModeExitTimer = Timer(_slowExitAfter, () {
         if (_lastPlaybackState == PlaybackState.playing) {
@@ -1422,6 +1463,21 @@ class AudioPlayerManager {
       _cause = cause;
       _diag('Causa de la falla: ${cause.name}');
     }
+    // Falla la señal liviana (no el servidor normal): se deja y se sigue
+    // con el servidor de siempre, sin marcarlo como probado.
+    if (_onLight &&
+        (cause == _OutageCause.offAir || cause == _OutageCause.serverDown)) {
+      _leaveLight(
+        cause == _OutageCause.offAir
+            ? 'la señal liviana no transmite'
+            : 'la señal liviana no responde',
+      );
+      _cause = _OutageCause.unknown;
+      if (_outageController.value.isNotEmpty) {
+        _outageController.add(_outageMessage());
+      }
+      return;
+    }
     // La falla es del servidor (no del teléfono): si otro transmite, se usa
     // ese en el próximo intento.
     if (cause == _OutageCause.offAir || cause == _OutageCause.serverDown) {
@@ -1576,6 +1632,20 @@ class AudioPlayerManager {
   /// entra al modo conexión lenta.
   void _registerCut() {
     final now = DateTime.now();
+    // Se estaba probando la señal normal y se cortó: de vuelta a la liviana
+    // y la próxima prueba espera el doble.
+    final trialAt = _lightTrialAt;
+    if (_slowMode &&
+        !_onLight &&
+        trialAt != null &&
+        now.difference(trialAt) < _slowExitAfter) {
+      _lightTrialAt = null;
+      final doubled = _lightRetryDelay * 2;
+      _lightRetryDelay = doubled > _lightRetryMax ? _lightRetryMax : doubled;
+      _diag('Señal normal: se cortó otra vez, se vuelve a la liviana');
+      unawaited(_useLightIfAvailable());
+      return;
+    }
     _recentCuts
       ..add(now)
       ..removeWhere((t) => now.difference(t) > _slowCutsWindow);
@@ -1592,16 +1662,83 @@ class AudioPlayerManager {
     _diag('Modo conexión lenta: activado ($reason)');
     _slowModeController.add(true);
     RadioPlayer.setSlowMode(true);
+    unawaited(_useLightIfAvailable());
   }
 
-  void _exitSlowMode(String reason) {
+  /// Sale del modo conexión lenta (y de la señal liviana). Devuelve true si
+  /// estaba en la liviana: la conexión actual sigue en ella hasta reconectar.
+  bool _exitSlowMode(String reason) {
     _recentCuts.clear();
     _slowModeExitTimer?.cancel();
-    if (!_slowMode) return;
+    _lightRetryTimer?.cancel();
+    _lightTrialAt = null;
+    _lightRetryDelay = _lightRetryFirst;
+    final wasOnLight = _onLight;
+    if (_onLight) _leaveLight(reason);
+    if (!_slowMode) return wasOnLight;
     _slowMode = false;
     _diag('Modo conexión lenta: desactivado ($reason)');
     _slowModeController.add(false);
     RadioPlayer.setSlowMode(false);
+    return wasOnLight;
+  }
+
+  /// En modo conexión lenta, pasa a la señal liviana si está configurada y
+  /// su página dice que transmite. Abre la conexión nueva de inmediato (o
+  /// la usa el próximo intento si ya se está reconectando).
+  Future<void> _useLightIfAvailable() async {
+    final url = _lightUrl;
+    if (url == null || _onLight || !_slowMode) return;
+    final status = await _fetchStatusOf(url);
+    if (!_slowMode || _onLight || _lightUrl != url) return;
+    if (status.state != _ServerState.live) {
+      _diag('Señal liviana no disponible (${status.state.name})');
+      return;
+    }
+    _onLight = true;
+    _streamUrl = url;
+    _offAir = false;
+    _connectedStreamStart = null;
+    _stationIsFresh = false;
+    _streamHasTitles = false;
+    _stopPrimaryChecks();
+    _diag('Señal liviana: se usa $url');
+    _slowModeController.add(true);
+    _scheduleLightRetry();
+    if (_userWantsPlayback && !_isPausedForArticle && !_isReconnecting) {
+      await _refreshConnection();
+    }
+  }
+
+  /// Deja la señal liviana: la próxima conexión usa el servidor normal.
+  void _leaveLight(String reason) {
+    if (!_onLight) return;
+    _onLight = false;
+    _lightRetryTimer?.cancel();
+    if (_streamUrls.isNotEmpty) _streamUrl = _streamUrls[_serverIndex];
+    _connectedStreamStart = null;
+    _stationIsFresh = false;
+    _streamHasTitles = false;
+    _diag('Señal liviana: se deja ($reason)');
+    _slowModeController.add(_slowMode);
+  }
+
+  /// Programa la próxima prueba de la señal normal.
+  void _scheduleLightRetry() {
+    _lightRetryTimer?.cancel();
+    _lightRetryTimer = Timer(_lightRetryDelay, () {
+      if (!_onLight) return;
+      // Si ahora mismo no suena, se espera otra vuelta.
+      if (_lastPlaybackState != PlaybackState.playing || _isReconnecting) {
+        _scheduleLightRetry();
+        return;
+      }
+      _leaveLight('se prueba la señal normal');
+      _lightTrialAt = DateTime.now();
+      if (_userWantsPlayback && !_isPausedForArticle) {
+        unawaited(_refreshConnection());
+      }
+    });
   }
 
   /// Empieza a medir si llega audio en una conexión nueva o en un corte.
@@ -1831,11 +1968,13 @@ class AudioPlayerManager {
   /// pausar y reanudar reutiliza la conexión vieja, que tras un cambio de red
   /// (wifi ↔ datos, cambio de antena) puede quedar muerta.
   Future<void> _setStation() async {
+    final url = _streamUrl;
     await RadioPlayer.setStation(
       title: 'Ambiente Stereo 88.4 FM',
-      url: _streamUrl,
+      url: url,
       logoAssetPath: 'assets/images/icon.png',
     );
+    _stationUrl = url;
     _stationIsFresh = true;
     _connectedStreamStart = null;
   }
@@ -2122,8 +2261,9 @@ class AudioPlayerManager {
 
     // Otra red puede ser buena: se vuelve al modo normal. Si sigue lenta,
     // los cortes lo vuelven a activar.
+    var leftLight = false;
     if (previous != null && network != _noNetwork) {
-      _exitSlowMode('cambió la red');
+      leftLight = _exitSlowMode('cambió la red');
     }
 
     // Se fue la red con la radio encendida: se avisa de inmediato (el audio
@@ -2147,7 +2287,12 @@ class AudioPlayerManager {
     // conexión vieja ya no sirve: se abre una nueva de inmediato.
     final previousParts = previous.split(' + ').toSet();
     final sharesNetwork = network.split(' + ').any(previousParts.contains);
-    if (_lastPlaybackState == PlaybackState.playing && sharesNetwork) return;
+    // Si sonaba la señal liviana, se reconecta para pasar a la normal.
+    if (_lastPlaybackState == PlaybackState.playing &&
+        sharesNetwork &&
+        !leftLight) {
+      return;
+    }
 
     _log('[AudioPlayerManager] 🔁 Cambio de red - reconectando');
     _userWantsPlayback = true;
@@ -2434,6 +2579,7 @@ class AudioPlayerManager {
     await _noticeSubscription?.cancel();
 
     _slowModeExitTimer?.cancel();
+    _lightRetryTimer?.cancel();
     await _outageController.close();
     await _slowModeController.close();
     await _noticeController.close();
