@@ -284,6 +284,30 @@ class AudioPlayerManager {
 
   final BehaviorSubject<String> _outageController =
       BehaviorSubject<String>.seeded('');
+
+  // ========== MODO CONEXIÓN LENTA ==========
+  // Cuando el internet del teléfono no alcanza para la señal, la radio se
+  // corta seguido. En este modo el reproductor junta más audio antes de
+  // sonar (Android), no se reconecta mientras siga llegando audio, no se
+  // cambia de servidor por eso y se muestra un aviso fijo. Con buena
+  // conexión no se activa y todo funciona como siempre.
+  bool _slowMode = false;
+  final List<DateTime> _recentCuts = [];
+  Timer? _slowModeExitTimer;
+  final BehaviorSubject<bool> _slowModeController =
+      BehaviorSubject<bool>.seeded(false);
+  Duration? _lastAhead;
+  DateTime? _lastAheadGrowth;
+  DateTime _attemptStartedAt = DateTime.now();
+  static const int _slowCutsToEnter = 3;
+  static const Duration _slowCutsWindow = Duration(minutes: 2);
+  static const Duration _slowExitAfter = Duration(minutes: 3);
+  static const Duration _slowMaxWait = Duration(seconds: 60);
+
+  /// Inicio de la última conexión (play o reconexión), para no reiniciarla
+  /// si el usuario toca Play varias veces mientras carga.
+  DateTime? _connectStartedAt;
+  static const Duration _playDebounce = Duration(seconds: 10);
   final BehaviorSubject<String> _noticeController =
       BehaviorSubject<String>.seeded('');
   StreamSubscription? _noticeSubscription;
@@ -309,6 +333,13 @@ class AudioPlayerManager {
   /// sentido sugerir los podcasts, que también lo necesitan).
   bool get outageIsNoInternet =>
       _lastNetwork == _noNetwork || _cause == _OutageCause.noInternet;
+
+  /// True mientras la app está en modo conexión lenta (aviso fijo).
+  Stream<bool> get slowConnectionStream => _slowModeController.stream;
+  bool get slowConnection => _slowModeController.value;
+  static const String slowConnectionMessage =
+      'Tu conexión a internet está lenta. La radio puede cortarse; estamos '
+      'guardando más audio para que suene seguido.';
 
   /// Aviso escrito por el equipo en Firebase (`app_config/streaming`, campo
   /// `aviso`), p. ej. "Estamos presentando fallas técnicas". '' = sin aviso.
@@ -706,6 +737,14 @@ class AudioPlayerManager {
         _diag('Estado: ${state.name}');
         final previous = _lastPlaybackState;
         _lastPlaybackState = state;
+        // Un corte: sonaba y se quedó cargando, con red y queriendo oír.
+        if (previous == PlaybackState.playing &&
+            state == PlaybackState.buffering &&
+            _userWantsPlayback &&
+            !_isPausedForArticle &&
+            _lastNetwork != _noNetwork) {
+          _registerCut();
+        }
 
         switch (state) {
           case PlaybackState.playing:
@@ -801,6 +840,16 @@ class AudioPlayerManager {
     // Registrar recuperación exitosa del buffer
     _onPlaybackRecovered();
     _onBufferingResolved();
+
+    // En modo conexión lenta: si suena un rato largo sin cortes, se sale.
+    if (_slowMode) {
+      _slowModeExitTimer?.cancel();
+      _slowModeExitTimer = Timer(_slowExitAfter, () {
+        if (_lastPlaybackState == PlaybackState.playing) {
+          _exitSlowMode('sonó ${_slowExitAfter.inMinutes} min sin cortes');
+        }
+      });
+    }
 
     _startAudioSession();
 
@@ -1293,6 +1342,7 @@ class AudioPlayerManager {
     // Mientras dure, los cambios de estado del reproductor no se toman como
     // una pausa del usuario.
     _isReconnecting = true;
+    _connectStartedAt = DateTime.now();
     try {
       await _setStation().timeout(const Duration(seconds: 10));
       _stationIsFresh = false;
@@ -1347,6 +1397,10 @@ class AudioPlayerManager {
         status.state == _ServerState.offAir) {
       _setOffAir(status.state == _ServerState.offAir);
       cause = _offAir ? _OutageCause.offAir : _OutageCause.weakConnection;
+      // El servidor transmite y aun así no suena: la conexión no alcanza.
+      if (!_offAir && _outageStart != null && _lastNetwork != _noNetwork) {
+        _enterSlowMode('el servidor transmite, la conexión no alcanza');
+      }
     } else if (status.state == _ServerState.unknown) {
       // El servidor responde (no está caído) pero no dice si transmite: no
       // se culpa a nadie, y los intentos fallidos dirán si hay que cambiar
@@ -1446,6 +1500,7 @@ class AudioPlayerManager {
   void _handleBufferingState() {
     _loadingController.add(true);
     _isInBufferingState = true;
+    _slowModeExitTimer?.cancel();
 
     // iOS: el reproductor solo pasa a buffering cuando se le pidió reproducir.
     // Si la app creía que el usuario había pausado, la reanudación vino de
@@ -1507,7 +1562,101 @@ class AudioPlayerManager {
     // malo, causa el ciclo "suena, se corta, suena". Solo se reconecta si
     // lleva [_bufferingTimeout] sin poder cargar; si la conexión falla del
     // todo, el reproductor queda en pausa y eso ya dispara la reconexión.
-    _startProgressiveBufferingCheck(_bufferingTimeout);
+    // En modo conexión lenta se espera mientras siga llegando audio.
+    if (_slowMode) {
+      _startSlowBufferingWatch();
+    } else {
+      _startProgressiveBufferingCheck(_bufferingTimeout);
+    }
+  }
+
+  // ========== MODO CONEXIÓN LENTA ==========
+
+  /// Anota un corte; con [_slowCutsToEnter] cortes en [_slowCutsWindow]
+  /// entra al modo conexión lenta.
+  void _registerCut() {
+    final now = DateTime.now();
+    _recentCuts
+      ..add(now)
+      ..removeWhere((t) => now.difference(t) > _slowCutsWindow);
+    if (!_slowMode && _recentCuts.length >= _slowCutsToEnter) {
+      _enterSlowMode(
+        '${_recentCuts.length} cortes en ${_slowCutsWindow.inMinutes} min',
+      );
+    }
+  }
+
+  void _enterSlowMode(String reason) {
+    if (_slowMode) return;
+    _slowMode = true;
+    _diag('Modo conexión lenta: activado ($reason)');
+    _slowModeController.add(true);
+    RadioPlayer.setSlowMode(true);
+  }
+
+  void _exitSlowMode(String reason) {
+    _recentCuts.clear();
+    _slowModeExitTimer?.cancel();
+    if (!_slowMode) return;
+    _slowMode = false;
+    _diag('Modo conexión lenta: desactivado ($reason)');
+    _slowModeController.add(false);
+    RadioPlayer.setSlowMode(false);
+  }
+
+  /// Empieza a medir si llega audio en una conexión nueva o en un corte.
+  void _resetArrivalCheck() {
+    _lastAhead = null;
+    _lastAheadGrowth = null;
+  }
+
+  /// True si en los últimos [_bufferingTimeout] creció el audio guardado,
+  /// es decir, si sigue llegando audio aunque sea lento. False si no creció
+  /// o si la plataforma no lo informa (iOS por ahora).
+  Future<bool> _audioStillArriving() async {
+    final ahead = await RadioPlayer.bufferedAhead();
+    if (ahead == null) return false;
+    final now = DateTime.now();
+    if (ahead > Duration.zero &&
+        (_lastAhead == null ||
+            ahead > _lastAhead! + const Duration(milliseconds: 200))) {
+      _lastAheadGrowth = now;
+    }
+    _lastAhead = ahead;
+    return _lastAheadGrowth != null &&
+        now.difference(_lastAheadGrowth!) < _bufferingTimeout;
+  }
+
+  /// Vigilante del corte en modo conexión lenta: no reconecta mientras
+  /// siga llegando audio (reconectar tira lo guardado). Reconecta si en
+  /// [_bufferingTimeout] no llegó nada o tras [_slowMaxWait] cargando.
+  void _startSlowBufferingWatch() {
+    _progressiveBufferingTimer?.cancel();
+    _resetArrivalCheck();
+    final started = DateTime.now();
+    _progressiveBufferingTimer = Timer.periodic(_progressiveBufferingCheck, (
+      timer,
+    ) async {
+      if (!_loadingController.value || !_userWantsPlayback) {
+        timer.cancel();
+        _onBufferingResolved();
+        return;
+      }
+      final arriving = await _audioStillArriving();
+      if (!timer.isActive) return;
+      if (!_loadingController.value || !_userWantsPlayback) return;
+      final waited = DateTime.now().difference(started);
+      if (arriving && waited < _slowMaxWait) return;
+      // Sin dato de la plataforma, igual que fuera del modo lento.
+      if (!arriving && waited < _bufferingTimeout) return;
+      timer.cancel();
+      _diag(
+        arriving
+            ? 'Conexión lenta: ${_slowMaxWait.inSeconds} s cargando, se reconecta'
+            : 'Conexión lenta: no llega audio, se reconecta',
+      );
+      _handleReconnection();
+    });
   }
 
   /// Pruebas con internet móvil malo: esperar más que esto deja silencios
@@ -1834,6 +1983,7 @@ class AudioPlayerManager {
       return;
     }
 
+    _connectStartedAt = DateTime.now();
     try {
       _log('[AudioPlayerManager] 🔄 Abriendo conexión nueva al stream...');
       await _setStation().timeout(const Duration(seconds: 10));
@@ -1846,19 +1996,40 @@ class AudioPlayerManager {
     // El intento solo cuenta como exitoso cuando el reproductor llega a
     // "playing" (_handlePlayingState). Si no suena a tiempo, se pasa al
     // siguiente intento en vez de quedarse cargando para siempre.
+    _attemptStartedAt = DateTime.now();
+    _resetArrivalCheck();
+    _armAttemptWatchdog(_playTimeout);
+  }
+
+  /// Vigilante del intento de reconexión (ver [_attemptConnection]).
+  void _armAttemptWatchdog(Duration after) {
     _attemptWatchdog?.cancel();
-    _attemptWatchdog = Timer(_playTimeout, () async {
+    _attemptWatchdog = Timer(after, () async {
+      if (!_isReconnecting) return;
+      // Modo conexión lenta: el reproductor junta más audio antes de sonar.
+      // Si sigue llegando audio, se le da más tiempo en vez de cortar.
+      if (_slowMode &&
+          DateTime.now().difference(_attemptStartedAt) < _slowMaxWait &&
+          await _audioStillArriving()) {
+        if (_isReconnecting) {
+          _armAttemptWatchdog(_progressiveBufferingCheck);
+        }
+        return;
+      }
       if (!_isReconnecting) return;
       _log('[AudioPlayerManager] ⏱️ El intento no logró sonar a tiempo');
       _diag(
         'Intento $_reconnectAttempts sin audio tras '
-        '${_playTimeout.inSeconds} s',
+        '${DateTime.now().difference(_attemptStartedAt).inSeconds} s',
       );
       // Solo cuenta contra el servidor si el teléfono tenía red e internet y
-      // la red no cambió durante el intento.
+      // la red no cambió durante el intento. Una conexión lenta tampoco
+      // cuenta: cambiar de servidor no la arregla (y puede empeorarla).
       final phoneProblem =
           _lastNetwork == _noNetwork ||
           _cause == _OutageCause.noInternet ||
+          _cause == _OutageCause.weakConnection ||
+          _slowMode ||
           _networkChangedSince(DateTime.now().subtract(_playTimeout));
       if (!phoneProblem) _failuresOnServer++;
       if (_failuresOnServer >= _failuresBeforeSwitch) {
@@ -1948,6 +2119,12 @@ class AudioPlayerManager {
 
     _log('[AudioPlayerManager] 📶 Red: ${previous ?? '-'} → $network');
     _diag('Red: ${previous ?? 'inicio'} → $network');
+
+    // Otra red puede ser buena: se vuelve al modo normal. Si sigue lenta,
+    // los cortes lo vuelven a activar.
+    if (previous != null && network != _noNetwork) {
+      _exitSlowMode('cambió la red');
+    }
 
     // Se fue la red con la radio encendida: se avisa de inmediato (el audio
     // en búfer puede seguir sonando unos segundos).
@@ -2122,7 +2299,22 @@ class AudioPlayerManager {
         return;
       }
 
+      // Tocar Play varias veces mientras conecta reiniciaba la conexión cada
+      // vez y nunca alcanzaba a cargar. Si ya está conectando hace poco, no
+      // se reinicia. Pasado [_playDebounce], Play reintenta como siempre.
+      final connecting =
+          _userWantsPlayback &&
+          _loadingController.value &&
+          _lastPlaybackState != PlaybackState.playing &&
+          _connectStartedAt != null &&
+          DateTime.now().difference(_connectStartedAt!) < _playDebounce;
+      if (connecting) {
+        _diag('Play ignorado: ya está conectando');
+        return;
+      }
+
       _diag('Play');
+      _connectStartedAt = DateTime.now();
       _userWantsPlayback = true;
       _gaveUpWaitingForNetwork = false;
       // Un play del usuario empieza de cero: cancela cualquier reconexión.
@@ -2178,6 +2370,7 @@ class AudioPlayerManager {
 
       _log('[AudioPlayerManager] ⏸️ Pausando reproducción...');
       _diag('Pausa');
+      _exitSlowMode('pausa');
       _userWantsPlayback = false;
       _resumeAfterInterruption = false;
       _gaveUpWaitingForNetwork = false;
@@ -2240,7 +2433,9 @@ class AudioPlayerManager {
     await _connectivitySubscription?.cancel();
     await _noticeSubscription?.cancel();
 
+    _slowModeExitTimer?.cancel();
     await _outageController.close();
+    await _slowModeController.close();
     await _noticeController.close();
     await _playingController.close();
     await _loadingController.close();

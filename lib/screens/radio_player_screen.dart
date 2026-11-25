@@ -286,49 +286,63 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   }
 
   /// Avisos fijos arriba del reproductor: el aviso que el equipo escribe en
-  /// Firebase y el estado de una falla larga de la emisora.
+  /// Firebase, el estado de una falla larga de la emisora y, si no hay
+  /// falla larga, el aviso de conexión lenta.
   Widget _buildNotices() {
-    return StreamBuilder<String>(
-      stream: _audioManager.noticeStream,
-      initialData: _audioManager.notice,
-      builder: (context, noticeSnap) {
-        return StreamBuilder<String>(
-          stream: _audioManager.outageStream,
-          initialData: _audioManager.outage,
-          builder: (context, outageSnap) {
-            final notice = noticeSnap.data ?? '';
-            final outage = outageSnap.data ?? '';
-            if (notice.isEmpty && outage.isEmpty) {
-              return const SizedBox.shrink();
-            }
-            return SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Column(
-                  children: [
-                    if (notice.isNotEmpty)
-                      _NoticeCard(icon: Icons.campaign_rounded, text: notice),
-                    if (notice.isNotEmpty && outage.isNotEmpty)
-                      const SizedBox(height: 8),
-                    if (outage.isNotEmpty)
-                      _NoticeCard(
-                        icon: Icons.portable_wifi_off_rounded,
-                        text: outage,
-                        actionLabel:
-                            widget.onOpenPodcasts == null ||
-                                _audioManager.outageIsNoInternet
-                            ? null
-                            : 'Mientras tanto, escucha nuestros podcasts',
-                        onAction: widget.onOpenPodcasts,
-                      ),
-                  ],
+    return StreamBuilder<bool>(
+      stream: _audioManager.slowConnectionStream,
+      initialData: _audioManager.slowConnection,
+      builder: (context, slowSnap) => StreamBuilder<String>(
+        stream: _audioManager.noticeStream,
+        initialData: _audioManager.notice,
+        builder: (context, noticeSnap) {
+          return StreamBuilder<String>(
+            stream: _audioManager.outageStream,
+            initialData: _audioManager.outage,
+            builder: (context, outageSnap) {
+              final notice = noticeSnap.data ?? '';
+              // La falla larga ya explica la causa; si no la hay y la conexión
+              // está lenta, se avisa eso.
+              final outage = (outageSnap.data ?? '').isNotEmpty
+                  ? outageSnap.data!
+                  : (slowSnap.data == true
+                        ? AudioPlayerManager.slowConnectionMessage
+                        : '');
+              if (notice.isEmpty && outage.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Column(
+                    children: [
+                      if (notice.isNotEmpty)
+                        _NoticeCard(icon: Icons.campaign_rounded, text: notice),
+                      if (notice.isNotEmpty && outage.isNotEmpty)
+                        const SizedBox(height: 8),
+                      if (outage.isNotEmpty)
+                        _NoticeCard(
+                          icon: Icons.portable_wifi_off_rounded,
+                          text: outage,
+                          // Con conexión lenta los podcasts tampoco cargarían.
+                          actionLabel:
+                              widget.onOpenPodcasts == null ||
+                                  _audioManager.outageIsNoInternet ||
+                                  outage ==
+                                      AudioPlayerManager.slowConnectionMessage
+                              ? null
+                              : 'Mientras tanto, escucha nuestros podcasts',
+                          onAction: widget.onOpenPodcasts,
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
