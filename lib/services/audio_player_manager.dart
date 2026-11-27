@@ -306,15 +306,38 @@ class AudioPlayerManager {
 
   // Señal liviana (`stream_url_liviano` en Firebase, p. ej. 32 kbps): en
   // modo conexión lenta se usa si transmite, para que suene sin cortes.
-  // Cada cierto tiempo se prueba volver a la normal; si se corta de nuevo,
-  // se vuelve a la liviana y la próxima prueba espera el doble.
+  // Mientras suena, cada minuto se mide en segundo plano si el internet ya
+  // alcanza para la señal normal (sin tocar el audio); con 2 medidas
+  // buenas de las últimas 3 se vuelve a la normal. Si la normal se corta en los
+  // primeros minutos, se vuelve a la liviana y hacen falta más medidas.
   String? _lightUrl;
   bool _onLight = false;
-  Timer? _lightRetryTimer;
   DateTime? _lightTrialAt;
-  static const Duration _lightRetryFirst = Duration(minutes: 10);
-  static const Duration _lightRetryMax = Duration(minutes: 30);
-  Duration _lightRetryDelay = _lightRetryFirst;
+
+  // Medida del internet hacia la señal normal: se descarga un pedazo
+  // pequeño en una conexión aparte y se cierra.
+  Timer? _probeTimer;
+  bool _probing = false;
+  final List<bool> _probeHistory = [];
+  int _probeGoodNeeded = _probeGoodFirst;
+  static const Duration _probeInterval = Duration(minutes: 1);
+  // Solo lo que el servidor manda de golpe al conectar (Asura a veces
+  // manda ~26 KB): lo que sigue llega al ritmo del audio y no mide nada.
+  static const int _probeBytes = 24 * 1024;
+  // Medidas buenas necesarias entre las últimas (necesarias + 1).
+  static const int _probeGoodFirst = 2;
+  static const int _probeGoodAfterFail = 4;
+
+  // Vigilancia de la reserva en la señal normal: si el audio guardado baja
+  // sin parar (llega más lento de lo que suena), se pasa a la liviana antes
+  // de que se corte.
+  Timer? _reserveTimer;
+  final List<(DateTime, Duration)> _reserveSamples = [];
+  DateTime? _reserveLoggedAt;
+  static const Duration _reserveInterval = Duration(seconds: 5);
+  static const Duration _reserveWindow = Duration(seconds: 20);
+  static const Duration _reserveDrop = Duration(seconds: 2);
+  static const Duration _reserveLow = Duration(seconds: 5);
 
   /// Dirección de la conexión abierta. Si la app decide pasar a la señal
   /// liviana mientras un intento ya conectaba con otra, al sonar se abre la
@@ -645,7 +668,7 @@ class AudioPlayerManager {
     if (index == _serverIndex || index >= _streamUrls.length) return;
     if (_onLight) {
       _onLight = false;
-      _lightRetryTimer?.cancel();
+      _probeHistory.clear();
       _slowModeController.add(_slowMode);
     }
     _serverIndex = index;
@@ -769,11 +792,15 @@ class AudioPlayerManager {
         _diag('Estado: ${state.name}');
         final previous = _lastPlaybackState;
         _lastPlaybackState = state;
-        // Un corte: sonaba y se quedó cargando, con red y queriendo oír.
+        // Un corte: sonaba y se quedó cargando, con red y queriendo oír. No
+        // cuenta cuando la propia app abre una conexión nueva (en iOS pasa
+        // de "sonando" a "cargando" sin pausa) ni mientras la red cambia.
         if (previous == PlaybackState.playing &&
             state == PlaybackState.buffering &&
             _userWantsPlayback &&
             !_isPausedForArticle &&
+            !_isReconnecting &&
+            !_networkChangedSince(DateTime.now()) &&
             _lastNetwork != _noNetwork) {
           _registerCut();
         }
@@ -892,8 +919,8 @@ class AudioPlayerManager {
       unawaited(_refreshConnection());
     }
 
-    // En la señal liviana no hay cortes: la salida la decide la prueba de
-    // la señal normal (_scheduleLightRetry), no este temporizador.
+    // En la señal liviana no hay cortes: la salida la deciden las medidas
+    // del internet (_probeNormal), no este temporizador.
     if (_slowMode && !_onLight) {
       _slowModeExitTimer?.cancel();
       _slowModeExitTimer = Timer(_slowExitAfter, () {
@@ -1321,6 +1348,10 @@ class AudioPlayerManager {
       (_) => _checkServerHealth(),
     );
     _startPrimaryChecks();
+    // Conexión lenta: medida del internet en la liviana y vigilancia de la
+    // reserva en la normal (cada una revisa si le toca).
+    _probeTimer ??= Timer.periodic(_probeInterval, (_) => _probeNormal());
+    _reserveTimer ??= Timer.periodic(_reserveInterval, (_) => _checkReserve());
   }
 
   void _stopHealthChecks() {
@@ -1328,6 +1359,11 @@ class AudioPlayerManager {
     _stopPrimaryChecks();
     _healthTimer?.cancel();
     _healthTimer = null;
+    _probeTimer?.cancel();
+    _probeTimer = null;
+    _reserveTimer?.cancel();
+    _reserveTimer = null;
+    _reserveSamples.clear();
   }
 
   /// Revisa si la emisora está al aire y si la transmisión se reinició desde
@@ -1469,7 +1505,11 @@ class AudioPlayerManager {
       _setOffAir(status.state == _ServerState.offAir);
       cause = _offAir ? _OutageCause.offAir : _OutageCause.weakConnection;
       // El servidor transmite y aun así no suena: la conexión no alcanza.
-      if (!_offAir && _outageStart != null && _lastNetwork != _noNetwork) {
+      // Justo después de un cambio de red no: esa falla es del cambio.
+      if (!_offAir &&
+          _outageStart != null &&
+          _lastNetwork != _noNetwork &&
+          !_networkChangedSince(DateTime.now())) {
         _enterSlowMode('el servidor transmite, la conexión no alcanza');
       }
     } else if (status.state == _ServerState.unknown) {
@@ -1662,16 +1702,15 @@ class AudioPlayerManager {
   /// entra al modo conexión lenta.
   void _registerCut() {
     final now = DateTime.now();
-    // Se estaba probando la señal normal y se cortó: de vuelta a la liviana
-    // y la próxima prueba espera el doble.
+    // Se había vuelto a la señal normal y se cortó en los primeros minutos:
+    // de vuelta a la liviana, y para volver hacen falta más medidas buenas.
     final trialAt = _lightTrialAt;
     if (_slowMode &&
         !_onLight &&
         trialAt != null &&
         now.difference(trialAt) < _slowExitAfter) {
       _lightTrialAt = null;
-      final doubled = _lightRetryDelay * 2;
-      _lightRetryDelay = doubled > _lightRetryMax ? _lightRetryMax : doubled;
+      _probeGoodNeeded = _probeGoodAfterFail;
       _diag('Señal normal: se cortó otra vez, se vuelve a la liviana');
       unawaited(_useLightIfAvailable());
       return;
@@ -1700,9 +1739,8 @@ class AudioPlayerManager {
   bool _exitSlowMode(String reason) {
     _recentCuts.clear();
     _slowModeExitTimer?.cancel();
-    _lightRetryTimer?.cancel();
     _lightTrialAt = null;
-    _lightRetryDelay = _lightRetryFirst;
+    _probeGoodNeeded = _probeGoodFirst;
     final wasOnLight = _onLight;
     if (_onLight) _leaveLight(reason);
     if (!_slowMode) return wasOnLight;
@@ -1721,8 +1759,11 @@ class AudioPlayerManager {
     if (url == null || _onLight || !_slowMode) return;
     final status = await _fetchStatusOf(url);
     if (!_slowMode || _onLight || _lightUrl != url) return;
-    if (status.state != _ServerState.live) {
-      _diag('Señal liviana no disponible (${status.state.name})');
+    // Solo se descarta si responde que no transmite. Si la consulta no llega
+    // (con internet malo puede pasar), se intenta igual: si no suena, la
+    // reconexión la deja ("la señal liviana no responde").
+    if (status.state == _ServerState.offAir) {
+      _diag('Señal liviana no disponible (no transmite)');
       return;
     }
     _onLight = true;
@@ -1734,7 +1775,7 @@ class AudioPlayerManager {
     _stopPrimaryChecks();
     _diag('Señal liviana: se usa $url');
     _slowModeController.add(true);
-    _scheduleLightRetry();
+    _probeHistory.clear();
     if (_userWantsPlayback && !_isPausedForArticle && !_isReconnecting) {
       await _refreshConnection();
     }
@@ -1744,7 +1785,7 @@ class AudioPlayerManager {
   void _leaveLight(String reason) {
     if (!_onLight) return;
     _onLight = false;
-    _lightRetryTimer?.cancel();
+    _probeHistory.clear();
     if (_streamUrls.isNotEmpty) _streamUrl = _streamUrls[_serverIndex];
     _connectedStreamStart = null;
     _stationIsFresh = false;
@@ -1753,22 +1794,158 @@ class AudioPlayerManager {
     _slowModeController.add(_slowMode);
   }
 
-  /// Programa la próxima prueba de la señal normal.
-  void _scheduleLightRetry() {
-    _lightRetryTimer?.cancel();
-    _lightRetryTimer = Timer(_lightRetryDelay, () {
-      if (!_onLight) return;
-      // Si ahora mismo no suena, se espera otra vuelta.
-      if (_lastPlaybackState != PlaybackState.playing || _isReconnecting) {
-        _scheduleLightRetry();
+  /// En la señal liviana: mide en segundo plano si el internet ya alcanza
+  /// para la señal normal, sin tocar el audio. Con [_probeGoodNeeded]
+  /// medidas buenas seguidas vuelve a la normal (es el único corte que se
+  /// nota); si la normal se corta en los primeros minutos, [_registerCut]
+  /// devuelve la liviana.
+  Future<void> _probeNormal() async {
+    if (!_onLight ||
+        _probing ||
+        _isReconnecting ||
+        !_userWantsPlayback ||
+        _isPausedForArticle ||
+        _lastPlaybackState != PlaybackState.playing ||
+        _streamUrls.isEmpty) {
+      return;
+    }
+    final url = _streamUrls[_serverIndex];
+    _probing = true;
+    final result = await _measureStream(url);
+    _probing = false;
+    if (!_onLight) return;
+
+    final needed = result == null ? null : result.$2 * 2;
+    final good = result != null && result.$1 >= needed!;
+    final window = _probeGoodNeeded + 1;
+    _probeHistory.add(good);
+    while (_probeHistory.length > window) {
+      _probeHistory.removeAt(0);
+    }
+    final goods = _probeHistory.where((g) => g).length;
+    _diag(
+      'Medida del internet: '
+      '${result == null ? 'no alcanzó' : '${result.$1} kbps (hacen falta $needed)'}'
+      ' — buenas $goods de las últimas ${_probeHistory.length} '
+      '(hacen falta $_probeGoodNeeded de $window)',
+    );
+    if (goods < _probeGoodNeeded) return;
+
+    _probeHistory.clear();
+    _leaveLight('el internet ya alcanza para la señal normal');
+    _lightTrialAt = DateTime.now();
+    // La medida ya dice que el internet está bien: se quita el aviso. Si la
+    // normal se vuelve a cortar, la liviana lo vuelve a mostrar.
+    _slowModeController.add(false);
+    if (_userWantsPlayback && !_isPausedForArticle) {
+      unawaited(_refreshConnection());
+    }
+  }
+
+  /// Descarga [_probeBytes] de [url] en una conexión aparte y la cierra.
+  /// Devuelve (kbps medidos, kbps de la señal) o null si no llegó a tiempo
+  /// (el internet no alcanza). Se corta antes si va claramente lento, para
+  /// no quitarle internet a la señal que suena.
+  Future<(int, int)?> _measureStream(String url) async {
+    final client = http.Client();
+    try {
+      final response = await client
+          .send(http.Request('GET', Uri.parse(url)))
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200) {
+        _diag(
+          'Medida del internet: el servidor respondió ${response.statusCode}',
+        );
+        return null;
+      }
+      // Icecast informa los kbps de la señal en "icy-br" (p. ej. "96").
+      final signalKbps =
+          int.tryParse(
+            (response.headers['icy-br'] ?? '').split(',').first.trim(),
+          ) ??
+          128;
+      final needed = signalKbps * 2;
+      var received = 0;
+      Stopwatch? clock;
+      await for (final chunk in response.stream.timeout(
+        const Duration(seconds: 8),
+      )) {
+        clock ??= Stopwatch()..start(); // desde el primer dato
+        received += chunk.length;
+        if (received >= _probeBytes) break;
+        final ms = clock.elapsedMilliseconds;
+        if (ms > 3000 && received * 8 / ms < needed) return null;
+        if (ms > 8000) return null;
+      }
+      if (received < _probeBytes || clock == null) return null;
+      final ms = clock.elapsedMilliseconds.clamp(1, 1 << 31);
+      return ((received * 8 / ms).round(), signalKbps);
+    } catch (e) {
+      _diag('Medida del internet: error ($e)');
+      return null;
+    } finally {
+      client.close();
+    }
+  }
+
+  /// En la señal normal: si el audio guardado baja sin parar durante
+  /// [_reserveWindow] (llega más lento de lo que suena) y queda poco, se
+  /// pasa a la liviana antes de que se corte. Cada 2 min anota la reserva
+  /// en el registro, para ver cómo se comporta.
+  Future<void> _checkReserve() async {
+    if (_onLight ||
+        _isReconnecting ||
+        !_userWantsPlayback ||
+        _isPausedForArticle ||
+        _lastPlaybackState != PlaybackState.playing) {
+      _reserveSamples.clear();
+      return;
+    }
+    final ahead = await RadioPlayer.bufferedAhead();
+    if (ahead == null) return; // la plataforma no lo informa
+    final now = DateTime.now();
+    _reserveSamples
+      ..add((now, ahead))
+      ..removeWhere((s) => now.difference(s.$1) > _reserveWindow);
+
+    final loggedAt = _reserveLoggedAt;
+    if (loggedAt == null || now.difference(loggedAt).inMinutes >= 2) {
+      _reserveLoggedAt = now;
+      _diag(
+        'Reserva de audio: ${(ahead.inMilliseconds / 1000).toStringAsFixed(1)} s',
+      );
+    }
+
+    if (_lightUrl == null || _slowMode || _networkChangedSince(now)) return;
+    final first = _reserveSamples.first;
+    if (now.difference(first.$1) < _reserveWindow - _reserveInterval) return;
+    var falling = true;
+    for (var i = 1; i < _reserveSamples.length; i++) {
+      if (_reserveSamples[i].$2 >
+          _reserveSamples[i - 1].$2 + const Duration(milliseconds: 300)) {
+        falling = false;
+        break;
+      }
+    }
+    if (falling && first.$2 - ahead >= _reserveDrop && ahead < _reserveLow) {
+      _reserveSamples.clear();
+      // La reserva también cae si el servidor deja de enviar: solo es la
+      // conexión del teléfono si el servidor responde y transmite. Si no,
+      // la reconexión de siempre se encarga (y puede cambiar de servidor).
+      final status = await _fetchServerStatus();
+      if (status.state != _ServerState.live) {
+        _diag(
+          'La reserva baja, pero el servidor no transmite bien '
+          '(${status.state.name}): no se pasa a la liviana',
+        );
         return;
       }
-      _leaveLight('se prueba la señal normal');
-      _lightTrialAt = DateTime.now();
-      if (_userWantsPlayback && !_isPausedForArticle) {
-        unawaited(_refreshConnection());
-      }
-    });
+      if (_onLight || _slowMode || _isReconnecting) return;
+      _enterSlowMode(
+        'la reserva bajó de ${(first.$2.inMilliseconds / 1000).toStringAsFixed(1)} '
+        'a ${(ahead.inMilliseconds / 1000).toStringAsFixed(1)} s',
+      );
+    }
   }
 
   /// Empieza a medir si llega audio en una conexión nueva o en un corte.
@@ -2007,6 +2184,7 @@ class AudioPlayerManager {
     _stationUrl = url;
     _stationIsFresh = true;
     _connectedStreamStart = null;
+    _reserveSamples.clear(); // la reserva de otra conexión no cuenta
     // La conexión nueva pone el nombre de la emisora: se devuelve el título
     // de la web si está al día (no cambió, así que no se volvería a enviar).
     if (_webTitleFresh && _webSong != null) {
@@ -2298,9 +2476,15 @@ class AudioPlayerManager {
     _diag('Red: ${previous ?? 'inicio'} → $network');
 
     // Otra red puede ser buena: se vuelve al modo normal. Si sigue lenta,
-    // los cortes lo vuelven a activar.
+    // los cortes lo vuelven a activar. Si el wifi sigue y solo se agregaron
+    // o quitaron los datos móviles (la "Asistencia para Wi-Fi" de iOS lo
+    // hace cuando el wifi va lento), es la misma red: no se sale.
+    final stillOnWifi =
+        previous != null &&
+        previous.split(' + ').contains('wifi') &&
+        network.split(' + ').contains('wifi');
     var leftLight = false;
-    if (previous != null && network != _noNetwork) {
+    if (previous != null && network != _noNetwork && !stillOnWifi) {
       leftLight = _exitSlowMode('cambió la red');
     }
 
@@ -2617,7 +2801,8 @@ class AudioPlayerManager {
     await _noticeSubscription?.cancel();
 
     _slowModeExitTimer?.cancel();
-    _lightRetryTimer?.cancel();
+    _probeTimer?.cancel();
+    _reserveTimer?.cancel();
     await _outageController.close();
     await _slowModeController.close();
     await _noticeController.close();
