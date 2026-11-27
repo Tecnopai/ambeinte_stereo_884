@@ -306,7 +306,7 @@ class AudioPlayerManager {
 
   // Señal liviana (`stream_url_liviano` en Firebase, p. ej. 32 kbps): en
   // modo conexión lenta se usa si transmite, para que suene sin cortes.
-  // Mientras suena, cada minuto se mide en segundo plano si el internet ya
+  // Mientras suena, cada 2 min se mide en segundo plano si el internet ya
   // alcanza para la señal normal (sin tocar el audio); con 2 medidas
   // buenas de las últimas 3 se vuelve a la normal. Si la normal se corta en los
   // primeros minutos, se vuelve a la liviana y hacen falta más medidas.
@@ -314,16 +314,19 @@ class AudioPlayerManager {
   bool _onLight = false;
   DateTime? _lightTrialAt;
 
-  // Medida del internet hacia la señal normal: se descarga un pedazo
-  // pequeño en una conexión aparte y se cierra.
+  // Medida del internet hacia la señal normal: se descargan 6 s en una
+  // conexión aparte y se cierra.
   Timer? _probeTimer;
   bool _probing = false;
+  bool _checkingServer = false;
   final List<bool> _probeHistory = [];
   int _probeGoodNeeded = _probeGoodFirst;
-  static const Duration _probeInterval = Duration(minutes: 1);
-  // Solo lo que el servidor manda de golpe al conectar (Asura a veces
-  // manda ~26 KB): lo que sigue llega al ritmo del audio y no mide nada.
-  static const int _probeBytes = 24 * 1024;
+  static const Duration _probeInterval = Duration(minutes: 2);
+  // Se mide lo que llega en 6 s seguidos. Un servidor puede mandar rápido
+  // los primeros KB y después entregar más lento que el audio (Asura,
+  // 26-nov-2026: 24 KB a 500-600 kbps, pero 76-115 kbps en 6 s para una
+  // señal de 96). Sano: el arranque más el ritmo del audio ≈ 1,9 veces.
+  static const Duration _probeTime = Duration(seconds: 6);
   // Medidas buenas necesarias entre las últimas (necesarias + 1).
   static const int _probeGoodFirst = 2;
   static const int _probeGoodAfterFail = 4;
@@ -616,6 +619,7 @@ class AudioPlayerManager {
 
   Timer? _primaryCheckTimer;
   int _primaryLiveChecks = 0;
+  bool _primarySlowLogged = false;
 
   /// Mientras suena un servidor de respaldo, revisa solo la página de estado
   /// del principal (sin tocar el audio) y vuelve a él cuando confirma que
@@ -655,6 +659,22 @@ class AudioPlayerManager {
       _primaryLiveChecks = 0;
       return;
     }
+    // Además de transmitir, tiene que entregar rápido: un servidor puede
+    // "transmitir" y entregar más lento que el propio audio.
+    final speed = await _measureStream(_streamUrls.first);
+    if (!_fastEnough(speed)) {
+      if (_primaryLiveChecks > 0 || !_primarySlowLogged) {
+        _diag(
+          'El principal transmite, pero entrega lento '
+          '(${speed == null ? 'no alcanzó' : '${speed.$1} kbps'}): '
+          'se sigue en el respaldo',
+        );
+        _primarySlowLogged = true;
+      }
+      _primaryLiveChecks = 0;
+      return;
+    }
+    _primarySlowLogged = false;
     _primaryLiveChecks++;
     if (_primaryLiveChecks < _primaryLiveChecksToReturn) return;
     if (_serverIndex == 0 || _isReconnecting) return;
@@ -1509,8 +1529,18 @@ class AudioPlayerManager {
       if (!_offAir &&
           _outageStart != null &&
           _lastNetwork != _noNetwork &&
-          !_networkChangedSince(DateTime.now())) {
-        _enterSlowMode('el servidor transmite, la conexión no alcanza');
+          !_networkChangedSince(DateTime.now()) &&
+          !_onLight &&
+          !_slowMode) {
+        // ¿El servidor o la conexión? Si otro servidor llega rápido, el
+        // lento es este servidor: se cambia, sin culpar al internet.
+        final other = await _fasterOtherServer();
+        if (other != null) {
+          _useServer(other, 'el servidor entrega lento');
+          cause = _OutageCause.unknown;
+        } else {
+          _enterSlowMode('el servidor transmite, la conexión no alcanza');
+        }
       }
     } else if (status.state == _ServerState.unknown) {
       // El servidor responde (no está caído) pero no dice si transmite: no
@@ -1719,10 +1749,31 @@ class AudioPlayerManager {
       ..add(now)
       ..removeWhere((t) => now.difference(t) > _slowCutsWindow);
     if (!_slowMode && _recentCuts.length >= _slowCutsToEnter) {
-      _enterSlowMode(
-        '${_recentCuts.length} cortes en ${_slowCutsWindow.inMinutes} min',
-      );
+      final reason =
+          '${_recentCuts.length} cortes en ${_slowCutsWindow.inMinutes} min';
+      _recentCuts.clear();
+      unawaited(_serverOrConnection(reason));
     }
+  }
+
+  /// Antes de culpar a la conexión del oyente: si otro servidor llega bien,
+  /// el lento es este servidor y se cambia a ese otro (calidad normal, sin
+  /// aviso de internet lento). Si no, modo conexión lenta.
+  Future<void> _serverOrConnection(String reason) async {
+    if (_slowMode || _onLight || _checkingServer) return;
+    _checkingServer = true;
+    final other = await _fasterOtherServer();
+    _checkingServer = false;
+    if (_slowMode || _onLight) return;
+    if (other != null) {
+      _diag('$reason: el lento es el servidor');
+      _useServer(other, 'el servidor entrega lento');
+      if (_userWantsPlayback && !_isPausedForArticle && !_isReconnecting) {
+        await _refreshConnection();
+      }
+      return;
+    }
+    _enterSlowMode(reason);
   }
 
   void _enterSlowMode(String reason) {
@@ -1812,11 +1863,23 @@ class AudioPlayerManager {
     final url = _streamUrls[_serverIndex];
     _probing = true;
     final result = await _measureStream(url);
+    // Si este servidor no alcanza pero otro sí, el lento es el servidor:
+    // se pasa a ese otro con la calidad normal.
+    final other = !_fastEnough(result) ? await _fasterOtherServer() : null;
     _probing = false;
     if (!_onLight) return;
+    if (other != null) {
+      _probeHistory.clear();
+      _useServer(other, 'el servidor entrega lento, el internet alcanza');
+      _exitSlowMode('el internet alcanza para otro servidor');
+      if (_userWantsPlayback && !_isPausedForArticle) {
+        unawaited(_refreshConnection());
+      }
+      return;
+    }
 
-    final needed = result == null ? null : result.$2 * 2;
-    final good = result != null && result.$1 >= needed!;
+    final needed = result == null ? null : _neededKbps(result.$2);
+    final good = _fastEnough(result);
     final window = _probeGoodNeeded + 1;
     _probeHistory.add(good);
     while (_probeHistory.length > window) {
@@ -1842,10 +1905,35 @@ class AudioPlayerManager {
     }
   }
 
-  /// Descarga [_probeBytes] de [url] en una conexión aparte y la cierra.
-  /// Devuelve (kbps medidos, kbps de la señal) o null si no llegó a tiempo
-  /// (el internet no alcanza). Se corta antes si va claramente lento, para
-  /// no quitarle internet a la señal que suena.
+  /// Mide en segundo plano otro servidor (el principal, o el primer
+  /// respaldo si ya se usa el principal). Devuelve su índice si llega al
+  /// doble de su señal: entonces el internet alcanza y el lento es el
+  /// servidor actual. Null si no hay otro o tampoco alcanza.
+  Future<int?> _fasterOtherServer() async {
+    if (_streamUrls.length < 2) return null;
+    final other = _serverIndex == 0 ? 1 : 0;
+    final speed = await _measureStream(_streamUrls[other]);
+    final fast = _fastEnough(speed);
+    _diag(
+      'Medida de otro servidor (${other + 1}): '
+      '${speed == null ? 'no alcanzó' : '${speed.$1} kbps'}'
+      '${fast ? ' — el internet alcanza' : ''}',
+    );
+    return fast ? other : null;
+  }
+
+  /// kbps que debe sostener un servidor en [_probeTime] para una señal de
+  /// [signalKbps]: 1,5 veces (con margen para internet algo irregular).
+  static int _neededKbps(int signalKbps) => signalKbps * 3 ~/ 2;
+
+  /// Si la medida dice que el internet y el servidor alcanzan.
+  static bool _fastEnough((int, int)? m) =>
+      m != null && m.$1 >= _neededKbps(m.$2);
+
+  /// Descarga [url] durante [_probeTime] en una conexión aparte y la cierra.
+  /// Devuelve (kbps medidos, kbps de la señal) o null si no llegó nada a
+  /// tiempo. Se corta antes si a los 3 s ni siquiera llega al ritmo de la
+  /// señal, para no quitarle internet a la que suena.
   Future<(int, int)?> _measureStream(String url) async {
     final client = http.Client();
     try {
@@ -1864,7 +1952,6 @@ class AudioPlayerManager {
             (response.headers['icy-br'] ?? '').split(',').first.trim(),
           ) ??
           128;
-      final needed = signalKbps * 2;
       var received = 0;
       Stopwatch? clock;
       await for (final chunk in response.stream.timeout(
@@ -1872,12 +1959,13 @@ class AudioPlayerManager {
       )) {
         clock ??= Stopwatch()..start(); // desde el primer dato
         received += chunk.length;
-        if (received >= _probeBytes) break;
         final ms = clock.elapsedMilliseconds;
-        if (ms > 3000 && received * 8 / ms < needed) return null;
-        if (ms > 8000) return null;
+        if (ms >= _probeTime.inMilliseconds) break;
+        if (ms > 3000 && received * 8 / ms < signalKbps) {
+          return ((received * 8 / ms).round(), signalKbps);
+        }
       }
-      if (received < _probeBytes || clock == null) return null;
+      if (clock == null) return null;
       final ms = clock.elapsedMilliseconds.clamp(1, 1 << 31);
       return ((received * 8 / ms).round(), signalKbps);
     } catch (e) {
@@ -1919,15 +2007,16 @@ class AudioPlayerManager {
     if (_lightUrl == null || _slowMode || _networkChangedSince(now)) return;
     final first = _reserveSamples.first;
     if (now.difference(first.$1) < _reserveWindow - _reserveInterval) return;
-    var falling = true;
-    for (var i = 1; i < _reserveSamples.length; i++) {
-      if (_reserveSamples[i].$2 >
-          _reserveSamples[i - 1].$2 + const Duration(milliseconds: 300)) {
-        falling = false;
-        break;
-      }
-    }
-    if (falling && first.$2 - ahead >= _reserveDrop && ahead < _reserveLow) {
+    // Con internet lento el audio sigue llegando a tirones: la reserva baja
+    // con pequeños saltos hacia arriba. Se mira la tendencia: las dos
+    // últimas medidas claramente por debajo de la de hace ~20 s (con buen
+    // internet la reserva solo se mueve unos ±0,4 s).
+    if (_reserveSamples.length < 3) return;
+    final previous = _reserveSamples[_reserveSamples.length - 2].$2;
+    final falling =
+        first.$2 - ahead >= _reserveDrop &&
+        first.$2 - previous >= const Duration(milliseconds: 1500);
+    if (falling && ahead < _reserveLow) {
       _reserveSamples.clear();
       // La reserva también cae si el servidor deja de enviar: solo es la
       // conexión del teléfono si el servidor responde y transmite. Si no,
@@ -1941,10 +2030,14 @@ class AudioPlayerManager {
         return;
       }
       if (_onLight || _slowMode || _isReconnecting) return;
-      _enterSlowMode(
-        'la reserva bajó de ${(first.$2.inMilliseconds / 1000).toStringAsFixed(1)} '
-        'a ${(ahead.inMilliseconds / 1000).toStringAsFixed(1)} s',
-      );
+      final drop =
+          '${(first.$2.inMilliseconds / 1000).toStringAsFixed(1)} '
+          'a ${(ahead.inMilliseconds / 1000).toStringAsFixed(1)} s';
+
+      // ¿Es este servidor o la conexión del teléfono? Se mide otro servidor
+      // en segundo plano: si llega rápido, el lento es el servidor y se
+      // cambia a ese otro con la calidad normal, sin culpar al internet.
+      await _serverOrConnection('la reserva bajó de $drop');
     }
   }
 
